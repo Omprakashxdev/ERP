@@ -1,0 +1,935 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+  AUDITOR
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String?
+  hashedPassword String
+  role           Role      @default(STAFF)
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  tasksAssignedBy Task[]       @relation("TaskAssignedBy")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// Fund Flow module enums
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum WorkType {
+  BUILDING
+  WATER_SUPPLY
+  UGD
+  ROAD
+  OTHER
+}
+
+enum ServiceType {
+  DPR
+  SUPERVISION
+  PMC
+  TPI
+  OTHER
+}
+
+enum TenderStatus {
+  UNDER_PREPARATION
+  SUBMITTED
+  UNDER_EVALUATION
+  WON
+  LOST
+  WITHDRAWN
+  CANCELLED
+}
+
+enum ProjectRole {
+  TEAM_LEADER
+  PROJECT_MANAGER
+  RESIDENTIAL_ENGINEER
+  DESIGN_ENGINEER
+  SITE_ENGINEER
+  OTHER
+}
+
+// Payment Schedules module enums
+
+enum PaymentScheduleCategory {
+  EXCISE
+  GST
+  TDS
+  VEHICLE_LOAN
+}
+
+enum PaymentScheduleStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Vehicle Log Book module enums
+
+enum VehicleStatus {
+  ACTIVE
+  INACTIVE
+  SOLD
+}
+
+enum JourneyApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Property & Asset List module enums
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  UNDER_MAINTENANCE
+  DISPOSED
+}
+
+// Shareable master-data models
+
+model Region {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  abbreviation String?
+  address      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  projects Project[]
+  staff    Staff[]
+}
+
+model Client {
+  id           String          @id @default(cuid())
+  name         String
+  abbreviation String?         @db.VarChar(8)
+  address      String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  projects Project[]
+  contacts ClientContact[]
+  inOutRegisters InOutRegister[]
+
+  @@unique([name, abbreviation])
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+model Staff {
+  id           String    @id @default(cuid())
+  name         String
+  email        String?   @unique
+  phone        String?
+  employeeCode String?   @unique
+  designation  String?
+  regionId     String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  region      Region?           @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  assignments ProjectAssignment[]
+  wipHoCoordinator WorkInProgress[] @relation("WipHoCoordinator")
+  wipRoCoordinator WorkInProgress[] @relation("WipRoCoordinator")
+  wipAssignments  WipAssignment[]
+  ccMarkings             InOutRegisterCcStaff[]
+  actionSuggestedEntries InOutRegister[]        @relation("ActionSuggestedStaff")
+  tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
+  tasksAssigned          Task[]                 @relation("TaskAssignedTo")
+  employeeDetail         EmployeeDetail?
+
+  @@index([regionId])
+}
+
+// Project and contract entities
+
+model Contractor {
+  id                          String        @id @default(cuid())
+  name                        String
+  contactPerson               String?
+  phone                       String?
+  email                       String?
+  address                     String?
+  contractAmount              Decimal?      @db.Decimal(19, 2)
+  agreementDate               DateTime?
+  workOrderDate               DateTime?
+
+  // Phase 2 Module 2: contractor work-spec, documents, and billing
+  tenderId                    String?
+  detailedOrder               String?
+  workName                    String?
+  workType                    WorkType?
+  serviceType                 ServiceType?
+  dprReference                String?
+  tsAaReference               String?
+
+  scheduleBAmount             Decimal?      @db.Decimal(19, 2)
+  scheduleBPath               String?
+
+  raBillDetails               String?
+
+  finalProgressAmount         Decimal?      @db.Decimal(19, 2)
+  finalProgressProjectExpense Decimal?      @db.Decimal(19, 2)
+
+  workOrderCopyPath           String?
+  drawingsPath                String?
+  completionCertificatePath   String?
+
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+
+  projects Project[]
+
+  @@index([name])
+}
+
+model Tender {
+  id                    String        @id @default(cuid())
+  status                TenderStatus  @default(UNDER_PREPARATION)
+
+  tenderDate            DateTime      @default(now())
+  name                  String
+  tenderId              String?
+  department            String?
+  state                 String?
+  city                  String?
+  platform              String?
+
+  workName              String?
+  workType              WorkType?
+  serviceType           ServiceType?
+
+  preBidMeetingDate     DateTime?
+  preBidMeetingAttended Boolean       @default(false)
+  biddingLastDate       DateTime?
+  dateOfOpening         DateTime?
+
+  tenderFeeAmount       Decimal?      @db.Decimal(19, 2)
+  tenderFeeDate         DateTime?
+  tenderFeeMode         String?
+
+  emdAmount             Decimal?      @db.Decimal(19, 2)
+  emdDate               DateTime?
+  emdMode               String?
+  emdReturnCollectionDate DateTime?
+
+  l1ContractorName      String?
+  l1City                String?
+  l1Amount              Decimal?      @db.Decimal(19, 2)
+
+  l2ContractorName      String?
+  l2City                String?
+  l2Amount              Decimal?      @db.Decimal(19, 2)
+
+  l3ContractorName      String?
+  l3City                String?
+  l3Amount              Decimal?      @db.Decimal(19, 2)
+
+  negotiationMeeting    String?
+
+  advertisementCopyPath String?
+  remarks               String?
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([status])
+  @@index([biddingLastDate])
+  @@index([tenderDate])
+}
+
+// Payment Schedules module
+
+model PaymentSchedule {
+  id            String                  @id @default(cuid())
+  date          DateTime                @default(now())
+  dueDate       DateTime?
+  paymentType   String?
+  category      PaymentScheduleCategory @default(GST)
+  detail        String?
+  amount        Decimal                 @db.Decimal(19, 2) @default("0.00")
+  status        PaymentScheduleStatus   @default(PENDING)
+  billCopyPath  String?
+  remarks       String?
+
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([dueDate])
+  @@index([date])
+}
+
+// Vehicle Log Book module
+
+model Vehicle {
+  id                        String        @id @default(cuid())
+  registrationNumber        String        @unique
+  make                      String?
+  model                     String?
+  year                      Int?
+  status                    VehicleStatus @default(ACTIVE)
+
+  rcNumber                  String?
+  rcExpiryDate              DateTime?
+  rcCopyPath                String?
+
+  insurancePolicyNumber     String?
+  insuranceExpiryDate       DateTime?
+  insuranceCopyPath         String?
+
+  pucExpiryDate             DateTime?
+  pucCopyPath               String?
+
+  tyreWarrantyExpiryDate    DateTime?
+  batteryWarrantyExpiryDate DateTime?
+
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  journeyLogs               JourneyLog[]
+
+  @@index([status])
+  @@index([registrationNumber])
+}
+
+model JourneyLog {
+  id                 String                @id @default(cuid())
+  vehicleId          String
+  journeyDate        DateTime
+  fromLocation       String
+  toLocation         String
+  startKm            Decimal               @db.Decimal(10, 2)
+  endKm              Decimal               @db.Decimal(10, 2)
+  totalKm            Decimal               @db.Decimal(10, 2)
+
+  fuelExpense        Decimal?              @db.Decimal(19, 2)
+  serviceExpense     Decimal?              @db.Decimal(19, 2)
+  maintenanceExpense Decimal?              @db.Decimal(19, 2)
+  taxExpense         Decimal?              @db.Decimal(19, 2)
+
+  driverName         String?
+  purpose            String?
+  approvalStatus     JourneyApprovalStatus @default(PENDING)
+  rejectedReason     String?
+
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  vehicle            Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  photos             JourneyLogPhoto[]
+
+  @@index([vehicleId])
+  @@index([journeyDate])
+  @@index([approvalStatus])
+}
+
+model JourneyLogPhoto {
+  id           String     @id @default(cuid())
+  journeyLogId String
+  path         String
+  createdAt    DateTime   @default(now())
+
+  journeyLog   JourneyLog @relation(fields: [journeyLogId], references: [id], onDelete: Cascade)
+
+  @@index([journeyLogId])
+}
+
+// Property & Asset List module
+
+model Asset {
+  id                String      @id @default(cuid())
+  itemCode          String      @unique
+  name              String
+  category          String?
+  make              String?
+  model             String?
+  yearOfPurchase    Int?
+  quantity          Decimal     @db.Decimal(10, 2) @default("1.00")
+  securityCode      String?
+  billWarrantyPath  String?
+
+  assigneeType      String?     // "PERSON" or "OFFICE"
+  assignee          String?     // Person name or Office name
+  assignedQuantity  Decimal?    @db.Decimal(10, 2)
+  responsiblePerson String?
+
+  status            AssetStatus @default(AVAILABLE)
+  remarks           String?
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([itemCode])
+}
+
+enum InOutDirection {
+  INWARD
+  OUTWARD
+}
+
+// In-Out Register module
+
+model InOutRegister {
+  id                     String                  @id @default(cuid())
+  direction              InOutDirection          @default(INWARD)
+  documentDate           DateTime
+  receivedDate           DateTime
+  documentRefNo          String
+  details                String?
+  clientId               String
+  actionSuggestedStaffId String?
+  replyDate              DateTime?
+  replyRefNo             String?                 @unique
+
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
+  documents              InOutRegisterDocument[]
+  ccStaff                InOutRegisterCcStaff[]
+
+  @@index([clientId])
+  @@index([direction])
+  @@index([receivedDate])
+  @@index([documentDate])
+  @@index([actionSuggestedStaffId])
+  @@index([replyDate])
+}
+
+model InOutRegisterDocument {
+  id              String        @id @default(cuid())
+  inOutRegisterId String
+  path            String
+  createdAt       DateTime      @default(now())
+
+  inOutRegister   InOutRegister @relation(fields: [inOutRegisterId], references: [id], onDelete: Cascade)
+
+  @@index([inOutRegisterId])
+}
+
+model InOutRegisterCcStaff {
+  id              String        @id @default(cuid())
+  inOutRegisterId String
+  staffId         String
+
+  inOutRegister   InOutRegister @relation(fields: [inOutRegisterId], references: [id], onDelete: Cascade)
+  staff           Staff         @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([inOutRegisterId, staffId])
+  @@index([inOutRegisterId])
+  @@index([staffId])
+}
+
+model Project {
+  id                       String        @id @default(cuid())
+  regionId                 String
+  clientId                 String
+  name                     String
+  abbreviation             String?       @db.VarChar(8)
+  address                  String?
+  agreementDate            DateTime?
+  workOrderDate            DateTime
+  timeLimitMonths          Decimal       @db.Decimal(8, 4)
+  additionalTimeMonths     Decimal?      @db.Decimal(8, 4)
+  targetTimeLimitMonths    Decimal?      @db.Decimal(8, 4)
+  stipulatedCompletionDate DateTime?
+  targetCompletionDate     DateTime?
+  estimatedCost            Decimal       @db.Decimal(19, 2) @default("0.00")
+  totalFee                 Decimal       @db.Decimal(19, 2) @default("0.00")
+  status                   ProjectStatus @default(ACTIVE)
+  workType                 WorkType
+  serviceType              ServiceType
+  contractorId             String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  region      Region            @relation(fields: [regionId], references: [id])
+  client      Client            @relation(fields: [clientId], references: [id])
+  contractor  Contractor?       @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+  assignments ProjectAssignment[]
+  feeStages   ProjectFeeStage[]
+  fundFlow    FundFlow?
+  dueBills    DueBill[]
+  wip         WorkInProgress?
+  tasks       Task[]          @relation("TaskProject")
+
+  @@unique([clientId, name])
+  @@index([regionId])
+  @@index([clientId])
+  @@index([status])
+  @@index([workOrderDate])
+}
+
+model ProjectAssignment {
+  id         String      @id @default(cuid())
+  projectId  String
+  staffId    String
+  role       ProjectRole
+  allocation Decimal?    @db.Decimal(5, 2)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staff   Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, staffId, role])
+  @@index([projectId])
+  @@index([staffId])
+}
+
+model ProjectFeeStage {
+  id        String   @id @default(cuid())
+  projectId String
+  stageName String
+  percentage Decimal? @db.Decimal(5, 2)
+  amount    Decimal  @db.Decimal(19, 2) @default("0.00")
+  dueDate   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// Fund Flow worksheet data
+
+model FundFlow {
+  id                    String   @id @default(cuid())
+  projectId             String   @unique
+  miscExp               Decimal  @db.Decimal(19, 2) @default("0.00")
+  staffExp              Decimal  @db.Decimal(19, 2) @default("0.00")
+  totalProjectCost      Decimal  @db.Decimal(19, 2) @default("0.00")
+  completedWorkAmt      Decimal  @db.Decimal(19, 2) @default("0.00")
+  proposedDueBillAmount Decimal  @db.Decimal(19, 2) @default("0.00")
+  feeReceived           Decimal  @db.Decimal(19, 2) @default("0.00")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// Due Bills Status module
+
+enum DueBillStatus {
+  PENDING
+  PARTIAL
+  PAID
+  ON_HOLD
+  CANCELLED
+}
+
+model DueBill {
+  id              String        @id @default(cuid())
+  projectId       String
+  scheme          String
+  grossAmount     Decimal       @db.Decimal(19, 2) @default("0.00")
+  sgst            Decimal       @db.Decimal(19, 2) @default("0.00")
+  cgst            Decimal       @db.Decimal(19, 2) @default("0.00")
+  billAmount      Decimal       @db.Decimal(19, 2) @default("0.00")
+  chequeAmount    Decimal       @db.Decimal(19, 2) @default("0.00")
+  sd              Decimal       @db.Decimal(19, 2) @default("0.00")
+  itTds           Decimal       @db.Decimal(19, 2) @default("0.00")
+  receivedAmount  Decimal       @db.Decimal(19, 2) @default("0.00")
+  billDate        DateTime?
+  receiveDate     DateTime?
+  status          DueBillStatus @default(PENDING)
+  remarks         String?
+  billCopyPath    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+  @@index([billDate])
+}
+
+// Work In Progress module
+
+enum WipStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum WipCoordinatorLevel {
+  L1
+  L2
+  L3
+  L4
+}
+
+model WorkInProgress {
+  id                       String        @id @default(cuid())
+  projectId                String        @unique
+  status                   WipStatus     @default(NOT_STARTED)
+
+  loiReceiptDate           DateTime?
+  agreementDate            DateTime?
+  workOrderDate            DateTime?
+  timeLimitMonths          Decimal?      @db.Decimal(8, 4)
+  stipulatedCompletionDate DateTime?
+  targetCompletionDate     DateTime?
+
+  hoCoordinatorId          String?
+  roCoordinatorId          String?
+
+  securityDepositAmount    Decimal?      @db.Decimal(19, 2)
+  securityDepositStatus    String?
+  securityDepositReturnDate DateTime?
+
+  amountOfWorkDone         Decimal?      @db.Decimal(19, 2)
+  finalProgressAmount      Decimal?      @db.Decimal(19, 2)
+
+  raBill1Amount            Decimal?      @db.Decimal(19, 2)
+  raBill1Date              DateTime?
+  raBill1SaecFee           Decimal?      @db.Decimal(19, 2)
+  raBill1ProjectExpense    Decimal?      @db.Decimal(19, 2)
+
+  raBill2Amount            Decimal?      @db.Decimal(19, 2)
+  raBill2Date              DateTime?
+  raBill2SaecFee           Decimal?      @db.Decimal(19, 2)
+  raBill2ProjectExpense    Decimal?      @db.Decimal(19, 2)
+
+  raBill3Amount            Decimal?      @db.Decimal(19, 2)
+  raBill3Date              DateTime?
+  raBill3SaecFee           Decimal?      @db.Decimal(19, 2)
+  raBill3ProjectExpense    Decimal?      @db.Decimal(19, 2)
+
+  raBill4Amount            Decimal?      @db.Decimal(19, 2)
+  raBill4Date              DateTime?
+  raBill4SaecFee           Decimal?      @db.Decimal(19, 2)
+  raBill4ProjectExpense    Decimal?      @db.Decimal(19, 2)
+
+  annexure3aPath           String?
+  completionCertificatePath String?
+  completionDate           DateTime?
+
+  remarks                  String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  project                  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hoCoordinator            Staff?        @relation("WipHoCoordinator", fields: [hoCoordinatorId], references: [id], onDelete: SetNull)
+  roCoordinator            Staff?        @relation("WipRoCoordinator", fields: [roCoordinatorId], references: [id], onDelete: SetNull)
+  assignments              WipAssignment[]
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model WipAssignment {
+  id                 String            @id @default(cuid())
+  workInProgressId   String
+  staffId            String
+  level              WipCoordinatorLevel
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  workInProgress     WorkInProgress    @relation(fields: [workInProgressId], references: [id], onDelete: Cascade)
+  staff              Staff             @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([workInProgressId, staffId, level])
+  @@index([workInProgressId])
+  @@index([staffId])
+}
+
+// Phase 4: Automated Notification Engine
+
+enum NotificationType {
+  DUE_DATE_REMINDER
+  OVERDUE_PAYMENT
+  PENDING_REPLY
+  VEHICLE_DOC_EXPIRY
+  DOCUMENT_EXPIRY
+  CUSTOM
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model NotificationRule {
+  id              String              @id @default(cuid())
+  name            String
+  type            NotificationType
+  priority        NotificationPriority @default(MEDIUM)
+  module          String
+  enabled         Boolean             @default(true)
+  thresholdDays   Int                 @default(7)
+  cronExpression  String?
+  lastRunAt       DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  notifications   Notification[]
+
+  @@index([type])
+  @@index([enabled])
+  @@index([module])
+}
+
+model Notification {
+  id              String              @id @default(cuid())
+  userId          String
+  ruleId          String?
+  type            NotificationType
+  priority        NotificationPriority @default(MEDIUM)
+  title           String
+  message         String
+  module          String
+  entityId        String?
+  entityName      String?
+  isRead          Boolean             @default(false)
+  readAt          DateTime?
+  createdAt       DateTime            @default(now())
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rule            NotificationRule?   @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+  @@index([priority])
+}
+
+// TADA Bills module
+
+enum TadaClaimStatus {
+  DRAFT
+  SUBMITTED
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+  ACCOUNTS_VERIFIED
+  ACCOUNTS_QUERY
+  FINANCE_APPROVED
+  PAID
+}
+
+model TadaClaim {
+  id                String          @id @default(cuid())
+  staffId           String
+
+  tourPurpose       String
+  fromDate          DateTime
+  toDate            DateTime
+  location          String
+
+  travelExpense     Decimal         @db.Decimal(19, 2) @default("0.00")
+  accommodationExp  Decimal         @db.Decimal(19, 2) @default("0.00")
+  foodExpense       Decimal         @db.Decimal(19, 2) @default("0.00")
+  localConveyance   Decimal         @db.Decimal(19, 2) @default("0.00")
+  otherExpense      Decimal         @db.Decimal(19, 2) @default("0.00")
+  totalClaimAmount  Decimal         @db.Decimal(19, 2) @default("0.00")
+
+  advanceAmount     Decimal?        @db.Decimal(19, 2)
+  adjustedAmount    Decimal?        @db.Decimal(19, 2)
+  balanceAmount     Decimal?        @db.Decimal(19, 2)
+
+  status            TadaClaimStatus @default(DRAFT)
+
+  managerRemarks    String?
+  managerApprovedAt DateTime?
+  managerApprovedById String?
+  accountsRemarks   String?
+  accountsVerifiedAt DateTime?
+  accountsVerifiedById String?
+  financeApprovedAt DateTime?
+  financeApprovedById String?
+  paidAt            DateTime?
+  paymentMode       String?
+
+  rejectedReason    String?
+
+  billCopyPath      String?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  staff             Staff           @relation("TadaClaimStaff", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([status])
+  @@index([fromDate])
+  @@index([toDate])
+}
+
+// Task Management module
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  PENDING_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Task {
+  id              String        @id @default(cuid())
+  title           String
+  description     String?
+  status          TaskStatus    @default(OPEN)
+  priority        TaskPriority  @default(MEDIUM)
+
+  assignedToId    String
+  assignedById    String?
+  projectId       String?
+
+  dueDate         DateTime?
+  completedAt     DateTime?
+  reworkCount     Int           @default(0)
+  reworkReason    String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  assignedTo      Staff         @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedBy      User?         @relation("TaskAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  project         Project?      @relation("TaskProject", fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([assignedToId])
+  @@index([assignedById])
+  @@index([projectId])
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
+}
+
+// HR module — extends Staff with HR-specific fields
+
+model EmployeeDetail {
+  id                    String   @id @default(cuid())
+  staffId               String   @unique
+
+  department            String?
+  alternatePhone        String?
+  presentCity           String?
+  dateOfJoining         DateTime?
+  dateOfExit            DateTime?
+
+  fatherName            String?
+  motherName            String?
+  permanentAddress      String?
+  communicationAddress  String?
+  dateOfBirth           DateTime?
+  nationality           String?
+  religionCaste         String?
+  maritalStatus         String?
+
+  passOutYear           Int?
+  otherQualification    String?
+  otherPassOutYear      Int?
+
+  interviewFormPath     String?
+  resumePath            String?
+  photoIdProofPath      String?
+  addressProofPath      String?
+  degreeCertificatePath String?
+  letterOfGuaranteePath String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  staff                 Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([department])
+  @@index([presentCity])
+}
+
+// Editable role-based permissions
+model RolePermission {
+  id              String   @id @default(cuid())
+  role            Role
+  resource        String
+  allowedActions  String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([role, resource])
+  @@index([role])
+}
+
+// System-wide settings (key-value store)
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

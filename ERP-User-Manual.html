@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAEC ERP — User Manual</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a2e35; margin: 0; padding: 40px; background: #fff; }
+  .cover { text-align: center; padding: 80px 20px; background: linear-gradient(135deg, #0d9488, #10b981); color: #fff; border-radius: 16px; margin-bottom: 40px; }
+  .cover h1 { font-size: 42px; margin: 0; }
+  .cover p { font-size: 18px; opacity: 0.9; }
+  .logo { width: 80px; height: 80px; border-radius: 16px; background: #fff; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+  h2 { color: #0d9488; border-bottom: 3px solid #10b981; padding-bottom: 8px; margin-top: 40px; font-size: 26px; }
+  h3 { color: #0f766e; font-size: 20px; margin-top: 30px; }
+  .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 20px; margin: 16px 0; background: #f9fafb; }
+  .card-title { font-weight: bold; font-size: 18px; color: #0d9488; margin-bottom: 8px; }
+  .icon-box { display: inline-flex; width: 40px; height: 40px; border-radius: 8px; background: #ccfbf1; align-items: center; justify-content: center; font-size: 20px; margin-right: 10px; vertical-align: middle; }
+  .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .feature-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; background: #fff; }
+  .feature-card h4 { margin: 0 0 6px; color: #0d9488; font-size: 16px; }
+  .feature-card p { margin: 0; font-size: 13px; color: #6b7280; }
+  .step-list { counter-reset: step; padding-left: 0; list-style: none; }
+  .step-list li { counter-increment: step; padding: 8px 0 8px 40px; position: relative; font-size: 14px; }
+  .step-list li::before { content: counter(step); position: absolute; left: 0; top: 6px; width: 28px; height: 28px; border-radius: 50%; background: #0d9488; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; }
+  .note { background: #ecfdf5; border-left: 4px solid #10b981; padding: 12px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; }
+  .warn { background: #fff7ed; border-left: 4px solid #f97316; padding: 12px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th { background: #0d9488; color: #fff; padding: 10px; text-align: left; }
+  td { border: 1px solid #e5e7eb; padding: 8px 10px; }
+  tr:nth-child(even) { background: #f9fafb; }
+  .role-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+  .role-admin { background: #fee2e2; color: #b91c1c; }
+  .role-manager { background: #dbeafe; color: #1d4ed8; }
+  .role-staff { background: #d1fae5; color: #047857; }
+  .role-auditor { background: #fef3c7; color: #b45309; }
+  .screenshot { border: 2px solid #e5e7eb; border-radius: 8px; padding: 20px; text-align: center; background: #f3f4f6; margin: 16px 0; }
+  .screenshot-label { font-size: 12px; color: #6b7280; margin-top: 8px; }
+  .toc { background: #f0fdfa; border-radius: 12px; padding: 24px; margin: 20px 0; }
+  .toc h3 { margin-top: 0; }
+  .toc ul { list-style: none; padding-left: 0; }
+  .toc li { padding: 4px 0; font-size: 14px; }
+  .toc a { text-decoration: none; color: #0d9488; }
+  @media print { .cover { page-break-after: always; } h2 { page-break-before: always; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="logo">🏗️</div>
+  <h1>SAEC ERP</h1>
+  <p>Complete User Manual for Enterprise Resource Planning</p>
+  <p style="margin-top: 20px; font-size: 14px;">Version 1.0 | July 2026</p>
+</div>
+
+<div class="toc">
+  <h3>📑 Table of Contents</h3>
+  <ul>
+    <li><a href="#intro">1. Introduction & Getting Started</a></li>
+    <li><a href="#login">2. Login & Authentication</a></li>
+    <li><a href="#dashboard">3. Dashboard Overview</a></li>
+    <li><a href="#fundflow">4. Fund Flow Module</a></li>
+    <li><a href="#duebills">5. Due Bills Module</a></li>
+    <li><a href="#wip">6. Work in Progress (WIP)</a></li>
+    <li><a href="#contractors">7. Contractors Module</a></li>
+    <li><a href="#tenders">8. Tender Management</a></li>
+    <li><a href="#payments">9. Payment Schedules</a></li>
+    <li><a href="#vehicle">10. Vehicle Log Book</a></li>
+    <li><a href="#assets">11. Property & Assets</a></li>
+    <li><a href="#inout">12. In-Out Register</a></li>
+    <li><a href="#tada">13. TADA Bills</a></li>
+    <li><a href="#tasks">14. Task Management</a></li>
+    <li><a href="#reports">15. Reports & Analytics</a></li>
+    <li><a href="#settings">16. Settings & Configuration</a></li>
+    <li><a href="#bulk">17. Bulk Import (All Modules)</a></li>
+    <li><a href="#ai">18. AI Assistant & Executive Summary</a></li>
+    <li><a href="#roles">19. User Roles & Permissions</a></li>
+  </ul>
+</div>
+
+<h2 id="intro">1. Introduction & Getting Started</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🏢</span> What is SAEC ERP?</div>
+  <p>SAEC ERP is a comprehensive enterprise resource planning system designed for infrastructure consultancy firms. It manages projects, finances, contracts, vehicles, assets, and daily operations — all in one secure, AI-powered platform.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📊 12+ Modules</h4><p>Fund Flow, Due Bills, WIP, Contractors, Tenders, Payments, Vehicles, Assets, In-Out Register, TADA Bills, Tasks, Reports</p></div>
+  <div class="feature-card"><h4>🤖 AI-Powered</h4><p>AI Executive Summary, AI Chat Assistant for instant answers about your data</p></div>
+  <div class="feature-card"><h4>📤 Bulk Import</h4><p>Upload CSV or Excel files to import data in bulk across all modules</p></div>
+  <div class="feature-card"><h4>🔒 Role-Based Access</h4><p>Admin, Manager, Staff, and Auditor roles with granular permissions</p></div>
+</div>
+<div class="screenshot">
+  <div style="font-size: 48px;">🏗️ 📊 🤖 📤 🔒</div>
+  <div class="screenshot-label">SAEC ERP — Key Features at a Glance</div>
+</div>
+
+<h2 id="login">2. Login & Authentication</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🔑</span> How to Log In</div>
+  <ol class="step-list">
+    <li>Open your browser and go to <strong>http://43.242.227.51:8080/login</strong></li>
+    <li>Enter your <strong>Email Address</strong> (e.g., admin@saec.com)</li>
+    <li>Enter your <strong>Password</strong></li>
+    <li>Click the <strong>"Sign in"</strong> button</li>
+    <li>You will be redirected to the Dashboard</li>
+  </ol>
+</div>
+<div class="note">💡 <strong>Tip:</strong> If you see "Invalid email or password", double-check your credentials. Contact your administrator if you need an account.</div>
+<div class="screenshot">
+  <div style="border: 2px solid #0d9488; border-radius: 12px; padding: 30px; max-width: 400px; margin: 0 auto; text-align: left;">
+    <div style="text-align: center; font-size: 32px; margin-bottom: 10px;">🏗️</div>
+    <div style="text-align: center; font-weight: bold; font-size: 18px; color: #0d9488;">Welcome to SAEC ERP</div>
+    <div style="text-align: center; font-size: 13px; color: #6b7280; margin-bottom: 16px;">Sign in with your organization account</div>
+    <div style="border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; margin-bottom: 8px; color: #9ca3af;">📧 you@saec.com</div>
+    <div style="border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; margin-bottom: 12px; color: #9ca3af;">🔒 Enter your password</div>
+    <div style="background: #0d9488; color: #fff; text-align: center; padding: 10px; border-radius: 6px; font-weight: bold;">Sign in</div>
+  </div>
+  <div class="screenshot-label">Login Page Layout</div>
+</div>
+
+<h2 id="dashboard">3. Dashboard Overview</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📊</span> Dashboard — Your Command Center</div>
+  <p>The Dashboard is the first page you see after login. It provides a bird's-eye view of your entire organization.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>💰 Financial Highlights</h4><p>Total projects, active projects, total fees, and fee received — at a glance</p></div>
+  <div class="feature-card"><h4>⚡ Quick Access Tiles</h4><p>Click any module tile to jump directly to that section</p></div>
+  <div class="feature-card"><h4>🤖 AI Executive Summary</h4><p>AI-generated summary of critical metrics, risks, and priorities</p></div>
+  <div class="feature-card"><h4>📋 Priority Actions</h4><p>Overdue payments, pending replies, and urgent tasks highlighted</p></div>
+</div>
+<div class="screenshot">
+  <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+    <div style="border: 2px solid #10b981; border-radius: 8px; padding: 16px; min-width: 140px;"><div style="font-size: 24px;">💰</div><div style="font-weight: bold; color: #0d9488;">Financial</div><div style="font-size: 12px; color: #6b7280;">Highlights</div></div>
+    <div style="border: 2px solid #0d9488; border-radius: 8px; padding: 16px; min-width: 140px;"><div style="font-size: 24px;">⚡</div><div style="font-weight: bold; color: #0d9488;">Quick</div><div style="font-size: 12px; color: #6b7280;">Access</div></div>
+    <div style="border: 2px solid #14b8a6; border-radius: 8px; padding: 16px; min-width: 140px;"><div style="font-size: 24px;">🤖</div><div style="font-weight: bold; color: #0d9488;">AI Summary</div><div style="font-size: 12px; color: #6b7280;">Executive</div></div>
+    <div style="border: 2px solid #f97316; border-radius: 8px; padding: 16px; min-width: 140px;"><div style="font-size: 24px;">📋</div><div style="font-weight: bold; color: #0d9488;">Priority</div><div style="font-size: 12px; color: #6b7280;">Actions</div></div>
+  </div>
+  <div class="screenshot-label">Dashboard Sections</div>
+</div>
+
+<h2 id="fundflow">4. Fund Flow Module</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🏦</span> Track Project Finances</div>
+  <p>The Fund Flow module tracks the financial health of each project — from costs incurred to fees received.</p>
+</div>
+<h3>Key Fields</h3>
+<table>
+  <tr><th>Field</th><th>Description</th><th>Example</th></tr>
+  <tr><td>Project</td><td>Linked project name</td><td>UGD Pipeline Phase 1</td></tr>
+  <tr><td>Misc Expenses</td><td>Miscellaneous project costs</td><td>₹15,000</td></tr>
+  <tr><td>Staff Expenses</td><td>Staff-related costs</td><td>₹2,50,000</td></tr>
+  <tr><td>Total Project Cost</td><td>Sum of all costs</td><td>₹12,34,567</td></tr>
+  <tr><td>Completed Work Amount</td><td>Value of work completed</td><td>₹8,00,000</td></tr>
+  <tr><td>Fee Received</td><td>Consultancy fees collected</td><td>₹5,00,000</td></tr>
+</table>
+<div class="note">💡 <strong>Tip:</strong> Use the <strong>Bulk Import</strong> button to upload fund flow data for multiple projects at once via CSV or Excel.</div>
+
+<h2 id="duebills">5. Due Bills Module</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📄</span> Billing Lifecycle & Collections</div>
+  <p>Track consultancy bills from generation to payment receipt. Monitor outstanding amounts and bill status.</p>
+</div>
+<h3>Bill Statuses</h3>
+<table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td>PENDING</td><td>Bill generated, not yet paid</td></tr>
+  <tr><td>PARTIAL</td><td>Partially paid</td></tr>
+  <tr><td>PAID</td><td>Fully paid</td></tr>
+  <tr><td>ON_HOLD</td><td>Payment paused</td></tr>
+  <tr><td>CANCELLED</td><td>Bill cancelled</td></tr>
+</table>
+<div class="feature-grid">
+  <div class="feature-card"><h4>🔍 Filter & Search</h4><p>Filter by project, region, client, status, or scheme</p></div>
+  <div class="feature-card"><h4>📤 Export & Import</h4><p>Export bills to CSV/Excel or import in bulk</p></div>
+</div>
+
+<h2 id="wip">6. Work in Progress (WIP)</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🔨</span> Track Active Work Orders</div>
+  <p>Monitor work orders, RA bills, security deposits, and project completion progress.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📅 Key Dates</h4><p>LOI receipt, agreement, work order, stipulated & target completion dates</p></div>
+  <div class="feature-card"><h4>💰 RA Bills</h4><p>Track up to 4 RA bills with amounts, dates, fees, and expenses</p></div>
+  <div class="feature-card"><h4>🔐 Security Deposit</h4><p>Track deposit amount, status, and return date</p></div>
+  <div class="feature-card"><h4>👥 Coordinators</h4><p>Assign HO and RO coordinators for each project</p></div>
+</div>
+
+<h2 id="contractors">7. Contractors Module</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">👷</span> Vendor Management</div>
+  <p>Manage contractor profiles, work specifications, contract amounts, and billing details.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📋 Contractor Details</h4><p>Name, contact person, phone, email, address</p></div>
+  <div class="feature-card"><h4>💼 Work Specs</h4><p>Work name, type (Building, Road, UGD, etc.), service type</p></div>
+  <div class="feature-card"><h4>💰 Financials</h4><p>Contract amount, Schedule B amount, final progress</p></div>
+  <div class="feature-card"><h4>📄 Documents</h4><p>Work order copy, drawings, completion certificate</p></div>
+</div>
+
+<h2 id="tenders">8. Tender Management</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📋</span> Bids & Proposals Tracking</div>
+  <p>Track tender opportunities from preparation to submission to evaluation — including fees, EMD, and price comparison.</p>
+</div>
+<h3>Tender Statuses</h3>
+<table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td>UNDER_PREPARATION</td><td>Tender being prepared</td></tr>
+  <tr><td>SUBMITTED</td><td>Tender submitted</td></tr>
+  <tr><td>UNDER_EVALUATION</td><td>Under client evaluation</td></tr>
+  <tr><td>WON</td><td>Tender won</td></tr>
+  <tr><td>LOST</td><td>Tender lost</td></tr>
+  <tr><td>WITHDRAWN</td><td>Withdrawn from bidding</td></tr>
+  <tr><td>CANCELLED</td><td>Tender cancelled</td></tr>
+</table>
+<div class="screenshot">
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+    <div style="background: #fef3c7; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">📝 Under Preparation</div>
+    <div style="background: #dbeafe; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">📤 Submitted</div>
+    <div style="background: #e0e7ff; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">🔍 Under Evaluation</div>
+    <div style="background: #d1fae5; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">✅ Won</div>
+    <div style="background: #fee2e2; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">❌ Lost</div>
+  </div>
+  <div class="screenshot-label">Tender Status Badges</div>
+</div>
+
+<h2 id="payments">9. Payment Schedules</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📅</span> Upcoming Payments Tracker</div>
+  <p>Track scheduled payments like GST, TDS, Excise, and Vehicle Loan EMIs with due dates and status.</p>
+</div>
+<h3>Categories</h3>
+<table>
+  <tr><th>Category</th><th>Use</th></tr>
+  <tr><td>EXCISE</td><td>Excise duty payments</td></tr>
+  <tr><td>GST</td><td>Goods & Services Tax</td></tr>
+  <tr><td>TDS</td><td>Tax Deducted at Source</td></tr>
+  <tr><td>VEHICLE_LOAN</td><td>Vehicle loan EMIs</td></tr>
+</table>
+
+<h2 id="vehicle">10. Vehicle Log Book</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🚗</span> Vehicle Tracking & Journey Logs</div>
+  <p>Manage vehicle records, track journeys, fuel expenses, and document renewals (RC, Insurance, PUC).</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>🚙 Vehicle Records</h4><p>Registration, make, model, year, status</p></div>
+  <div class="feature-card"><h4>📝 Journey Logs</h4><p>Date, from/to, start/end km, total km, expenses</p></div>
+  <div class="feature-card"><h4>📄 Document Tracking</h4><p>RC, Insurance, PUC expiry dates with alerts</p></div>
+  <div class="feature-card"><h4>✅ Approval System</h4><p>Journey logs: Pending → Approved/Rejected</p></div>
+</div>
+
+<h2 id="assets">11. Property & Assets</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📦</span> Equipment & Property Management</div>
+  <p>Track organizational assets — from computers to field equipment — with assignment and warranty tracking.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>🏷️ Asset Details</h4><p>Item code, name, category, make, model, year</p></div>
+  <div class="feature-card"><h4>👤 Assignment</h4><p>Assign to person or office, track quantity</p></div>
+  <div class="feature-card"><h4>🔒 Security</h4><p>Security codes and warranty document paths</p></div>
+  <div class="feature-card"><h4>📊 Status</h4><p>Available, Assigned, Under Maintenance, Disposed</p></div>
+</div>
+
+<h2 id="inout">12. In-Out Register</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">↔️</span> Document Tracking System</div>
+  <p>Track inward/outward documents, client correspondence, staff CC assignments, and replies.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📥 Document Entry</h4><p>Document date, received date, reference number</p></div>
+  <div class="feature-card"><h4>🏢 Client Linking</h4><p>Link documents to specific clients</p></div>
+  <div class="feature-card"><h4>👤 Action Staff</h4><p>Assign staff for action suggested</p></div>
+  <div class="feature-card"><h4>📤 Reply Tracking</h4><p>Reply date and reference number</p></div>
+</div>
+
+<h2 id="tada">13. TADA Bills</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🧾</span> Travel & Daily Allowance Claims</div>
+  <p>Submit and track travel allowance claims with multi-level approval workflow.</p>
+</div>
+<h3>Approval Workflow</h3>
+<div class="screenshot">
+  <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: center;">
+    <div style="background: #f3f4f6; padding: 8px 12px; border-radius: 8px; font-size: 13px;">📝 Draft</div>
+    <div style="font-size: 18px;">→</div>
+    <div style="background: #dbeafe; padding: 8px 12px; border-radius: 8px; font-size: 13px;">📤 Submitted</div>
+    <div style="font-size: 18px;">→</div>
+    <div style="background: #d1fae5; padding: 8px 12px; border-radius: 8px; font-size: 13px;">✅ Manager Approved</div>
+    <div style="font-size: 18px;">→</div>
+    <div style="background: #e0e7ff; padding: 8px 12px; border-radius: 8px; font-size: 13px;">🔍 Accounts Verified</div>
+    <div style="font-size: 18px;">→</div>
+    <div style="background: #fef3c7; padding: 8px 12px; border-radius: 8px; font-size: 13px;">💰 Finance Approved</div>
+    <div style="font-size: 18px;">→</div>
+    <div style="background: #d1fae5; padding: 8px 12px; border-radius: 8px; font-size: 13px;">💵 Paid</div>
+  </div>
+  <div class="screenshot-label">TADA Bill Approval Flow</div>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>💰 Expense Types</h4><p>Travel, accommodation, food, local conveyance, other</p></div>
+  <div class="feature-card"><h4>💵 Advance & Balance</h4><p>Track advance given, amount adjusted, balance due</p></div>
+</div>
+
+<h2 id="tasks">14. Task Management</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">✅</span> Team Assignments & Tracking</div>
+  <p>Create tasks, assign to staff, set priorities and due dates, and track completion.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📋 Task Details</h4><p>Title, description, status, priority</p></div>
+  <div class="feature-card"><h4>👤 Assignment</h4><p>Assign to staff, link to project</p></div>
+  <div class="feature-card"><h4>📅 Due Dates</h4><p>Set deadlines, track overdue tasks</p></div>
+  <div class="feature-card"><h4>🔄 Rework</h4><p>Track rework count and reasons</p></div>
+</div>
+<h3>Task Priorities</h3>
+<table>
+  <tr><th>Priority</th><th>Color</th><th>Use</th></tr>
+  <tr><td>CRITICAL</td><td>🔴 Red</td><td>Urgent — needs immediate attention</td></tr>
+  <tr><td>HIGH</td><td>🟠 Orange</td><td>Important — address soon</td></tr>
+  <tr><td>MEDIUM</td><td>🟡 Yellow</td><td>Normal priority</td></tr>
+  <tr><td>LOW</td><td>🟢 Green</td><td>Can wait — low urgency</td></tr>
+</table>
+
+<h2 id="reports">15. Reports & Analytics</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📈</span> Analytics & Data Export</div>
+  <p>Generate reports across all modules. Export data in CSV, JSON, or Excel formats for external analysis.</p>
+</div>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📊 Module Reports</h4><p>Fund Flow, Due Bills, WIP, Tenders, Payments, Vehicles, Assets, TADA, Tasks</p></div>
+  <div class="feature-card"><h4>📤 Export Formats</h4><p>CSV, JSON, XLSX (Excel)</p></div>
+</div>
+
+<h2 id="settings">16. Settings & Configuration</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">⚙️</span> System Configuration</div>
+  <p>Access settings from the sidebar. Available tabs depend on your role.</p>
+</div>
+<table>
+  <tr><th>Tab</th><th>Function</th><th>Who Can Access</th></tr>
+  <tr><td>Export / Import</td><td>Export or import data across modules</td><td><span class="role-badge role-admin">Admin</span> <span class="role-badge role-manager">Manager</span> <span class="role-badge role-auditor">Auditor</span></td></tr>
+  <tr><td>Notifications</td><td>Configure alert rules and thresholds</td><td>All roles</td></tr>
+  <tr><td>Audit Log</td><td>View system activity logs</td><td><span class="role-badge role-admin">Admin</span> <span class="role-badge role-auditor">Auditor</span></td></tr>
+  <tr><td>Users</td><td>Create and manage user accounts</td><td><span class="role-badge role-admin">Admin</span> only</td></tr>
+  <tr><td>Rights</td><td>Configure role permissions and AI access</td><td>All roles</td></tr>
+</table>
+
+<h2 id="bulk">17. Bulk Import (All Modules)</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">📤</span> Upload Data in Bulk</div>
+  <p>Every module has a <strong>"Bulk Import"</strong> button in the top-right corner. Use it to upload data for multiple records at once.</p>
+</div>
+<h3>How to Use Bulk Import</h3>
+<ol class="step-list">
+  <li>Go to any module page (e.g., Contractors)</li>
+  <li>Click the <strong>"Bulk Import"</strong> button</li>
+  <li>Download a <strong>CSV</strong> or <strong>Excel</strong> template — this shows the correct column headers</li>
+  <li>Fill in your data in the template (using Excel or Google Sheets)</li>
+  <li>Save the file as CSV or XLSX</li>
+  <li>Upload the file using the file picker, or paste CSV data directly</li>
+  <li>Click <strong>"Import"</strong> — records will be created in the database</li>
+  <li>Review success/error messages — fix any errors and re-import</li>
+</ol>
+<div class="note">💡 <strong>Relation Fields:</strong> For fields like "Project" or "Staff", just enter the <strong>name</strong> (e.g., "GUDM Kutiyana UGD DPR"). The system will automatically look up the correct ID.</div>
+<div class="warn">⚠️ <strong>Important:</strong> Make sure related records (Projects, Staff, Clients) exist before importing modules that reference them.</div>
+<div class="screenshot">
+  <div style="border: 2px solid #0d9488; border-radius: 12px; padding: 24px; max-width: 500px; margin: 0 auto; text-align: left;">
+    <div style="font-weight: bold; color: #0d9488; font-size: 16px; margin-bottom: 12px;">📤 Bulk Import — Contractors</div>
+    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+      <div><div style="font-weight: bold; font-size: 13px;">Download Template</div><div style="font-size: 11px; color: #6b7280;">Get correct column headers</div></div>
+      <div style="display: flex; gap: 4px;"><span style="background: #f3f4f6; padding: 4px 10px; border-radius: 4px; font-size: 12px;">CSV</span><span style="background: #f3f4f6; padding: 4px 10px; border-radius: 4px; font-size: 12px;">Excel</span></div>
+    </div>
+    <div style="border: 1px dashed #d1d5db; border-radius: 8px; padding: 12px; margin-bottom: 8px; text-align: center; color: #9ca3af; font-size: 13px;">📁 Upload CSV or Excel file</div>
+    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-bottom: 8px; height: 40px; background: #f9fafb; font-size: 11px; color: #9ca3af;">Or paste CSV data here...</div>
+    <div style="text-align: right;"><span style="background: #0d9488; color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: bold;">Import</span></div>
+  </div>
+  <div class="screenshot-label">Bulk Import Dialog</div>
+</div>
+
+<h2 id="ai">18. AI Assistant & Executive Summary</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">🤖</span> AI-Powered Intelligence</div>
+  <p>SAEC ERP includes two AI features to help you make faster, better decisions.</p>
+</div>
+<h3>AI Executive Summary (Dashboard)</h3>
+<div class="feature-grid">
+  <div class="feature-card"><h4>📊 Auto-Generated</h4><p>Click "Generate" on the dashboard to get an AI summary of your key metrics</p></div>
+  <div class="feature-card"><h4>🚨 Risk Alerts</h4><p>Critical, High, Medium, and Low severity badges highlight priorities</p></div>
+</div>
+<h3>AI Chat Assistant</h3>
+<div class="feature-grid">
+  <div class="feature-card"><h4>💬 Floating Button</h4><p>Click the "Ask AI" button (bottom-right corner) on any page</p></div>
+  <div class="feature-card"><h4>🔍 Ask Anything</h4><p>Ask about projects, bills, tasks, payments, and more — in plain English</p></div>
+</div>
+<div class="screenshot">
+  <div style="position: relative; height: 200px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; padding: 16px;">
+    <div style="font-size: 13px; color: #6b7280;">Dashboard content...</div>
+    <div style="position: absolute; bottom: 16px; right: 16px; background: #0d9488; color: #fff; padding: 10px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(13,148,136,0.3);">🤖 Ask AI</div>
+  </div>
+  <div class="screenshot-label">AI Assistant Floating Button Location</div>
+</div>
+<div class="note">💡 <strong>Example Questions:</strong> "How many overdue payments do we have?", "What's the total fee received across all projects?", "Which tasks are overdue?"</div>
+
+<h2 id="roles">19. User Roles & Permissions</h2>
+<div class="card">
+  <div class="card-title"><span class="icon-box">👥</span> Four Role Types</div>
+</div>
+<table>
+  <tr><th>Role</th><th>Badge</th><th>Description</th></tr>
+  <tr><td><strong>Admin</strong></td><td><span class="role-badge role-admin">Admin</span></td><td>Full system access — all modules, settings, user management, audit logs, role permissions</td></tr>
+  <tr><td><strong>Manager</strong></td><td><span class="role-badge role-manager">Manager</span></td><td>Most modules, export/import, notifications, user rights configuration</td></tr>
+  <tr><td><strong>Staff</strong></td><td><span class="role-badge role-staff">Staff</span></td><td>Operational modules, notifications, user rights (no export/import, no audit log)</td></tr>
+  <tr><td><strong>Auditor</strong></td><td><span class="role-badge role-auditor">Auditor</span></td><td>Read-only access, export/import, audit logs, notifications</td></tr>
+</table>
+
+<div class="note" style="margin-top: 40px; text-align: center; font-size: 15px;">
+  <strong>SAEC ERP</strong> — Secure, AI-Powered Enterprise Resource Planning<br/>
+  For support, contact your system administrator.<br/>
+  Live URL: http://43.242.227.51:8080
+</div>
+
+</body>
+</html>
