@@ -12,6 +12,10 @@ export const clientCreateSchema = z.object({
   name: cleanedString(200),
   abbreviation: cleanedString(8).optional().nullable(),
   address: cleanedString(500).optional().nullable(),
+  gstNumber: cleanedString(15).optional().nullable(),
+  panNumber: cleanedString(10).optional().nullable(),
+  phone: cleanedString(20).optional().nullable(),
+  website: cleanedString(200).optional().nullable(),
   contacts: z.array(clientContactSchema).optional(),
 });
 

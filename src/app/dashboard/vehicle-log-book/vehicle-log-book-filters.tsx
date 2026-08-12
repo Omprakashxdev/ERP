@@ -157,7 +157,9 @@ export function VehicleLogBookFilters({
               onValueChange={(v) => setVehicleId(v ?? "")}
             >
               <SelectTrigger className="w-full min-w-40" size="sm">
-                <SelectValue placeholder="All vehicles" />
+                <SelectValue placeholder="All vehicles">
+                  {(value: string) => value ? vehicles.find((v) => v.id === value)?.registrationNumber ?? "All vehicles" : "All vehicles"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">All vehicles</SelectItem>

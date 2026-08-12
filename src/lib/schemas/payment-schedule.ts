@@ -4,19 +4,30 @@ import {
   PaymentScheduleCategory,
   PaymentScheduleStatus,
 } from "@prisma/client";
-import { money, cleanedString } from "./shared";
+import { positiveMoney, cleanedString } from "./shared";
+
+function notFutureDate(d: Date | undefined) {
+  if (!d) return true;
+  const now = new Date();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return d <= endOfToday;
+}
 
 export const paymentScheduleCreateSchema = z.object({
-  date: z.coerce.date().optional(),
+  date: z.coerce.date().optional().refine(notFutureDate, "Date cannot be in the future"),
   dueDate: z.coerce.date().optional().nullable(),
   paymentType: cleanedString(100).optional().nullable(),
   category: z
     .nativeEnum(PaymentScheduleCategory)
     .default(PaymentScheduleCategory.GST),
   detail: cleanedString(500).optional().nullable(),
-  amount: money.default(new Prisma.Decimal("0.00")),
+  amount: positiveMoney.default(new Prisma.Decimal("0.00")),
   status: z
     .nativeEnum(PaymentScheduleStatus)
+    .refine(
+      (s) => s !== PaymentScheduleStatus.CANCELLED,
+      "Cannot create a payment schedule with CANCELLED status"
+    )
     .default(PaymentScheduleStatus.PENDING),
   billCopyPath: cleanedString(500).optional().nullable(),
   remarks: cleanedString(500).optional().nullable(),

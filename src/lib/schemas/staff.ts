@@ -8,6 +8,7 @@ export const staffCreateSchema = z.object({
   employeeCode: cleanedString(30).optional().nullable(),
   designation: cleanedString(60).optional().nullable(),
   regionId: optionalCuid,
+  reportingManagerId: optionalCuid,
   isActive: z.boolean().default(true),
 });
 

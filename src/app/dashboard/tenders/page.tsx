@@ -10,6 +10,7 @@ import { TenderFilterInput } from "@/lib/schemas/tender";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileSpreadsheet, ClipboardList } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface TendersPageProps {
   searchParams: Promise<{
@@ -56,7 +57,11 @@ export default async function TendersPage({
     toDate: parseDate(params.toDate),
   };
 
-  const tendersResult = await getTenders(filter, page, pageSize);
+  const [tendersResult, masters] = await Promise.all([
+    getTenders(filter, page, pageSize),
+    fetchAllMasters(),
+  ]);
+  const masterData = masters as unknown as MasterData;
 
   const rows = tendersResult.success
     ? (tendersResult.data?.rows ?? [])
@@ -100,6 +105,7 @@ export default async function TendersPage({
           total={total}
           totalPages={totalPages}
           filter={filter}
+          masters={masterData}
         />
       ) : (
         <Card className="shadow-sm">

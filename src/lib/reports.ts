@@ -226,7 +226,7 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     id: "tender-fee-emd",
     category: "tenders",
     title: "Tender Fee – EMD Wise Report",
-    description: "Date, month, client wise — draft/bank instrument + validity + pending EMD",
+    description: "EMD deposits, refund status (refunded/pending), draft/bank instrument details",
     groupBy: ["date", "month", "client"],
   },
   {
@@ -946,7 +946,19 @@ async function runPmtByCategory(_params?: { dateFrom?: Date; dateTo?: Date }) {
 }
 
 async function runTadaClaim(params?: { dateFrom?: Date; dateTo?: Date }) {
-  const where = dateFilter(params);
+  const where: Record<string, unknown> = {};
+  if (params?.dateFrom || params?.dateTo) {
+    const and: Record<string, unknown>[] = [];
+    if (params.dateFrom) {
+      and.push({ toDate: { gte: params.dateFrom } });
+    }
+    if (params.dateTo) {
+      const to = new Date(params.dateTo);
+      to.setDate(to.getDate() + 1);
+      and.push({ fromDate: { lt: to } });
+    }
+    where.AND = and;
+  }
   const claims = await prisma.tadaClaim.findMany({
     where,
     include: { staff: { select: { name: true, designation: true } } },
@@ -993,8 +1005,8 @@ async function runTadaPendingApproval(_params?: { dateFrom?: Date; dateTo?: Date
   };
 }
 
-async function runTaskStatus(_params?: { dateFrom?: Date; dateTo?: Date }) {
-  const tasks = await prisma.task.findMany({ take: 1000 });
+async function runTaskStatus(params?: { dateFrom?: Date; dateTo?: Date }) {
+  const tasks = await prisma.task.findMany({ where: dateFilter(params), take: 1000 });
   const byStatus: Record<string, number> = {};
   for (const t of tasks) {
     byStatus[t.status] = (byStatus[t.status] ?? 0) + 1;
@@ -1006,10 +1018,11 @@ async function runTaskStatus(_params?: { dateFrom?: Date; dateTo?: Date }) {
   };
 }
 
-async function runTaskOverdue(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskOverdue(params?: { dateFrom?: Date; dateTo?: Date }) {
   const now = new Date();
   const tasks = await prisma.task.findMany({
     where: {
+      ...dateFilter(params),
       dueDate: { lt: now },
       status: { notIn: ["COMPLETED", "CANCELLED"] },
     },
@@ -1033,10 +1046,10 @@ async function runTaskOverdue(_params?: { dateFrom?: Date; dateTo?: Date }) {
   };
 }
 
-async function runTaskAging(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskAging(params?: { dateFrom?: Date; dateTo?: Date }) {
   const now = new Date();
   const tasks = await prisma.task.findMany({
-    where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+    where: { ...dateFilter(params), status: { notIn: ["COMPLETED", "CANCELLED"] } },
     take: 1000,
   });
   const buckets = { "0-7": 0, "8-15": 0, "16-30": 0, "30+": 0 };
@@ -1391,21 +1404,38 @@ async function runTenderFeeEmd(_params?: { dateFrom?: Date; dateTo?: Date }) {
     take: 500,
     orderBy: { tenderDate: "desc" },
   });
+  const now = new Date();
   return {
-    columns: ["Date", "Tender Name", "Tender Fee", "Fee Mode", "EMD Amount", "EMD Mode", "EMD Return Date", "Status"],
-    rows: tenders.map((t) => ({
-      Date: t.tenderDate,
-      "Tender Name": t.name,
-      "Tender Fee": t.tenderFeeAmount ? Number(t.tenderFeeAmount) : "—",
-      "Fee Mode": t.tenderFeeMode ?? "—",
-      "EMD Amount": t.emdAmount ? Number(t.emdAmount) : "—",
-      "EMD Mode": t.emdMode ?? "—",
-      "EMD Return Date": t.emdReturnCollectionDate ?? "—",
-      Status: t.status,
-    })),
+    columns: ["Date", "Tender Name", "Tender Fee", "Fee Mode", "EMD Amount", "EMD Mode", "EMD Date", "EMD Return Date", "Refund Status", "Tender Status"],
+    rows: tenders.map((t) => {
+      let refundStatus = "—";
+      if (t.emdAmount && Number(t.emdAmount) > 0) {
+        if (t.emdReturnCollectionDate) {
+          refundStatus = "Refunded";
+        } else if (["WON", "LOST", "WITHDRAWN", "CANCELLED"].includes(t.status)) {
+          refundStatus = "Pending Refund";
+        } else {
+          refundStatus = "Submitted (in process)";
+        }
+      }
+      return {
+        Date: t.tenderDate,
+        "Tender Name": t.name,
+        "Tender Fee": t.tenderFeeAmount ? Number(t.tenderFeeAmount) : "—",
+        "Fee Mode": t.tenderFeeMode ?? "—",
+        "EMD Amount": t.emdAmount ? Number(t.emdAmount) : "—",
+        "EMD Mode": t.emdMode ?? "—",
+        "EMD Date": t.emdDate ?? "—",
+        "EMD Return Date": t.emdReturnCollectionDate ?? "—",
+        "Refund Status": refundStatus,
+        "Tender Status": t.status,
+      };
+    }),
     summary: {
       "Total tender fees": tenders.reduce((s, t) => s + (t.tenderFeeAmount ? Number(t.tenderFeeAmount) : 0), 0),
-      "Total EMD": tenders.reduce((s, t) => s + (t.emdAmount ? Number(t.emdAmount) : 0), 0),
+      "Total EMD deposited": tenders.reduce((s, t) => s + (t.emdAmount ? Number(t.emdAmount) : 0), 0),
+      "EMD refunded": tenders.filter((t) => t.emdReturnCollectionDate).reduce((s, t) => s + (t.emdAmount ? Number(t.emdAmount) : 0), 0),
+      "EMD pending refund": tenders.filter((t) => !t.emdReturnCollectionDate && t.emdAmount && ["WON", "LOST", "WITHDRAWN", "CANCELLED"].includes(t.status)).reduce((s, t) => s + (t.emdAmount ? Number(t.emdAmount) : 0), 0),
     },
   };
 }
@@ -1748,8 +1778,9 @@ async function runTadaOverdueClaim(_params?: { dateFrom?: Date; dateTo?: Date })
 
 // --- Task Employee Report ---
 
-async function runTaskEmployee(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskEmployee(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
+    where: dateFilter(params),
     include: { assignedTo: { select: { name: true } } },
     take: 1000,
   });
@@ -1771,8 +1802,9 @@ async function runTaskEmployee(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 // --- Task Department Report ---
 
-async function runTaskDepartment(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskDepartment(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
+    where: dateFilter(params),
     include: { assignedTo: { select: { designation: true } } },
     take: 1000,
   });
@@ -1792,8 +1824,8 @@ async function runTaskDepartment(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 // --- Task Priority Report ---
 
-async function runTaskPriority(_params?: { dateFrom?: Date; dateTo?: Date }) {
-  const tasks = await prisma.task.findMany({ take: 1000 });
+async function runTaskPriority(params?: { dateFrom?: Date; dateTo?: Date }) {
+  const tasks = await prisma.task.findMany({ where: dateFilter(params), take: 1000 });
   const byPriority: Record<string, number> = {};
   for (const t of tasks) {
     byPriority[t.priority] = (byPriority[t.priority] ?? 0) + 1;
@@ -1806,9 +1838,9 @@ async function runTaskPriority(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 // --- Task Completion Report ---
 
-async function runTaskCompletion(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskCompletion(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
-    where: { status: "COMPLETED", completedAt: { not: null } },
+    where: { ...dateFilter(params), status: "COMPLETED", completedAt: { not: null } },
     include: { assignedTo: { select: { name: true } } },
     take: 500,
     orderBy: { completedAt: "desc" },
@@ -1822,8 +1854,9 @@ async function runTaskCompletion(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 // --- Task Assignment Report ---
 
-async function runTaskAssignment(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskAssignment(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
+    where: dateFilter(params),
     include: {
       assignedTo: { select: { name: true } },
       assignedBy: { select: { name: true } },
@@ -1847,9 +1880,9 @@ async function runTaskAssignment(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 // --- Task Project Wise Report ---
 
-async function runTaskProjectWise(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskProjectWise(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
-    where: { projectId: { not: null } },
+    where: { ...dateFilter(params), projectId: { not: null } },
     include: { project: { select: { name: true } } },
     take: 1000,
   });
@@ -1869,8 +1902,9 @@ async function runTaskProjectWise(_params?: { dateFrom?: Date; dateTo?: Date }) 
 
 // --- Task-wise Employee Summary ---
 
-async function runTaskWiseEmployee(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskWiseEmployee(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
+    where: dateFilter(params),
     include: {
       assignedTo: { select: { name: true, designation: true } },
       assignedBy: { select: { name: true } },
@@ -1898,9 +1932,9 @@ async function runTaskWiseEmployee(_params?: { dateFrom?: Date; dateTo?: Date })
 
 // --- Task Rework Report ---
 
-async function runTaskRework(_params?: { dateFrom?: Date; dateTo?: Date }) {
+async function runTaskRework(params?: { dateFrom?: Date; dateTo?: Date }) {
   const tasks = await prisma.task.findMany({
-    where: { reworkCount: { gt: 0 } },
+    where: { ...dateFilter(params), reworkCount: { gt: 0 } },
     include: { assignedTo: { select: { name: true, designation: true } } },
     take: 500,
   });

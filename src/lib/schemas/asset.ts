@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { AssetStatus } from "@prisma/client";
-import { cleanedString, money } from "./shared";
+import { cleanedString, money, cuid, optionalCuid } from "./shared";
 
-export const assetCreateSchema = z.object({
+const assetBaseSchema = z.object({
   name: cleanedString(200),
   category: cleanedString(100).optional().nullable(),
   make: cleanedString(100).optional().nullable(),
@@ -22,9 +22,37 @@ export const assetCreateSchema = z.object({
   remarks: cleanedString(500).optional().nullable(),
 });
 
-export const assetUpdateSchema = assetCreateSchema
+export const assetCreateSchema = assetBaseSchema.refine(
+  (data) => {
+    const qty = Number(data.quantity ?? 1);
+    const assigned = Number(data.assignedQuantity ?? 0);
+    return assigned <= qty;
+  },
+  {
+    message: "Assigned quantity cannot exceed total quantity",
+    path: ["assignedQuantity"],
+  }
+);
+
+export const assetUpdateSchema = assetBaseSchema
   .partial()
-  .extend({ id: z.string().cuid() });
+  .extend({ id: z.string().cuid() })
+  .refine(
+    (data) => {
+      // For updates, we don't strictly know original quantity if it's not passed,
+      // but if both are provided, we can validate.
+      if (data.quantity !== undefined && data.assignedQuantity !== undefined) {
+        const qty = Number(data.quantity ?? 1);
+        const assigned = Number(data.assignedQuantity ?? 0);
+        return assigned <= qty;
+      }
+      return true;
+    },
+    {
+      message: "Assigned quantity cannot exceed total quantity",
+      path: ["assignedQuantity"],
+    }
+  );
 
 export const assetFilterSchema = z.object({
   search: z.string().optional(),
@@ -33,6 +61,23 @@ export const assetFilterSchema = z.object({
   yearOfPurchase: z.coerce.number().int().min(1900).optional(),
 });
 
+export const assetMovementCreateSchema = z.object({
+  assetId: cuid,
+  movementType: z.enum([
+    "ASSIGNED_TO_EMPLOYEE",
+    "RETURNED_FROM_EMPLOYEE",
+    "GONE_FOR_REPAIR",
+    "RETURNED_FROM_REPAIR",
+    "TRASH",
+    "NOT_WORKING",
+    "TRANSFERRED",
+  ]),
+  fromStaffId: optionalCuid,
+  toStaffId: optionalCuid,
+  notes: cleanedString(500).optional().nullable(),
+});
+
 export type AssetCreateInput = z.infer<typeof assetCreateSchema>;
 export type AssetUpdateInput = z.infer<typeof assetUpdateSchema>;
 export type AssetFilterInput = z.infer<typeof assetFilterSchema>;
+export type AssetMovementCreateInput = z.infer<typeof assetMovementCreateSchema>;

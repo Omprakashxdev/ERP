@@ -45,6 +45,8 @@ interface VehicleLogBookTableProps {
   totalPages: number;
   vehicleFilter: VehicleFilterInput;
   journeyLogFilter: JourneyLogFilterInput;
+  staff: { id: string; name: string }[];
+  cities?: { id: string; name: string }[];
 }
 
 const vehicleStatusVariantMap: Record<VehicleStatus, string> = {
@@ -96,6 +98,8 @@ export function VehicleLogBookTable({
   totalPages,
   vehicleFilter,
   journeyLogFilter,
+  staff,
+  cities = [],
 }: VehicleLogBookTableProps) {
   const router = useRouter();
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithComputed | null>(null);
@@ -427,6 +431,8 @@ export function VehicleLogBookTable({
             id: v.id,
             registrationNumber: v.registrationNumber,
           }))}
+          staff={staff}
+          cities={cities}
           mode="edit"
           onClose={() => setSelectedJourney(null)}
         />
@@ -438,6 +444,8 @@ export function VehicleLogBookTable({
             id: v.id,
             registrationNumber: v.registrationNumber,
           }))}
+          staff={staff}
+          cities={cities}
           mode="create"
           onClose={() => setCreateJourneyOpen(false)}
         />

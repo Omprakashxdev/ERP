@@ -7,9 +7,11 @@ import {
   assetCreateSchema,
   assetUpdateSchema,
   assetFilterSchema,
+  assetMovementCreateSchema,
   AssetCreateInput,
   AssetUpdateInput,
   AssetFilterInput,
+  AssetMovementCreateInput,
 } from "@/lib/schemas/asset";
 import { buildAssetWhere } from "@/lib/queries/assets";
 import {
@@ -136,7 +138,16 @@ export async function getAssetById(
   id: string
 ): Promise<ActionResult<unknown | null>> {
   return withPermission("assets", "read", async () => {
-    const asset = await prisma.asset.findUnique({ where: { id } });
+    const asset = await prisma.asset.findUnique({
+      where: { id },
+      include: {
+        currentHolder: true,
+        movements: {
+          include: { fromStaff: true, toStaff: true },
+          orderBy: { movementDate: "desc" },
+        },
+      },
+    });
 
     if (!asset) return null;
 
@@ -148,5 +159,89 @@ export async function getAssetById(
       ),
       ...computeAssetFlags(asset),
     };
+  });
+}
+
+const MOVEMENT_STATUS_MAP: Record<string, string> = {
+  ASSIGNED_TO_EMPLOYEE: "ASSIGNED",
+  RETURNED_FROM_EMPLOYEE: "AVAILABLE",
+  GONE_FOR_REPAIR: "UNDER_MAINTENANCE",
+  RETURNED_FROM_REPAIR: "AVAILABLE",
+  TRASH: "DISPOSED",
+  NOT_WORKING: "NOT_WORKING",
+  TRANSFERRED: "ASSIGNED",
+};
+
+export async function createAssetMovement(
+  input: AssetMovementCreateInput
+): Promise<ActionResult<{ id: string }>> {
+  return withPermission("assets", "update", async (user) => {
+    const parsed = assetMovementCreateSchema.parse(input);
+    await checkRateLimit(user.id);
+
+    const asset = await prisma.asset.findUnique({
+      where: { id: parsed.assetId },
+    });
+    if (!asset) throw new Error("Asset not found");
+
+    if (
+      parsed.movementType === "ASSIGNED_TO_EMPLOYEE" &&
+      asset.status === "ASSIGNED"
+    ) {
+      throw new Error(
+        "This asset is already assigned. Please return it or use 'Transfer' instead."
+      );
+    }
+
+    const newStatus = MOVEMENT_STATUS_MAP[parsed.movementType] ?? asset.status;
+    const newHolderId =
+      parsed.movementType === "ASSIGNED_TO_EMPLOYEE" ||
+      parsed.movementType === "TRANSFERRED"
+        ? parsed.toStaffId ?? null
+        : parsed.movementType === "RETURNED_FROM_EMPLOYEE" ||
+          parsed.movementType === "RETURNED_FROM_REPAIR"
+        ? null
+        : asset.currentHolderId;
+
+    const movement = await prisma.assetMovement.create({
+      data: {
+        assetId: parsed.assetId,
+        movementType: parsed.movementType,
+        fromStaffId: parsed.fromStaffId ?? asset.currentHolderId ?? null,
+        toStaffId: parsed.toStaffId ?? null,
+        notes: parsed.notes,
+      },
+    });
+
+    await prisma.asset.update({
+      where: { id: parsed.assetId },
+      data: {
+        status: newStatus as never,
+        currentHolderId: newHolderId,
+      },
+    });
+
+    await audit(user.id, "create", "AssetMovement", movement.id, {
+      assetId: parsed.assetId,
+      movementType: parsed.movementType,
+      fromStaffId: parsed.fromStaffId,
+      toStaffId: parsed.toStaffId,
+    });
+
+    revalidatePath("/dashboard/assets");
+    return { id: movement.id };
+  });
+}
+
+export async function getAssetMovements(
+  assetId: string
+): Promise<ActionResult<unknown[]>> {
+  return withPermission("assets", "read", async () => {
+    const movements = await prisma.assetMovement.findMany({
+      where: { assetId },
+      include: { fromStaff: true, toStaff: true },
+      orderBy: { movementDate: "desc" },
+    });
+    return movements;
   });
 }

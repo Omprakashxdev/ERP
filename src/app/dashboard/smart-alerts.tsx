@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getSmartAlerts, SmartAlert } from "@/lib/actions/smart-alerts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, ShieldAlert, Info, CheckCircle2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
@@ -41,7 +43,7 @@ const severityConfig = {
 export function SmartAlerts() {
   const [alerts, setAlerts] = useState<SmartAlert[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +56,7 @@ export function SmartAlerts() {
         setAlerts(result.data);
       } else {
         setError(result.error ?? "Failed to load alerts");
+        toast.error(result.error ?? "Failed to load alerts");
       }
       setLoading(false);
     }
@@ -87,8 +90,8 @@ export function SmartAlerts() {
             Smart Alerts
           </CardTitle>
         </CardHeader>
-        <CardContent className="py-4 text-sm text-muted-foreground">
-          Unable to load alerts: {error}
+        <CardContent className="py-4">
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Loading smart alerts")} askingAi={askingAi} aiResponse={aiResponse} />
         </CardContent>
       </Card>
     );

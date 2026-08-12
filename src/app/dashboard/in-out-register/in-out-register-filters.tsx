@@ -118,7 +118,9 @@ export function InOutRegisterFilters({
         <label className="text-xs font-medium text-zinc-600">From / To</label>
         <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
           <SelectTrigger className="w-full min-w-48" size="sm">
-            <SelectValue placeholder="All clients" />
+            <SelectValue placeholder="All clients">
+              {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All clients</SelectItem>
@@ -138,7 +140,9 @@ export function InOutRegisterFilters({
           onValueChange={(v) => setActionSuggestedStaffId(v ?? "")}
         >
           <SelectTrigger className="w-full min-w-48" size="sm">
-            <SelectValue placeholder="All staff" />
+            <SelectValue placeholder="All staff">
+              {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All staff" : "All staff"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All staff</SelectItem>
@@ -158,7 +162,9 @@ export function InOutRegisterFilters({
           onValueChange={(v) => setCcStaffId(v ?? "")}
         >
           <SelectTrigger className="w-full min-w-48" size="sm">
-            <SelectValue placeholder="All staff" />
+            <SelectValue placeholder="All staff">
+              {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All staff" : "All staff"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All staff</SelectItem>

@@ -16,6 +16,8 @@ import { Separator } from "@/components/ui/separator";
 import { upsertFundFlow } from "@/lib/actions/fund-flow";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface FundFlowFormProps {
   project: FundFlowWithComputed;
@@ -43,7 +45,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
     feeReceived: toMoneyString(project.fundFlow?.feeReceived),
   });
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const remainingWorkAmt = useMemo(() => {
     const total = Number(form.totalProjectCost) || 0;
@@ -83,15 +85,19 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save fund flow.");
+        toast.error(result.error ?? "Failed to save fund flow.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success("Fund flow saved successfully");
     router.refresh();
     onClose();
   }
@@ -198,11 +204,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
             </div>
           </div>
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button

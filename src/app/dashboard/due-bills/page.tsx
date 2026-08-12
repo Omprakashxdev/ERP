@@ -1,18 +1,21 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getDueBills } from "@/lib/actions/due-bill";
+import { getDueBills, getDueBillsSummary } from "@/lib/actions/due-bill";
 import { getRegions } from "@/lib/actions/region";
 import { getClients } from "@/lib/actions/client";
 import { getProjects } from "@/lib/actions/project";
+import { getStaff } from "@/lib/actions/staff";
 import { serialize } from "@/lib/utils";
 import { DueBillsTable } from "./due-bills-table";
 import { DueBillsFilters } from "./due-bills-filters";
 import { DueBillsSkeleton } from "./due-bills-skeleton";
+import { BillSummaryView } from "./bill-summary-view";
 import { DueBillFilterInput } from "@/lib/schemas/due-bill";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { DueBillsViewToggle } from "./view-toggle";
 
 interface DueBillsPageProps {
   searchParams: Promise<{
@@ -23,6 +26,7 @@ interface DueBillsPageProps {
     status?: string;
     scheme?: string;
     page?: string;
+    view?: string;
   }>;
 }
 
@@ -37,6 +41,7 @@ export default async function DueBillsPage({
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? "1"));
   const pageSize = 25;
+  const view = params.view === "summary" ? "summary" : "list";
 
   const filter: DueBillFilterInput = {
     search: params.search,
@@ -47,21 +52,25 @@ export default async function DueBillsPage({
     scheme: params.scheme,
   };
 
-  const [dueBillsResult, regionsResult, clientsResult, projectsResult] =
+  const [dueBillsResult, summaryResult, regionsResult, clientsResult, projectsResult, staffResult] =
     await Promise.all([
       getDueBills(filter, page, pageSize),
+      getDueBillsSummary(filter),
       getRegions(),
       getClients(),
       getProjects(),
+      getStaff(),
     ]);
 
   const rows = dueBillsResult.success ? (dueBillsResult.data?.rows ?? []) : [];
   const total = dueBillsResult.success ? (dueBillsResult.data?.total ?? 0) : 0;
+  const summaryGroups = summaryResult.success ? (summaryResult.data ?? []) : [];
   const regions = regionsResult.success ? (regionsResult.data ?? []) : [];
   const clients = clientsResult.success ? (clientsResult.data ?? []) : [];
   const projects = projectsResult.success
     ? (projectsResult.data?.rows ?? [])
     : [];
+  const staff = staffResult.success ? (staffResult.data ?? []) : [];
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -81,7 +90,10 @@ export default async function DueBillsPage({
             </p>
           </div>
         </div>
-        <BulkImportDialog module="dueBills" moduleLabel="Due Bills" />
+        <div className="flex items-center gap-2">
+          <DueBillsViewToggle currentView={view} />
+          <BulkImportDialog module="dueBills" moduleLabel="Due Bills" />
+        </div>
       </div>
 
 
@@ -96,7 +108,9 @@ export default async function DueBillsPage({
         </CardContent>
       </Card>
 
-      {dueBillsResult.success ? (
+      {view === "summary" ? (
+        <BillSummaryView groups={serialize(summaryGroups) as never} />
+      ) : dueBillsResult.success ? (
         <DueBillsTable
           rows={serialize(rows) as never}
           page={page}
@@ -105,6 +119,7 @@ export default async function DueBillsPage({
           totalPages={totalPages}
           filter={filter}
           projects={serialize(projects) as { id: string; name: string }[]}
+          staff={serialize(staff) as { id: string; name: string }[]}
         />
       ) : (
         <Card className="shadow-sm">

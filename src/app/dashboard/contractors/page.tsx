@@ -10,6 +10,7 @@ import { ContractorFilterInput } from "@/lib/schemas/contractor";
 import { Card, CardContent } from "@/components/ui/card";
 import { HardHat, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface ContractorsPageProps {
   searchParams: Promise<{
@@ -34,7 +35,11 @@ export default async function ContractorsPage({
     search: params.search,
   };
 
-  const contractorsResult = await getContractors(filter, page, pageSize);
+  const [contractorsResult, masters] = await Promise.all([
+    getContractors(filter, page, pageSize),
+    fetchAllMasters(),
+  ]);
+  const masterData = masters as unknown as MasterData;
 
   const rows = contractorsResult.success
     ? (contractorsResult.data?.rows ?? [])
@@ -78,6 +83,7 @@ export default async function ContractorsPage({
           total={total}
           totalPages={totalPages}
           filter={filter}
+          masters={masterData}
         />
       ) : (
         <Card className="shadow-sm">

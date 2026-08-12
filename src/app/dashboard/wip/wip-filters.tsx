@@ -81,7 +81,9 @@ export function WipFilters({
         <label className="text-xs font-medium text-zinc-600">Region</label>
         <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")}>
           <SelectTrigger className="w-full min-w-40" size="sm">
-            <SelectValue placeholder="All regions" />
+            <SelectValue placeholder="All regions">
+              {(value: string) => value ? regions.find((r) => r.id === value)?.name ?? "All regions" : "All regions"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All regions</SelectItem>
@@ -98,7 +100,9 @@ export function WipFilters({
         <label className="text-xs font-medium text-zinc-600">Client</label>
         <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
           <SelectTrigger className="w-full min-w-40" size="sm">
-            <SelectValue placeholder="All clients" />
+            <SelectValue placeholder="All clients">
+              {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All clients</SelectItem>
@@ -115,7 +119,9 @@ export function WipFilters({
         <label className="text-xs font-medium text-zinc-600">Project</label>
         <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
           <SelectTrigger className="w-full min-w-40" size="sm">
-            <SelectValue placeholder="All projects" />
+            <SelectValue placeholder="All projects">
+              {(value: string) => value ? projects.find((p) => p.id === value)?.name ?? "All projects" : "All projects"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All projects</SelectItem>

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getAssets } from "@/lib/actions/asset";
+import { getStaff } from "@/lib/actions/staff";
 import { serialize } from "@/lib/utils";
 import { AssetsTable } from "./assets-table";
 import { AssetsFilters } from "./assets-filters";
@@ -10,6 +11,7 @@ import { AssetFilterInput } from "@/lib/schemas/asset";
 import { Card, CardContent } from "@/components/ui/card";
 import { Box } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface AssetsPageProps {
   searchParams: Promise<{
@@ -42,7 +44,13 @@ export default async function AssetsPage({
       : undefined,
   };
 
-  const assetsResult = await getAssets(filter, page, pageSize);
+  const [assetsResult, masters, staffResult] = await Promise.all([
+    getAssets(filter, page, pageSize),
+    fetchAllMasters(),
+    getStaff(),
+  ]);
+  const masterData = masters as unknown as MasterData;
+  const staff = staffResult.success ? (staffResult.data ?? []) : [];
 
   const rows = assetsResult.success
     ? (assetsResult.data?.rows ?? [])
@@ -86,6 +94,8 @@ export default async function AssetsPage({
           total={total}
           totalPages={totalPages}
           filter={filter}
+          masters={masterData}
+          staff={serialize(staff) as { id: string; name: string }[]}
         />
       ) : (
         <Card className="shadow-sm">

@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PaymentScheduleFilterInput } from "@/lib/schemas/payment-schedule";
 import { PaymentScheduleWithComputed } from "@/types/payment-schedules";
 import { PaymentScheduleForm } from "./payment-schedule-form";
+import type { MasterData } from "@/lib/master-data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ interface PaymentSchedulesTableProps {
   total: number;
   totalPages: number;
   filter: PaymentScheduleFilterInput;
+  masters?: MasterData;
 }
 
 const statusVariantMap: Record<PaymentScheduleStatus, string> = {
@@ -86,6 +88,7 @@ export function PaymentSchedulesTable({
   total,
   totalPages,
   filter,
+  masters,
 }: PaymentSchedulesTableProps) {
   const router = useRouter();
   const [selectedSchedule, setSelectedSchedule] =
@@ -247,6 +250,7 @@ export function PaymentSchedulesTable({
         <PaymentScheduleForm
           paymentSchedule={selectedSchedule}
           mode="edit"
+          masters={masters}
           onClose={() => setSelectedSchedule(null)}
         />
       )}
@@ -254,6 +258,7 @@ export function PaymentSchedulesTable({
       {createScheduleOpen && (
         <PaymentScheduleForm
           mode="create"
+          masters={masters}
           onClose={() => setCreateScheduleOpen(false)}
         />
       )}

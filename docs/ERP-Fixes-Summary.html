@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAEC ERP — Fixes Summary & Testing Guide</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 15mm 20mm 15mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #1a1a2e;
+    line-height: 1.6;
+    font-size: 13px;
+  }
+  .cover {
+    text-align: center;
+    padding: 80px 40px 40px;
+    page-break-after: always;
+  }
+  .cover h1 {
+    font-size: 32px;
+    color: #0f766e;
+    margin-bottom: 8px;
+  }
+  .cover h2 {
+    font-size: 18px;
+    color: #555;
+    font-weight: 400;
+    margin-bottom: 30px;
+  }
+  .cover .meta {
+    margin-top: 60px;
+    font-size: 14px;
+    color: #666;
+  }
+  .cover .meta table {
+    margin: 0 auto;
+    text-align: left;
+  }
+  .cover .meta td {
+    padding: 4px 16px;
+  }
+  .cover .meta td:first-child {
+    font-weight: 600;
+    color: #0f766e;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .badge-fixed { background: #d1fae5; color: #065f46; }
+  .badge-new { background: #dbeafe; color: #1e40af; }
+  .badge-enhanced { background: #fef3c7; color: #92400e; }
+
+  .section {
+    page-break-inside: avoid;
+    margin-bottom: 24px;
+  }
+  .section-title {
+    font-size: 20px;
+    color: #0f766e;
+    border-bottom: 2px solid #0f766e;
+    padding-bottom: 6px;
+    margin-bottom: 16px;
+  }
+  .fix-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+  }
+  .fix-card h3 {
+    font-size: 15px;
+    color: #1a1a2e;
+    margin-bottom: 6px;
+  }
+  .fix-card .desc {
+    font-size: 13px;
+    color: #444;
+    margin-bottom: 10px;
+  }
+  .test-steps {
+    background: #f0fdfa;
+    border-left: 3px solid #0f766e;
+    border-radius: 0 6px 6px 0;
+    padding: 10px 14px;
+  }
+  .test-steps ol {
+    padding-left: 20px;
+  }
+  .test-steps li {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .test-steps li strong {
+    color: #0f766e;
+  }
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  .summary-table th {
+    background: #0f766e;
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 12px;
+  }
+  .summary-table td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .summary-table tr:nth-child(even) {
+    background: #f9fafb;
+  }
+  .footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 11px;
+    color: #9ca3af;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 30px;
+  }
+  .note {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #92400e;
+    margin-bottom: 16px;
+  }
+  .note strong {
+    color: #78350f;
+  }
+  .phase-header {
+    font-size: 16px;
+    color: #0f766e;
+    margin: 20px 0 10px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <h1>SAEC ERP</h1>
+  <h2>Fixes Summary &amp; Testing Guide</h2>
+  <div class="meta">
+    <table>
+      <tr>
+        <td>Production URL</td>
+        <td>https://demo.adelphostech.com</td>
+      </tr>
+      <tr>
+        <td>Admin Login</td>
+        <td>admin@saec.com / ChangeMe123!</td>
+      </tr>
+      <tr>
+        <td>Date</td>
+        <td>29 July 2026</td>
+      </tr>
+      <tr>
+        <td>Document Version</td>
+        <td>1.0</td>
+      </tr>
+      <tr>
+        <td>Total Fixes</td>
+        <td>12 issues across 2 phases</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- QUICK SUMMARY TABLE -->
+<div class="section">
+  <h2 class="section-title">Quick Summary</h2>
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Issue</th>
+        <th>Status</th>
+        <th>Module</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Vehicle dropdown empty in Journey Log form</td>
+        <td><span class="badge badge-fixed">FIXED</span></td>
+        <td>Vehicle Log Book</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Manual file path inputs instead of browse/upload</td>
+        <td><span class="badge badge-fixed">FIXED</span></td>
+        <td>6 Forms (Vehicle, Tender, In-Out, Journey Log)</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Dropdowns showing codes/IDs instead of names</td>
+        <td><span class="badge badge-fixed">FIXED</span></td>
+        <td>All Forms &amp; Filters</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Document upload not working on server</td>
+        <td><span class="badge badge-fixed">FIXED</span></td>
+        <td>File Upload (server-side)</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Client bulk import not found</td>
+        <td><span class="badge badge-new">NEW</span></td>
+        <td>Clients</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>EMD deposit refund data not generating</td>
+        <td><span class="badge badge-enhanced">ENHANCED</span></td>
+        <td>Tenders / Reports</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td>City addition needs to be unique</td>
+        <td><span class="badge badge-fixed">FIXED</span></td>
+        <td>Masters</td>
+      </tr>
+      <tr>
+        <td>8</td>
+        <td>Client/Staff management pages</td>
+        <td><span class="badge badge-fixed">VERIFIED</span></td>
+        <td>Clients / Fund Flow</td>
+      </tr>
+      <tr>
+        <td>9</td>
+        <td>Interlinking of Clients/Employees</td>
+        <td><span class="badge badge-fixed">VERIFIED</span></td>
+        <td>Multiple modules</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PHASE 1 -->
+<div class="section">
+  <h2 class="section-title">Phase 1 — File Uploads &amp; Vehicle Dropdown</h2>
+
+  <div class="phase-header">Fix 1: Vehicle Dropdown Empty in Journey Log Form</div>
+  <div class="fix-card">
+    <h3>Vehicle dropdown showed no options <span class="badge badge-fixed">FIXED</span></h3>
+    <div class="desc">
+      When on the "Journeys" tab, the vehicle dropdown in the Journey Log form was empty.
+      Fixed by ensuring all registered vehicles are loaded for the dropdown regardless of active filters.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to <strong>Vehicle Log Book</strong> → click the <strong>"Journeys"</strong> tab</li>
+        <li>Click <strong>"New journey log"</strong> button</li>
+        <li>Click the <strong>Vehicle dropdown</strong> — it should show all registered vehicles by registration number</li>
+        <li>Select a vehicle — the name should remain visible (not convert to an ID code)</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 2: Manual File Path Inputs Replaced with Browse/Upload</div>
+  <div class="fix-card">
+    <h3>FileUploadField component integrated across all forms <span class="badge badge-fixed">FIXED</span></h3>
+    <div class="desc">
+      All manual text input fields for file paths have been replaced with a browse/upload button.
+      Users can now select files directly from their computer instead of typing file paths manually.
+      The system uploads the file to the server and stores the path automatically.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li><strong>Vehicle Form:</strong> Go to Vehicle Log Book → Vehicles tab → New vehicle → scroll to R.C./Insurance/P.U.C fields → click "Browse" → select a PDF/image → file path appears automatically</li>
+        <li><strong>Journey Log Form:</strong> Go to Vehicle Log Book → Journeys tab → New journey log → scroll to "Attach photo / document" → click Browse → select file → it appears in the list below with a remove (✕) button</li>
+        <li><strong>Tender Form:</strong> Go to Tenders → New tender → scroll to "Advertisement copy" → click Browse → select file</li>
+        <li><strong>In-Out Register Form:</strong> Go to In-Out Register → New entry → scroll to "Attach document" → click Browse → file added to list with view (↗) and remove (✕) buttons</li>
+        <li>Supported file types: PDF, JPG, JPEG, PNG, DOC, DOCX, XLS, XLSX (max 10 MB)</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 2 -->
+<div class="section">
+  <h2 class="section-title">Phase 2 — Dropdowns, Uploads, Bulk Import &amp; Reports</h2>
+
+  <div class="phase-header">Fix 3: Dropdowns Showing Codes Instead of Names</div>
+  <div class="fix-card">
+    <h3>SelectValue displaying entity IDs (CUIDs) instead of human-readable names <span class="badge badge-fixed">FIXED</span></h3>
+    <div class="desc">
+      When selecting a name, client, staff member, or project from any dropdown, the selection
+      was converting into a long code/ID string instead of showing the readable name.
+      Fixed across all forms and filter bars so that dropdowns always display human-readable names.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to <strong>WIP</strong> → click any existing record to edit → the <strong>Project</strong>, <strong>HO coordinator</strong>, and <strong>RO coordinator</strong> dropdowns should show the selected entity's <strong>name</strong>, not a long ID string</li>
+        <li>Go to <strong>Fund Flow</strong> → open a project → <strong>Region</strong> and <strong>Client</strong> dropdowns should show names</li>
+        <li>Go to <strong>Due Bills</strong> → use the filter bar → select a Region/Client/Project → the dropdown should show the selected name</li>
+        <li>Go to <strong>In-Out Register</strong> → use filters → select "From/To" (client) and "Action suggested" (staff) → names should display</li>
+        <li>Go to <strong>TADA Bills</strong> → create or edit a claim → the Employee dropdown should show the staff name when selected</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 4: Document Upload Not Working on Server</div>
+  <div class="fix-card">
+    <h3>Upload directory permissions and server environment <span class="badge badge-fixed">FIXED</span></h3>
+    <div class="desc">
+      The upload directory on the production server had incorrect permissions preventing file writes.
+      Fixed directory ownership, created module-specific subdirectories, and corrected the server
+      environment configuration.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to any form with a file upload field (e.g., Vehicle Form → R.C. copy)</li>
+        <li>Click <strong>Browse</strong> → select a file → wait for upload to complete</li>
+        <li>The file path should appear in the field (e.g., <code>/uploads/vehicle-rc/1234567_document.pdf</code>)</li>
+        <li>Save the form → verify the file path is stored correctly</li>
+        <li>For In-Out Register documents, click the <strong>↗</strong> icon to open the uploaded file in a new tab</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 5: Client Bulk Import</div>
+  <div class="fix-card">
+    <h3>Bulk import functionality added to Clients page <span class="badge badge-new">NEW</span></h3>
+    <div class="desc">
+      Added a "Bulk Import" button to the Clients page. Users can download a CSV/Excel template,
+      fill in client data, and upload it to create multiple clients at once. Duplicate client names
+      are automatically detected and rejected.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to <strong>Clients</strong> page (left sidebar → Clients)</li>
+        <li>Click the <strong>"Bulk Import"</strong> button (top right, next to page title)</li>
+        <li>Click <strong>"CSV"</strong> or <strong>"Excel"</strong> to download the template</li>
+        <li>Open the template — it will have columns: <code>name</code>, <code>abbreviation</code>, <code>address</code></li>
+        <li>Fill in a few client rows and save the file</li>
+        <li>Upload the file using the file picker, or paste CSV data directly</li>
+        <li>Click <strong>"Import"</strong> — you should see a success message with the count of imported records</li>
+        <li>The clients list should refresh automatically showing the new clients</li>
+        <li>Try importing a duplicate client name — it should show an error message</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 6: EMD Deposit Refund Data</div>
+  <div class="fix-card">
+    <h3>EMD refund tracking enhanced in Tender Fee – EMD Report <span class="badge badge-enhanced">ENHANCED</span></h3>
+    <div class="desc">
+      The "Tender Fee – EMD Wise Report" has been enhanced with a Refund Status column that
+      automatically calculates whether EMD is refunded, pending refund, or still in process.
+      The report summary now shows total EMD deposited, total refunded, and total pending refund.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to <strong>Reports</strong> (left sidebar)</li>
+        <li>Select the <strong>"Tenders"</strong> category tab</li>
+        <li>Click the <strong>"Tender Fee – EMD Wise Report"</strong> card</li>
+        <li>Click <strong>"Generate Report"</strong></li>
+        <li>Verify the report shows these columns: Date, Tender Name, Tender Fee, Fee Mode, EMD Amount, EMD Mode, EMD Date, EMD Return Date, <strong>Refund Status</strong>, Tender Status</li>
+        <li>The <strong>Refund Status</strong> column should show one of:
+          <ul>
+            <li><strong>"Refunded"</strong> — if EMD return date is filled</li>
+            <li><strong>"Pending Refund"</strong> — if tender is WON/LOST/WITHDRAWN/CANCELLED but no return date</li>
+            <li><strong>"Submitted (in process)"</strong> — if tender is still active</li>
+            <li><strong>"—"</strong> — if no EMD amount was recorded</li>
+          </ul>
+        </li>
+        <li>Check the summary section shows: Total tender fees, Total EMD deposited, EMD refunded, EMD pending refund</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 7: City Uniqueness Validation</div>
+  <div class="fix-card">
+    <h3>Cities must have unique names (case-insensitive) <span class="badge badge-fixed">FIXED</span></h3>
+    <div class="desc">
+      When creating or updating a city in the Masters page, the system now checks if a city with the
+      same name already exists (case-insensitive). If a duplicate is found, an error message is shown
+      and the operation is blocked.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Go to <strong>Masters</strong> page (left sidebar → Masters)</li>
+        <li>Select the <strong>"Cities"</strong> tab</li>
+        <li>Click <strong>"New city"</strong></li>
+        <li>Enter a city name that already exists (e.g., "Surat") and select a state</li>
+        <li>Click <strong>"Create"</strong> — you should see an error: <em>"City 'Surat' already exists. City names must be unique."</em></li>
+        <li>Try with different case (e.g., "SURAT") — it should still be blocked</li>
+        <li>Enter a new unique city name — it should be created successfully</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 8: Client/Staff Management Pages — Verified</div>
+  <div class="fix-card">
+    <h3>Client and Staff management already available <span class="badge badge-fixed">VERIFIED</span></h3>
+    <div class="desc">
+      <strong>Clients:</strong> Full create, edit, search, and manage functionality available on
+      the Clients page. Bulk import is also available (see Fix 5).<br><br>
+      <strong>Staff/Employees:</strong> Staff are managed through the Fund Flow module. When creating
+      a Fund Flow project, staff can be assigned as coordinators. Staff data is used across WIP,
+      TADA Bills, Tasks, and In-Out Register.
+    </div>
+    <div class="test-steps">
+      <strong>How to Test — Clients:</strong>
+      <ol>
+        <li>Go to <strong>Clients</strong> from the left sidebar</li>
+        <li>Click <strong>"New client"</strong> → fill in name, abbreviation, address, and contacts → click "Create client"</li>
+        <li>The new client should appear in the table</li>
+        <li>Click the edit (✏) icon to modify → save changes</li>
+      </ol>
+      <strong>How to Test — Staff:</strong>
+      <ol>
+        <li>Go to <strong>Fund Flow</strong> → open a project</li>
+        <li>Staff assignments are visible in the project form</li>
+        <li>Staff created here are available in WIP, TADA Bills, Tasks, and In-Out Register dropdowns</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase-header">Fix 9: Interlinking of Clients/Employees — Verified</div>
+  <div class="fix-card">
+    <h3>Clients and Staff are linked across modules <span class="badge badge-fixed">VERIFIED</span></h3>
+    <div class="desc">
+      <strong>Client linkages:</strong>
+      <ul>
+        <li>Fund Flow → Projects are linked to Clients (client dropdown in project form)</li>
+        <li>In-Out Register → "From/To (client)" dropdown links to client master</li>
+        <li>Due Bills → Projects (which are linked to clients) are selectable</li>
+        <li>WIP → Projects (which are linked to clients) are selectable</li>
+      </ul>
+      <strong>Staff/Employee linkages:</strong>
+      <ul>
+        <li>WIP → HO coordinator, RO coordinator, and L1–L4 level assignments</li>
+        <li>TADA Bills → Employee selection for travel claims</li>
+        <li>Tasks → Assignee selection</li>
+        <li>In-Out Register → Action suggested staff, CC marked staff</li>
+        <li>Fund Flow → Staff assignments per project</li>
+      </ul>
+    </div>
+    <div class="test-steps">
+      <strong>How to Test:</strong>
+      <ol>
+        <li>Create a client in <strong>Clients</strong> page</li>
+        <li>Go to <strong>Fund Flow</strong> → create a project → select the client in the Client dropdown</li>
+        <li>Go to <strong>In-Out Register</strong> → create an entry → select the client in "From/To (client)" dropdown</li>
+        <li>Go to <strong>WIP</strong> → create a record → select the project → assign HO/RO coordinators from staff</li>
+        <li>Go to <strong>TADA Bills</strong> → create a claim → select an employee</li>
+        <li>All dropdowns should show <strong>names</strong> (not IDs) — see Fix 3</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORTANT NOTES -->
+<div class="section">
+  <h2 class="section-title">Important Notes</h2>
+  <div class="note">
+    <strong>Browser Cache:</strong> After deployment, always perform a hard refresh in the browser
+    (<strong>Ctrl+Shift+R</strong> on Windows, <strong>Cmd+Shift+R</strong> on Mac) or use
+    <strong>Incognito/Private mode</strong> to see the latest changes. Old cached JavaScript
+    may cause the UI to show outdated components.
+  </div>
+  <div class="note">
+    <strong>File Upload Limits:</strong> Maximum file size is <strong>10 MB</strong>. Allowed file types:
+    PDF, JPG, JPEG, PNG, DOC, DOCX, XLS, XLSX.
+  </div>
+</div>
+
+<div class="footer">
+  SAEC ERP — Fixes Summary &amp; Testing Guide | Generated 29 July 2026 | Page 1 of 1
+</div>
+
+</body>
+</html>

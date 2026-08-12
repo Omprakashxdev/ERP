@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ContractorFilterInput } from "@/lib/schemas/contractor";
 import { ContractorWithComputed } from "@/types/contractor";
 import { ContractorForm } from "./contractor-form";
+import { ContractorProjectsDialog } from "./contractor-projects-dialog";
+import type { MasterData } from "@/lib/master-data";
 import { BillCertificationDialog } from "./bill-certification-dialog";
 import {
   ChevronLeft,
@@ -26,6 +28,7 @@ import {
   Plus,
   HardHat,
   FileCheck,
+  FolderOpen,
 } from "lucide-react";
 
 interface ContractorsTableProps {
@@ -35,6 +38,7 @@ interface ContractorsTableProps {
   total: number;
   totalPages: number;
   filter: ContractorFilterInput;
+  masters?: MasterData;
 }
 
 function formatDate(value: Date | string | null | undefined): string {
@@ -67,11 +71,14 @@ export function ContractorsTable({
   total,
   totalPages,
   filter,
+  masters,
 }: ContractorsTableProps) {
   const router = useRouter();
   const [selectedContractor, setSelectedContractor] =
     useState<ContractorWithComputed | null>(null);
   const [certContractor, setCertContractor] =
+    useState<ContractorWithComputed | null>(null);
+  const [projectsContractor, setProjectsContractor] =
     useState<ContractorWithComputed | null>(null);
   const [createContractorOpen, setCreateContractorOpen] = useState(false);
 
@@ -190,6 +197,15 @@ export function ContractorsTable({
                       >
                         <FileCheck className="h-3.5 w-3.5 text-blue-600" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setProjectsContractor(row)}
+                        title="Manage projects"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5 text-purple-600" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -240,6 +256,7 @@ export function ContractorsTable({
         <ContractorForm
           contractor={selectedContractor}
           mode="edit"
+          masters={masters}
           onClose={() => setSelectedContractor(null)}
         />
       )}
@@ -247,6 +264,7 @@ export function ContractorsTable({
       {createContractorOpen && (
         <ContractorForm
           mode="create"
+          masters={masters}
           onClose={() => setCreateContractorOpen(false)}
         />
       )}
@@ -255,6 +273,14 @@ export function ContractorsTable({
         <BillCertificationDialog
           contractor={certContractor as unknown as Parameters<typeof BillCertificationDialog>[0]["contractor"]}
           onClose={() => setCertContractor(null)}
+        />
+      )}
+
+      {projectsContractor && (
+        <ContractorProjectsDialog
+          contractorId={projectsContractor.id}
+          contractorName={projectsContractor.name}
+          onClose={() => setProjectsContractor(null)}
         />
       )}
     </div>

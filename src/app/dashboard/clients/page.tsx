@@ -6,6 +6,7 @@ import { serialize } from "@/lib/utils";
 import { ClientsTable } from "./clients-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users } from "lucide-react";
+import { BulkImportDialog } from "@/components/bulk-import-dialog";
 
 export default async function ClientsPage() {
   const session = await auth();
@@ -34,6 +35,7 @@ export default async function ClientsPage() {
             </p>
           </div>
         </div>
+        {canManage && <BulkImportDialog module="clients" moduleLabel="Clients" />}
       </div>
 
       <Card className="shadow-sm">

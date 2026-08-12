@@ -19,6 +19,7 @@ import {
   sanitizeForAudit,
   ActionResult,
 } from "./wrapper";
+import { createTenderLinkedTasks, deleteLinkedTasks } from "./task-linking";
 
 function toDecimal(value: Decimal | null | undefined): Decimal {
   return value ? new Decimal(value.toString()) : new Decimal("0.00");
@@ -67,7 +68,20 @@ export async function createTender(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    // Auto-create linked tasks for tender fee, EMD, bidding, opening dates
+    await createTenderLinkedTasks({
+      tenderId: tender.id,
+      tenderName: parsed.name,
+      tenderFeeDate: parsed.tenderFeeDate,
+      emdDate: parsed.emdDate,
+      emdReturnCollectionDate: parsed.emdReturnCollectionDate,
+      biddingLastDate: parsed.biddingLastDate,
+      dateOfOpening: parsed.dateOfOpening,
+      preBidMeetingDate: parsed.preBidMeetingDate,
+    }).catch(() => {});
+
     revalidatePath("/dashboard/tenders");
+    revalidatePath("/dashboard/tasks");
     return { id: tender.id };
   });
 }
@@ -168,7 +182,20 @@ export async function updateTender(
       projectCreated,
     });
 
+    // Auto-create linked tasks for any newly added dates
+    await createTenderLinkedTasks({
+      tenderId: tender.id,
+      tenderName: tender.name,
+      tenderFeeDate: parsed.tenderFeeDate,
+      emdDate: parsed.emdDate,
+      emdReturnCollectionDate: parsed.emdReturnCollectionDate,
+      biddingLastDate: parsed.biddingLastDate,
+      dateOfOpening: parsed.dateOfOpening,
+      preBidMeetingDate: parsed.preBidMeetingDate,
+    }).catch(() => {});
+
     revalidatePath("/dashboard/tenders");
+    revalidatePath("/dashboard/tasks");
     revalidatePath("/dashboard/projects");
     revalidatePath("/dashboard/clients");
     return { id: tender.id, clientCreated, projectCreated };
@@ -183,9 +210,12 @@ export async function deleteTender(
 
     const tender = await prisma.tender.delete({ where: { id } });
 
+    await deleteLinkedTasks("TENDER", id).catch(() => {});
+
     await audit(user.id, "delete", "Tender", tender.id, {});
 
     revalidatePath("/dashboard/tenders");
+    revalidatePath("/dashboard/tasks");
     return { id: tender.id };
   });
 }

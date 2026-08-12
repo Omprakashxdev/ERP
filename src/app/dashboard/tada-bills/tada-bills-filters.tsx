@@ -66,7 +66,9 @@ export function TadaBillsFilters({ staff }: { staff: StaffOption[] }) {
         onValueChange={(v) => updateParam("staffId", v || undefined)}
       >
         <SelectTrigger className="h-8 w-40" size="sm">
-          <SelectValue placeholder="All staff" />
+          <SelectValue placeholder="All staff">
+            {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All staff" : "All staff"}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {staff.map((s) => (

@@ -24,6 +24,11 @@ export const money = z
   })
   .transform((value) => new Prisma.Decimal(Number(value).toFixed(2)));
 
+export const positiveMoney = money.refine(
+  (v) => Number(v.toString()) >= 0,
+  "Amount must be non-negative"
+);
+
 export const months = z
   .union([z.string(), z.number()])
   .transform(toNumber)

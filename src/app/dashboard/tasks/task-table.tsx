@@ -20,10 +20,15 @@ interface TaskRow {
   status: string;
   priority: string;
   assignedToId: string;
+  reviewerId: string | null;
   projectId: string | null;
   dueDate: Date | null;
   completedAt: Date | null;
   reworkCount: number;
+  department: string | null;
+  percentageCompletion: number;
+  sourceModule: string | null;
+  sourceEntityId: string | null;
   assignedTo: { id: string; name: string; designation: string | null };
   assignedBy: { id: string; name: string } | null;
   project: { id: string; name: string } | null;
@@ -102,9 +107,10 @@ export function TaskTable({
                 <TableHead className="whitespace-nowrap">Assigned To</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap">Priority</TableHead>
+                <TableHead className="whitespace-nowrap">Progress</TableHead>
                 <TableHead className="whitespace-nowrap">Due Date</TableHead>
                 <TableHead className="whitespace-nowrap">Project</TableHead>
-                <TableHead className="whitespace-nowrap">Rework</TableHead>
+                <TableHead className="whitespace-nowrap">Source</TableHead>
                 <TableHead className="whitespace-nowrap">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -144,6 +150,17 @@ export function TaskTable({
                       </span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 w-12 rounded-full bg-zinc-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-500"
+                            style={{ width: `${task.percentageCompletion}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">{task.percentageCompletion}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {task.dueDate ? (
                         <span className={isOverdue ? "text-red-600 font-medium" : "text-zinc-500"}>
                           {new Date(task.dueDate).toLocaleDateString("en-IN")}
@@ -156,12 +173,12 @@ export function TaskTable({
                       {task.project?.name ?? "—"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {task.reworkCount > 0 ? (
-                        <span className="text-amber-600 font-medium">
-                          {task.reworkCount}x
+                      {task.sourceModule ? (
+                        <span className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+                          {task.sourceModule}
                         </span>
                       ) : (
-                        "—"
+                        <span className="text-zinc-400">Manual</span>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -249,6 +266,7 @@ export function TaskTable({
           onClose={() => setStatusTask(null)}
         />
       )}
+
     </div>
   );
 }

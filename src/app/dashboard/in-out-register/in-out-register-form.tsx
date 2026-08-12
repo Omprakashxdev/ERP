@@ -32,7 +32,11 @@ import {
   createInOutRegister,
   updateInOutRegister,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink } from "lucide-react";
+import { withBasePath } from "@/lib/base-path";
+import { FileUploadField } from "@/components/ui/file-upload-field";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface InOutRegisterFormProps {
   entry?: InOutRegister & {
@@ -76,6 +80,8 @@ function getInitialForm(
       ccStaffIds: [] as string[],
       documents: [] as string[],
       replyDate: "",
+      inwardType: "",
+      receivedByPersonName: "",
     };
   }
   return {
@@ -89,6 +95,8 @@ function getInitialForm(
     ccStaffIds: entry.ccStaff?.map((cs) => cs.staffId) ?? [],
     documents: entry.documents?.map((d) => d.path) ?? [],
     replyDate: toInputDate(entry.replyDate),
+    inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
+    receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
   };
 }
 
@@ -106,7 +114,7 @@ export function InOutRegisterForm({
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const documentListRef = useRef<HTMLDivElement>(null);
 
   function updateField<K extends keyof typeof form>(
@@ -114,15 +122,6 @@ export function InOutRegisterForm({
     value: (typeof form)[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function addDocument() {
-    if (!newDocument.trim()) return;
-    setForm((prev) => ({
-      ...prev,
-      documents: [...prev.documents, newDocument.trim()],
-    }));
-    setNewDocument("");
   }
 
   useEffect(() => {
@@ -172,6 +171,8 @@ export function InOutRegisterForm({
       ccStaffIds: form.ccStaffIds.length > 0 ? form.ccStaffIds : undefined,
       documents: form.documents.length > 0 ? form.documents : undefined,
       replyDate: form.direction === "OUTWARD" ? null : form.replyDate || null,
+      inwardType: form.direction === "INWARD" && form.inwardType ? form.inwardType : null,
+      receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
     };
 
     if (isEdit) {
@@ -197,15 +198,19 @@ export function InOutRegisterForm({
 
       if (!result.success) {
         setError(result.error ?? "Failed to save in-out register entry.");
+        toast.error(result.error ?? "Failed to save in-out register entry.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success("In-out register entry saved successfully");
     router.refresh();
     onClose();
   }
@@ -320,6 +325,36 @@ export function InOutRegisterForm({
               {!isOutward && (
                 <>
                   <div className="space-y-1.5">
+                    <Label htmlFor="inwardType">Inward type</Label>
+                    <Select
+                      value={form.inwardType}
+                      onValueChange={(v) => updateField("inwardType", v ?? "")}
+                    >
+                      <SelectTrigger id="inwardType">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">—</SelectItem>
+                        <SelectItem value="INFORMATIVE">Informative</SelectItem>
+                        <SelectItem value="ACTION_REQUIRED">Action Required</SelectItem>
+                        <SelectItem value="COMPLAINT">Complaint</SelectItem>
+                        <SelectItem value="QUERY">Query</SelectItem>
+                        <SelectItem value="NOTICE">Notice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="receivedByPersonName">Received by (person)</Label>
+                    <Input
+                      id="receivedByPersonName"
+                      value={form.receivedByPersonName}
+                      onChange={(e) => updateField("receivedByPersonName", e.target.value)}
+                      placeholder="Name of person who received"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
                     <Label htmlFor="actionSuggestedStaffId">Action suggested to</Label>
                     <Select
                       value={form.actionSuggestedStaffId}
@@ -354,7 +389,11 @@ export function InOutRegisterForm({
                       type="date"
                       value={form.replyDate}
                       onChange={(e) => updateField("replyDate", e.target.value)}
+                      min={form.receivedDate || undefined}
                     />
+                    {form.replyDate && form.receivedDate && form.replyDate < form.receivedDate && (
+                      <p className="text-xs text-red-600">Reply date cannot be before received/sent date</p>
+                    )}
                   </div>
                 </>
               )}
@@ -411,58 +450,57 @@ export function InOutRegisterForm({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Document paths</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={newDocument}
-                    onChange={(e) => setNewDocument(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addDocument();
-                      }
-                    }}
-                    placeholder="Add a document path"
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={addDocument}
-                  >
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add
-                  </Button>
-                </div>
-                <div ref={documentListRef} className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-                  {form.documents.map((document, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
-                    >
-                      <span className="truncate">{document}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => removeDocument(index)}
+                <FileUploadField
+                  id="in-out-register-doc"
+                  label="Attach document"
+                  value={newDocument}
+                  onChange={(path) => {
+                    if (path) {
+                      setForm((prev) => ({
+                        ...prev,
+                        documents: [...prev.documents, path],
+                      }));
+                      setNewDocument("");
+                    }
+                  }}
+                  placeholder="Click browse to attach a document"
+                />
+                {form.documents.length > 0 && (
+                  <div ref={documentListRef} className="mt-2 max-h-32 space-y-1 overflow-y-auto">
+                    {form.documents.map((document, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
                       >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="truncate">{document}</span>
+                          <a
+                            href={withBasePath(document)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-teal-600 hover:text-teal-700 hover:underline shrink-0"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => removeDocument(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "In-out register entry")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

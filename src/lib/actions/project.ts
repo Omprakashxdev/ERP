@@ -267,3 +267,84 @@ export async function getProjectById(
     return project;
   });
 }
+
+export async function getProjectsForContractor(
+  contractorId: string
+): Promise<ActionResult<unknown[]>> {
+  return withAuth(async () => {
+    const projects = await prisma.project.findMany({
+      where: { contractorId },
+      select: {
+        id: true,
+        name: true,
+        workOrderDate: true,
+        status: true,
+        workType: true,
+        serviceType: true,
+      },
+      orderBy: { workOrderDate: "desc" },
+    });
+    return projects;
+  });
+}
+
+export async function getUnlinkedProjects(
+  contractorId: string
+): Promise<ActionResult<unknown[]>> {
+  return withAuth(async () => {
+    const projects = await prisma.project.findMany({
+      where: {
+        contractorId: null,
+        status: { not: "COMPLETED" },
+      },
+      select: {
+        id: true,
+        name: true,
+        workOrderDate: true,
+        status: true,
+        workType: true,
+        serviceType: true,
+      },
+      orderBy: { name: "asc" },
+    });
+    return projects;
+  });
+}
+
+export async function linkProjectToContractor(
+  projectId: string,
+  contractorId: string
+): Promise<ActionResult<{ id: string }>> {
+  return withAuth(async (user) => {
+    await checkRateLimit(user.id);
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: { contractorId },
+    });
+    await audit(user.id, "update", "Project", project.id, {
+      action: "linkToContractor",
+      contractorId,
+    });
+    revalidatePath("/dashboard/contractors");
+    revalidatePath("/dashboard/projects");
+    return { id: project.id };
+  });
+}
+
+export async function unlinkProjectFromContractor(
+  projectId: string
+): Promise<ActionResult<{ id: string }>> {
+  return withAuth(async (user) => {
+    await checkRateLimit(user.id);
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: { contractorId: null },
+    });
+    await audit(user.id, "update", "Project", project.id, {
+      action: "unlinkFromContractor",
+    });
+    revalidatePath("/dashboard/contractors");
+    revalidatePath("/dashboard/projects");
+    return { id: project.id };
+  });
+}

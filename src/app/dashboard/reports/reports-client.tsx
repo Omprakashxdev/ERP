@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Loader2, FileBarChart, Calendar, Download } from "lucide-react";
 import { runReportAction } from "@/lib/actions/reports";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface ReportCategoryInfo {
   id: string;
@@ -44,7 +46,7 @@ export function ReportsClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [result, setResult] = useState<{
     columns: string[];
     rows: Record<string, unknown>[];
@@ -88,8 +90,10 @@ export function ReportsClient({
 
     if (res.success && res.data) {
       setResult(res.data);
+      toast.success("Report generated successfully");
     } else {
       setError(res.error ?? "Failed to run report");
+      toast.error(res.error ?? "Failed to run report");
     }
   }, [selectedReportId, dateFrom, dateTo]);
 
@@ -207,9 +211,7 @@ export function ReportsClient({
 
         {/* Error */}
         {error && (
-          <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Running report")} askingAi={askingAi} aiResponse={aiResponse} />
         )}
 
         {/* Summary */}

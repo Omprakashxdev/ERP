@@ -274,3 +274,102 @@ export async function getDueBillById(
     return { ...dueBill, pendingAmount, computedStatus };
   });
 }
+
+export async function getDueBillsSummary(
+  filter?: DueBillFilterInput
+): Promise<ActionResult<unknown[]>> {
+  return withPermission("dueBills", "read", async () => {
+    const parsed = filter ? dueBillFilterSchema.parse(filter) : undefined;
+    const where = buildDueBillsWhere(parsed);
+
+    const bills = await prisma.dueBill.findMany({
+      where,
+      include: {
+        project: {
+          include: {
+            client: true,
+          },
+        },
+      },
+      orderBy: { billDate: "desc" },
+    });
+
+    // Group by client
+    const grouped = new Map<string, {
+      clientId: string;
+      clientName: string;
+      bills: Array<{
+        id: string;
+        scheme: string;
+        grossAmount: Decimal;
+        sgst: Decimal;
+        cgst: Decimal;
+        billAmount: Decimal;
+        receivedAmount: Decimal;
+        chequeAmount: Decimal;
+        sd: Decimal;
+        itTds: Decimal;
+        billDate: Date | null;
+        receiveDate: Date | null;
+        status: string;
+        remarks: string | null;
+      }>;
+      totals: {
+        grossAmount: Decimal;
+        billAmount: Decimal;
+        receivedAmount: Decimal;
+        chequeAmount: Decimal;
+        sd: Decimal;
+        itTds: Decimal;
+      };
+    }>();
+
+    for (const bill of bills) {
+      const clientId = bill.project?.client?.id ?? "unknown";
+      const clientName = bill.project?.client?.name ?? "Unknown Client";
+
+      if (!grouped.has(clientId)) {
+        grouped.set(clientId, {
+          clientId,
+          clientName,
+          bills: [],
+          totals: {
+            grossAmount: new Decimal(0),
+            billAmount: new Decimal(0),
+            receivedAmount: new Decimal(0),
+            chequeAmount: new Decimal(0),
+            sd: new Decimal(0),
+            itTds: new Decimal(0),
+          },
+        });
+      }
+
+      const group = grouped.get(clientId)!;
+      group.bills.push({
+        id: bill.id,
+        scheme: bill.scheme,
+        grossAmount: bill.grossAmount,
+        sgst: bill.sgst,
+        cgst: bill.cgst,
+        billAmount: bill.billAmount,
+        receivedAmount: bill.receivedAmount,
+        chequeAmount: bill.chequeAmount,
+        sd: bill.sd,
+        itTds: bill.itTds,
+        billDate: bill.billDate,
+        receiveDate: bill.receiveDate,
+        status: bill.status,
+        remarks: bill.remarks,
+      });
+
+      group.totals.grossAmount = group.totals.grossAmount.plus(bill.grossAmount);
+      group.totals.billAmount = group.totals.billAmount.plus(bill.billAmount);
+      group.totals.receivedAmount = group.totals.receivedAmount.plus(bill.receivedAmount);
+      group.totals.chequeAmount = group.totals.chequeAmount.plus(bill.chequeAmount);
+      group.totals.sd = group.totals.sd.plus(bill.sd);
+      group.totals.itTds = group.totals.itTds.plus(bill.itTds);
+    }
+
+    return Array.from(grouped.values());
+  });
+}

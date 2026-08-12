@@ -19,12 +19,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AssetFilterInput } from "@/lib/schemas/asset";
 import { AssetWithComputed } from "@/types/assets";
 import { AssetForm } from "./asset-form";
+import { AssetTransferDialog } from "./asset-transfer-dialog";
+import { AssetMovementHistory } from "./asset-movement-history";
+import type { MasterData } from "@/lib/master-data";
 import {
   ChevronLeft,
   ChevronRight,
   Box,
   Pencil,
   Plus,
+  ArrowRightLeft,
+  History,
 } from "lucide-react";
 
 interface AssetsTableProps {
@@ -34,6 +39,8 @@ interface AssetsTableProps {
   total: number;
   totalPages: number;
   filter: AssetFilterInput;
+  masters?: MasterData;
+  staff?: { id: string; name: string }[];
 }
 
 const statusVariantMap: Record<AssetStatus, string> = {
@@ -42,6 +49,7 @@ const statusVariantMap: Record<AssetStatus, string> = {
   [AssetStatus.UNDER_MAINTENANCE]:
     "bg-amber-50 text-amber-700 border-amber-200",
   [AssetStatus.DISPOSED]: "bg-zinc-100 text-zinc-700 border-zinc-200",
+  [AssetStatus.NOT_WORKING]: "bg-red-50 text-red-700 border-red-200",
 };
 
 function formatEnum(value: string | null | undefined): string {
@@ -67,12 +75,16 @@ export function AssetsTable({
   total,
   totalPages,
   filter,
+  masters,
+  staff,
 }: AssetsTableProps) {
   const router = useRouter();
   const [selectedAsset, setSelectedAsset] = useState<AssetWithComputed | null>(
     null
   );
   const [createAssetOpen, setCreateAssetOpen] = useState(false);
+  const [transferAsset, setTransferAsset] = useState<AssetWithComputed | null>(null);
+  const [historyAsset, setHistoryAsset] = useState<AssetWithComputed | null>(null);
 
   if (rows.length === 0) {
     return (
@@ -126,6 +138,7 @@ export function AssetsTable({
                 <TableHead className="whitespace-nowrap text-right">Remaining</TableHead>
                 <TableHead className="whitespace-nowrap">Assignee</TableHead>
                 <TableHead className="whitespace-nowrap">Responsible</TableHead>
+                <TableHead className="whitespace-nowrap">Current Holder</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
@@ -169,6 +182,9 @@ export function AssetsTable({
                     {row.responsiblePerson ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
+                    {row.currentHolder?.name ?? "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge
                       variant="outline"
                       className={statusVariantMap[row.status]}
@@ -178,15 +194,35 @@ export function AssetsTable({
                     </Badge>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setSelectedAsset(row)}
-                      title="Edit asset"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setSelectedAsset(row)}
+                        title="Edit asset"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setTransferAsset(row)}
+                        title="Transfer / Movement"
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setHistoryAsset(row)}
+                        title="Movement history"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -232,12 +268,29 @@ export function AssetsTable({
         <AssetForm
           asset={selectedAsset}
           mode="edit"
+          masters={masters}
           onClose={() => setSelectedAsset(null)}
         />
       )}
 
+      {transferAsset && staff && (
+        <AssetTransferDialog
+          asset={transferAsset}
+          staff={staff}
+          onClose={() => setTransferAsset(null)}
+        />
+      )}
+
+      {historyAsset && (
+        <AssetMovementHistory
+          assetId={historyAsset.id}
+          assetName={historyAsset.name}
+          onClose={() => setHistoryAsset(null)}
+        />
+      )}
+
       {createAssetOpen && (
-        <AssetForm mode="create" onClose={() => setCreateAssetOpen(false)} />
+        <AssetForm mode="create" masters={masters} onClose={() => setCreateAssetOpen(false)} />
       )}
     </div>
   );

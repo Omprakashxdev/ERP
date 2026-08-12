@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { createTask, updateTask } from "@/lib/actions/task-management";
 import { Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface StaffOption {
   id: string;
@@ -53,14 +55,16 @@ function toInputDate(value: Date | string | null | undefined): string {
 export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; projects?: ProjectOption[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clearError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
+  const [reviewerId, setReviewerId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [dueDate, setDueDate] = useState("");
+  const [department, setDepartment] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,19 +76,25 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
         title,
         description: description || undefined,
         assignedToId,
+        reviewerId: reviewerId || undefined,
         projectId: projectId || undefined,
         priority: priority as never,
         dueDate: dueDate ? new Date(dueDate) : null,
+        department: department || undefined,
       } as never);
 
       if (res.success) {
+        toast.success("Task created successfully");
         setOpen(false);
         window.location.reload();
       } else {
         setError(res.error ?? "Failed to create task");
+        toast.error(res.error ?? "Failed to create task");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -184,20 +194,50 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Department (optional)</Label>
+              <Input
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. Civil, Electrical"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Reviewer (optional)</Label>
+              <Select value={reviewerId} onValueChange={(v) => setReviewerId(v ?? "")}>
+                <SelectTrigger className="w-full" size="sm">
+                  <SelectValue placeholder="No reviewer">
+                    {(value: string) =>
+                      value
+                        ? staff.find((s) => s.id === value)?.name ?? "No reviewer"
+                        : "No reviewer"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No reviewer</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="space-y-1">
             <Label className="text-xs">Due Date</Label>
             <Input
               type="date"
               value={dueDate}
+              min={toInputDate(new Date())}
               onChange={(e) => setDueDate(e.target.value)}
             />
           </div>
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Creating a task")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
@@ -219,10 +259,13 @@ interface TaskEditData {
   title: string;
   description: string | null;
   assignedToId: string;
+  reviewerId: string | null;
   projectId: string | null;
   priority: string;
   dueDate: Date | null;
   status: string;
+  department: string | null;
+  percentageCompletion: number | null;
 }
 
 export function TaskEditForm({
@@ -238,15 +281,18 @@ export function TaskEditForm({
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clearError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const [form, setForm] = useState({
     title: task.title,
     description: task.description ?? "",
     assignedToId: task.assignedToId,
+    reviewerId: task.reviewerId ?? "",
     projectId: task.projectId ?? "",
     priority: task.priority,
     dueDate: toInputDate(task.dueDate),
+    department: task.department ?? "",
+    percentageCompletion: task.percentageCompletion ?? 0,
   });
 
   function updateField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -264,22 +310,29 @@ export function TaskEditForm({
         title: form.title,
         description: form.description || undefined,
         assignedToId: form.assignedToId,
+        reviewerId: form.reviewerId || undefined,
         projectId: form.projectId || undefined,
         priority: form.priority as never,
         dueDate: form.dueDate ? new Date(form.dueDate) : null,
+        department: form.department || undefined,
+        percentageCompletion: form.percentageCompletion,
       } as never);
 
       if (!res.success) {
         setError(res.error ?? "Failed to update task");
+        toast.error(res.error ?? "Failed to update task");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success("Task updated successfully");
     router.refresh();
     onClose();
   }
@@ -384,6 +437,54 @@ export function TaskEditForm({
               </div>
             )}
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Department</Label>
+                <Input
+                  value={form.department}
+                  onChange={(e) => updateField("department", e.target.value)}
+                  placeholder="e.g. Civil, Electrical"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Reviewer</Label>
+                <Select
+                  value={form.reviewerId}
+                  onValueChange={(v) => updateField("reviewerId", v ?? "")}
+                >
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue placeholder="No reviewer">
+                      {(value: string) =>
+                        value
+                          ? staff.find((s) => s.id === value)?.name ?? "No reviewer"
+                          : "No reviewer"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No reviewer</SelectItem>
+                    {staff.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Percentage Completion: {form.percentageCompletion}%</Label>
+              <Input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={form.percentageCompletion}
+                onChange={(e) => updateField("percentageCompletion", Number(e.target.value))}
+              />
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs">Due Date</Label>
               <Input
@@ -394,11 +495,7 @@ export function TaskEditForm({
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing a task")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-3">
             <Button
@@ -432,7 +529,7 @@ export function TaskStatusActions({
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [reworkReason, setReworkReason] = useState("");
 
   async function handleStatusChange(
@@ -456,9 +553,11 @@ export function TaskStatusActions({
 
     if (!res.success) {
       setError(res.error ?? "Failed to update status");
+      toast.error(res.error ?? "Failed to update status");
       return;
     }
 
+    toast.success("Task status updated");
     router.refresh();
     onClose();
   }
@@ -477,9 +576,11 @@ export function TaskStatusActions({
 
     if (!res.success) {
       setError(res.error ?? "Failed to send back for rework");
+      toast.error(res.error ?? "Failed to send back for rework");
       return;
     }
 
+    toast.success("Task sent back for rework");
     router.refresh();
     onClose();
   }
@@ -526,11 +627,7 @@ export function TaskStatusActions({
             </div>
           )}
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Task status change")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex flex-wrap gap-2">
             {actions.map((a) => (

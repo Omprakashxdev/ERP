@@ -76,7 +76,9 @@ export function TaskFilters({ staff }: { staff: StaffOption[] }) {
         onValueChange={(v) => updateParam("assignedToId", v || undefined)}
       >
         <SelectTrigger className="h-8 w-40" size="sm">
-          <SelectValue placeholder="All assignees" />
+          <SelectValue placeholder="All assignees">
+            {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All assignees" : "All assignees"}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {staff.map((s) => (

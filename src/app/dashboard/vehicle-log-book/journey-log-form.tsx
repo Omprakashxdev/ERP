@@ -28,11 +28,16 @@ import {
   createJourneyLog,
   updateJourneyLog,
 } from "@/lib/actions/vehicle-log-book";
-import { Loader2, X, Plus } from "lucide-react";
+import { FileUploadField } from "@/components/ui/file-upload-field";
+import { Loader2, X } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface JourneyLogFormProps {
-  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[] };
+  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[]; approvedBy?: { id: string; name: string } | null };
   vehicles: { id: string; registrationNumber: string }[];
+  staff: { id: string; name: string }[];
+  cities?: { id: string; name: string }[];
   mode: "create" | "edit";
   onClose: () => void;
 }
@@ -56,63 +61,88 @@ function emptyToNull(value: string): string | null {
   return value.trim() || null;
 }
 
-function getInitialForm(
-  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[] },
-  defaultVehicleId?: string
-) {
+function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: string }[] = []) {
   if (!journeyLog) {
     return {
-      vehicleId: defaultVehicleId ?? "",
+      vehicleId: "",
       journeyDate: toInputDate(new Date()),
       fromLocation: "",
       toLocation: "",
       startKm: "",
       endKm: "",
       totalKm: "",
+      startKmPhotoPath: "",
+      endKmPhotoPath: "",
       fuelExpense: "",
+      fuelBillPath: "",
+      serviceParticulars: "",
       serviceExpense: "",
+      serviceBillPath: "",
+      maintenanceParticulars: "",
       maintenanceExpense: "",
+      maintenanceBillPath: "",
       taxExpense: "",
+      taxReceiptPath: "",
+      personsTravelling: "",
       driverName: "",
       purpose: "",
+      remarks: "",
       approvalStatus: JourneyApprovalStatus.PENDING,
       rejectedReason: "",
+      approvedById: "",
       photos: [] as string[],
     };
   }
   return {
     vehicleId: journeyLog.vehicleId,
     journeyDate: toInputDate(journeyLog.journeyDate),
-    fromLocation: journeyLog.fromLocation,
-    toLocation: journeyLog.toLocation,
+    fromLocation: journeyLog.fromLocation 
+      ? (cities.some(c => c.name === journeyLog.fromLocation) ? journeyLog.fromLocation : "__other__" + journeyLog.fromLocation)
+      : "",
+    toLocation: journeyLog.toLocation
+      ? (cities.some(c => c.name === journeyLog.toLocation) ? journeyLog.toLocation : "__other__" + journeyLog.toLocation)
+      : "",
     startKm: toMoneyString(journeyLog.startKm),
     endKm: toMoneyString(journeyLog.endKm),
     totalKm: toMoneyString(journeyLog.totalKm),
+    startKmPhotoPath: journeyLog.startKmPhotoPath ?? "",
+    endKmPhotoPath: journeyLog.endKmPhotoPath ?? "",
     fuelExpense: toMoneyString(journeyLog.fuelExpense),
+    fuelBillPath: journeyLog.fuelBillPath ?? "",
+    serviceParticulars: journeyLog.serviceParticulars ?? "",
     serviceExpense: toMoneyString(journeyLog.serviceExpense),
+    serviceBillPath: journeyLog.serviceBillPath ?? "",
+    maintenanceParticulars: journeyLog.maintenanceParticulars ?? "",
     maintenanceExpense: toMoneyString(journeyLog.maintenanceExpense),
+    maintenanceBillPath: journeyLog.maintenanceBillPath ?? "",
     taxExpense: toMoneyString(journeyLog.taxExpense),
+    taxReceiptPath: journeyLog.taxReceiptPath ?? "",
+    personsTravelling: journeyLog.personsTravelling ?? "",
     driverName: journeyLog.driverName ?? "",
     purpose: journeyLog.purpose ?? "",
+    remarks: journeyLog.remarks ?? "",
     approvalStatus: journeyLog.approvalStatus,
     rejectedReason: journeyLog.rejectedReason ?? "",
-    photos: journeyLog.photos?.map((p) => p.path) ?? [],
+    approvedById: journeyLog.approvedById ?? "",
+    photos: (journeyLog as any).photos?.map((p: any) => p.path) ?? [],
   };
 }
 
 export function JourneyLogForm({
   journeyLog,
   vehicles,
+  staff,
+  cities = [],
   mode,
   onClose,
 }: JourneyLogFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
 
-  const [form, setForm] = useState(() => getInitialForm(journeyLog));
+  const [form, setForm] = useState(() => getInitialForm(journeyLog, cities));
   const [newPhoto, setNewPhoto] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const computedTotalKm = useMemo(() => {
     const start = Number(form.startKm);
@@ -130,19 +160,10 @@ export function JourneyLogForm({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function addPhoto() {
-    if (!newPhoto.trim()) return;
-    setForm((prev) => ({
-      ...prev,
-      photos: [...prev.photos, newPhoto.trim()],
-    }));
-    setNewPhoto("");
-  }
-
   function removePhoto(index: number) {
     setForm((prev) => ({
       ...prev,
-      photos: prev.photos.filter((_, i) => i !== index),
+      photos: prev.photos.filter((_: string, i: number) => i !== index),
     }));
   }
 
@@ -150,22 +171,33 @@ export function JourneyLogForm({
     const base = {
       vehicleId: form.vehicleId,
       journeyDate: form.journeyDate || undefined,
-      fromLocation: emptyToNull(form.fromLocation) ?? "",
-      toLocation: emptyToNull(form.toLocation) ?? "",
+      fromLocation: emptyToNull(form.fromLocation.replace(/^__other__/, "")) ?? "",
+      toLocation: emptyToNull(form.toLocation.replace(/^__other__/, "")) ?? "",
       startKm: form.startKm || null,
       endKm: form.endKm || null,
       totalKm: computedTotalKm || null,
+      startKmPhotoPath: emptyToNull(form.startKmPhotoPath),
+      endKmPhotoPath: emptyToNull(form.endKmPhotoPath),
       fuelExpense: form.fuelExpense || null,
+      fuelBillPath: emptyToNull(form.fuelBillPath),
+      serviceParticulars: emptyToNull(form.serviceParticulars),
       serviceExpense: form.serviceExpense || null,
+      serviceBillPath: emptyToNull(form.serviceBillPath),
+      maintenanceParticulars: emptyToNull(form.maintenanceParticulars),
       maintenanceExpense: form.maintenanceExpense || null,
+      maintenanceBillPath: emptyToNull(form.maintenanceBillPath),
       taxExpense: form.taxExpense || null,
+      taxReceiptPath: emptyToNull(form.taxReceiptPath),
+      personsTravelling: emptyToNull(form.personsTravelling),
       driverName: emptyToNull(form.driverName),
       purpose: emptyToNull(form.purpose),
+      remarks: emptyToNull(form.remarks),
       approvalStatus: form.approvalStatus,
       rejectedReason:
         form.approvalStatus === "REJECTED"
           ? emptyToNull(form.rejectedReason)
           : null,
+      approvedById: emptyToNull(form.approvedById),
       photos: form.photos.length > 0 ? form.photos : undefined,
     };
 
@@ -192,15 +224,19 @@ export function JourneyLogForm({
 
       if (!result.success) {
         setError(result.error ?? "Failed to save journey log.");
+        toast.error(result.error ?? "Failed to save journey log.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Journey log created successfully" : "Journey log updated successfully");
     router.refresh();
     onClose();
   }
@@ -228,7 +264,9 @@ export function JourneyLogForm({
                   onValueChange={(v) => updateField("vehicleId", v ?? "")}
                 >
                   <SelectTrigger id="vehicleId">
-                    <SelectValue placeholder="Select vehicle" />
+                    <SelectValue placeholder="Select vehicle">
+                      {(value: string) => vehicles.find((v) => v.id === value)?.registrationNumber ?? "Select vehicle"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {vehicles.map((vehicle) => (
@@ -273,22 +311,70 @@ export function JourneyLogForm({
 
               <div className="space-y-1.5">
                 <Label htmlFor="fromLocation">From</Label>
-                <Input
-                  id="fromLocation"
-                  value={form.fromLocation}
-                  onChange={(e) => updateField("fromLocation", e.target.value)}
-                  placeholder="Start location"
-                />
+                {cities.length > 0 ? (
+                  <Select
+                    value={form.fromLocation.startsWith("__other__") ? "__other__" : form.fromLocation}
+                    onValueChange={(v) => {
+                      if (v === "__other__") {
+                        updateField("fromLocation", "__other__");
+                      } else {
+                        updateField("fromLocation", v ?? "");
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="fromLocation">
+                      <SelectValue placeholder="Select city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cities.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__other__">Other (type manually)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {cities.length === 0 || form.fromLocation.startsWith("__other__") ? (
+                  <Input
+                    id="fromLocationText"
+                    value={form.fromLocation.replace(/^__other__/, "")}
+                    onChange={(e) => updateField("fromLocation", "__other__" + e.target.value)}
+                    placeholder="Start location"
+                  />
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="toLocation">To</Label>
-                <Input
-                  id="toLocation"
-                  value={form.toLocation}
-                  onChange={(e) => updateField("toLocation", e.target.value)}
-                  placeholder="Destination"
-                />
+                {cities.length > 0 ? (
+                  <Select
+                    value={form.toLocation.startsWith("__other__") ? "__other__" : form.toLocation}
+                    onValueChange={(v) => {
+                      if (v === "__other__") {
+                        updateField("toLocation", "__other__");
+                      } else {
+                        updateField("toLocation", v ?? "");
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="toLocation">
+                      <SelectValue placeholder="Select city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cities.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__other__">Other (type manually)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {cities.length === 0 || form.toLocation.startsWith("__other__") ? (
+                  <Input
+                    id="toLocationText"
+                    value={form.toLocation.replace(/^__other__/, "")}
+                    onChange={(e) => updateField("toLocation", "__other__" + e.target.value)}
+                    placeholder="End location"
+                  />
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
@@ -325,6 +411,28 @@ export function JourneyLogForm({
                 />
               </div>
 
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-startKm-photo"
+                  label="Start KM odometer photo"
+                  value={form.startKmPhotoPath}
+                  onChange={(v) => updateField("startKmPhotoPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload odometer photo at start of journey"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-endKm-photo"
+                  label="End KM odometer photo"
+                  value={form.endKmPhotoPath}
+                  onChange={(v) => updateField("endKmPhotoPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload odometer photo at end of journey"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="fuelExpense">Fuel expense (₹)</Label>
                 <Input
@@ -333,6 +441,27 @@ export function JourneyLogForm({
                   step="0.01"
                   value={form.fuelExpense}
                   onChange={(e) => updateField("fuelExpense", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-fuel-bill"
+                  label="Fuel bill + odometer photo"
+                  value={form.fuelBillPath}
+                  onChange={(v) => updateField("fuelBillPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload petrol bill & odometer photo"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="serviceParticulars">Service particulars</Label>
+                <Input
+                  id="serviceParticulars"
+                  value={form.serviceParticulars}
+                  onChange={(e) => updateField("serviceParticulars", e.target.value)}
+                  placeholder="Description of service"
                 />
               </div>
 
@@ -347,6 +476,27 @@ export function JourneyLogForm({
                 />
               </div>
 
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-service-bill"
+                  label="Service bill + odometer photo"
+                  value={form.serviceBillPath}
+                  onChange={(v) => updateField("serviceBillPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload service bill & odometer photo"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="maintenanceParticulars">Maintenance particulars</Label>
+                <Input
+                  id="maintenanceParticulars"
+                  value={form.maintenanceParticulars}
+                  onChange={(e) => updateField("maintenanceParticulars", e.target.value)}
+                  placeholder="Description of maintenance"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="maintenanceExpense">Maintenance expense (₹)</Label>
                 <Input
@@ -355,6 +505,17 @@ export function JourneyLogForm({
                   step="0.01"
                   value={form.maintenanceExpense}
                   onChange={(e) => updateField("maintenanceExpense", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-maintenance-bill"
+                  label="Maintenance bill + odometer photo"
+                  value={form.maintenanceBillPath}
+                  onChange={(v) => updateField("maintenanceBillPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload maintenance bill & odometer photo"
                 />
               </div>
 
@@ -369,6 +530,27 @@ export function JourneyLogForm({
                 />
               </div>
 
+              <div className="space-y-1.5 sm:col-span-2">
+                <FileUploadField
+                  id="journey-tax-receipt"
+                  label="Tax / toll receipt"
+                  value={form.taxReceiptPath}
+                  onChange={(v) => updateField("taxReceiptPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload tax receipt"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="personsTravelling">Persons travelling</Label>
+                <Input
+                  id="personsTravelling"
+                  value={form.personsTravelling}
+                  onChange={(e) => updateField("personsTravelling", e.target.value)}
+                  placeholder="Names of people travelling (comma separated)"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="driverName">Driver name</Label>
                 <Input
@@ -379,11 +561,22 @@ export function JourneyLogForm({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="purpose">Purpose</Label>
+                <Label htmlFor="purpose">Purpose of travel</Label>
                 <Input
                   id="purpose"
                   value={form.purpose}
                   onChange={(e) => updateField("purpose", e.target.value)}
+                  placeholder="e.g. Site visit, Client meeting"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="remarks">Remarks</Label>
+                <Input
+                  id="remarks"
+                  value={form.remarks}
+                  onChange={(e) => updateField("remarks", e.target.value)}
+                  placeholder="Any additional remarks"
                 />
               </div>
 
@@ -399,48 +592,77 @@ export function JourneyLogForm({
                 </div>
               )}
 
+              {isEdit && form.approvalStatus !== "PENDING" && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="approvedById">Approved by (travelling authority)</Label>
+                  <Select
+                    value={form.approvedById}
+                    onValueChange={(v) => updateField("approvedById", v ?? "")}
+                  >
+                    <SelectTrigger id="approvedById">
+                      <SelectValue placeholder="Select approving authority">
+                        {(value: string) =>
+                          value
+                            ? staff.find((s) => s.id === value)?.name ?? "Select approving authority"
+                            : "Select approving authority"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No approver</SelectItem>
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Photo paths</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={newPhoto}
-                    onChange={(e) => setNewPhoto(e.target.value)}
-                    placeholder="Add a photo path"
-                    className="flex-1"
-                  />
-                  <Button type="button" size="sm" variant="outline" onClick={addPhoto}>
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add
-                  </Button>
-                </div>
-                <div className="mt-2 space-y-1">
-                  {form.photos.map((photo, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
-                    >
-                      <span className="truncate">{photo}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => removePhoto(index)}
+                <FileUploadField
+                  id="journey-photo"
+                  label="Attach photo / document"
+                  value={newPhoto}
+                  onChange={(path) => {
+                    if (path) {
+                      setForm((prev) => ({
+                        ...prev,
+                        photos: [...prev.photos, path],
+                      }));
+                      setNewPhoto("");
+                    }
+                  }}
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  placeholder="Click browse to attach a photo or document"
+                />
+                {form.photos.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {form.photos.map((photo: string, index: number) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
                       >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                        <span className="truncate">{photo}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => removePhoto(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating journey log" : "Editing journey log")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

@@ -23,6 +23,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient, updateClient } from "@/lib/actions/client";
 import { Plus, Pencil, Loader2, X, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface ClientContact {
   id?: string;
@@ -36,6 +38,10 @@ interface ClientRow {
   name: string;
   abbreviation: string | null;
   address: string | null;
+  gstNumber: string | null;
+  panNumber: string | null;
+  phone: string | null;
+  website: string | null;
   contacts: ClientContact[];
   _count: { projects: number };
 }
@@ -154,12 +160,16 @@ function ClientFormDialog({
   const router = useRouter();
   const isEdit = mode === "edit";
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const [form, setForm] = useState({
     name: client?.name ?? "",
     abbreviation: client?.abbreviation ?? "",
     address: client?.address ?? "",
+    gstNumber: client?.gstNumber ?? "",
+    panNumber: client?.panNumber ?? "",
+    phone: client?.phone ?? "",
+    website: client?.website ?? "",
     contacts: client?.contacts?.length ? client.contacts : [{ name: "", email: "", phone: "" }],
   });
 
@@ -199,6 +209,10 @@ function ClientFormDialog({
       name: form.name.trim(),
       abbreviation: form.abbreviation.trim() || null,
       address: form.address.trim() || null,
+      gstNumber: form.gstNumber.trim() || null,
+      panNumber: form.panNumber.trim() || null,
+      phone: form.phone.trim() || null,
+      website: form.website.trim() || null,
       contacts,
     };
 
@@ -209,15 +223,19 @@ function ClientFormDialog({
 
       if (!res.success) {
         setError(res.error ?? "Failed to save client");
+        toast.error(res.error ?? "Failed to save client");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Client created successfully" : "Client updated successfully");
     router.refresh();
     onClose();
   }
@@ -261,6 +279,46 @@ function ClientFormDialog({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">GST Number</Label>
+                <Input
+                  value={form.gstNumber}
+                  onChange={(e) => updateField("gstNumber", e.target.value)}
+                  maxLength={15}
+                  placeholder="22AAAAA0000A1Z5"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">PAN Number</Label>
+                <Input
+                  value={form.panNumber}
+                  onChange={(e) => updateField("panNumber", e.target.value)}
+                  maxLength={10}
+                  placeholder="AAAAA0000A"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Phone</Label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => updateField("phone", e.target.value)}
+                  placeholder="Phone number"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Website</Label>
+                <Input
+                  value={form.website}
+                  onChange={(e) => updateField("website", e.target.value)}
+                  placeholder="https://example.com"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Contacts</Label>
@@ -300,9 +358,7 @@ function ClientFormDialog({
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating client" : "Editing client")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-3">
             <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={submitting}>

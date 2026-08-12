@@ -24,8 +24,21 @@ import {
 import { createTadaClaim, updateTadaClaim } from "@/lib/actions/tada-bills";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface StaffOption {
+  id: string;
+  name: string;
+  regionId?: string | null;
+}
+
+interface RegionOption {
+  id: string;
+  name: string;
+}
+
+interface CityOption {
   id: string;
   name: string;
 }
@@ -62,15 +75,16 @@ function toMoneyString(value: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2) : "";
 }
 
-export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
+export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOption[]; regions: RegionOption[]; cities: CityOption[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const [staffId, setStaffId] = useState("");
   const [tourPurpose, setTourPurpose] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [regionId, setRegionId] = useState("");
   const [location, setLocation] = useState("");
   const [travelExpense, setTravelExpense] = useState("0");
   const [accommodationExp, setAccommodationExp] = useState("0");
@@ -92,6 +106,7 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
         fromDate: new Date(fromDate),
         toDate: new Date(toDate),
         location,
+        regionId: regionId || undefined,
         travelExpense,
         accommodationExp,
         foodExpense,
@@ -102,13 +117,17 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
       } as never);
 
       if (res.success) {
+        toast.success("TADA claim created successfully");
         setOpen(false);
         window.location.reload();
       } else {
         setError(res.error ?? "Failed to create claim");
+        toast.error(res.error ?? "Failed to create claim");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -130,9 +149,15 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Employee</Label>
-              <Select value={staffId} onValueChange={(v) => setStaffId(v ?? "")}>
+              <Select value={staffId} onValueChange={(v) => {
+                setStaffId(v ?? "");
+                const emp = staff.find(s => s.id === v);
+                if (emp?.regionId) setRegionId(emp.regionId);
+              }}>
                 <SelectTrigger className="w-full" size="sm">
-                  <SelectValue placeholder="Select employee" />
+                  <SelectValue placeholder="Select employee">
+                    {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select employee"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {staff.map((s) => (
@@ -144,12 +169,36 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Location</Label>
-              <Input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                required
-              />
+              <Label className="text-xs">Region</Label>
+              <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")} disabled>
+                <SelectTrigger className="w-full" size="sm">
+                  <SelectValue placeholder="Select region">
+                    {(value: string) => regions.find((r) => r.id === value)?.name ?? "Select region"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {regions.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Location (City)</Label>
+              <Select value={location} onValueChange={setLocation}>
+                <SelectTrigger className="w-full" size="sm">
+                  <SelectValue placeholder="Select city" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cities.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="col-span-2 space-y-1">
               <Label className="text-xs">Tour Purpose</Label>
@@ -164,6 +213,7 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
               <Label className="text-xs">From Date</Label>
               <Input
                 type="date"
+                min="2026-01-01"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
                 required
@@ -173,6 +223,7 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
               <Label className="text-xs">To Date</Label>
               <Input
                 type="date"
+                min="2026-01-01"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
                 required
@@ -245,11 +296,7 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
             placeholder="Upload bill copy or enter path"
           />
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Creating TADA claim")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
@@ -269,15 +316,19 @@ export function TadaClaimFormDialog({ staff }: { staff: StaffOption[] }) {
 export function TadaClaimEditForm({
   claim,
   staff,
+  regions,
+  cities,
   onClose,
 }: {
   claim: TadaClaimEditData;
   staff: StaffOption[];
+  regions: RegionOption[];
+  cities: CityOption[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const [form, setForm] = useState({
     staffId: claim.staffId,
@@ -285,6 +336,7 @@ export function TadaClaimEditForm({
     fromDate: toInputDate(claim.fromDate),
     toDate: toInputDate(claim.toDate),
     location: claim.location,
+    regionId: (claim as { regionId?: string }).regionId ?? "",
     travelExpense: toMoneyString(claim.travelExpense) || "0",
     accommodationExp: toMoneyString(claim.accommodationExp) || "0",
     foodExpense: toMoneyString(claim.foodExpense) || "0",
@@ -311,6 +363,7 @@ export function TadaClaimEditForm({
         fromDate: form.fromDate ? new Date(form.fromDate) : undefined,
         toDate: form.toDate ? new Date(form.toDate) : undefined,
         location: form.location,
+        regionId: form.regionId || undefined,
         travelExpense: form.travelExpense || "0",
         accommodationExp: form.accommodationExp || "0",
         foodExpense: form.foodExpense || "0",
@@ -322,15 +375,19 @@ export function TadaClaimEditForm({
 
       if (!res.success) {
         setError(res.error ?? "Failed to update claim");
+        toast.error(res.error ?? "Failed to update claim");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success("TADA claim updated successfully");
     router.refresh();
     onClose();
   }
@@ -359,10 +416,16 @@ export function TadaClaimEditForm({
                 <Label className="text-xs">Employee</Label>
                 <Select
                   value={form.staffId}
-                  onValueChange={(v) => updateField("staffId", v ?? "")}
+                  onValueChange={(v) => {
+                    updateField("staffId", v ?? "");
+                    const emp = staff.find(s => s.id === v);
+                    if (emp?.regionId) updateField("regionId", emp.regionId);
+                  }}
                 >
                   <SelectTrigger className="w-full" size="sm">
-                    <SelectValue placeholder="Select employee" />
+                    <SelectValue placeholder="Select employee">
+                      {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select employee"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {staff.map((s) => (
@@ -374,12 +437,43 @@ export function TadaClaimEditForm({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Location</Label>
-                <Input
+                <Label className="text-xs">Region</Label>
+                <Select
+                  value={form.regionId}
+                  onValueChange={(v) => updateField("regionId", v ?? "")}
+                  disabled
+                >
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue placeholder="Select region">
+                      {(value: string) => regions.find((r) => r.id === value)?.name ?? "Select region"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regions.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Location (City)</Label>
+                <Select
                   value={form.location}
-                  onChange={(e) => updateField("location", e.target.value)}
-                  required
-                />
+                  onValueChange={(v) => updateField("location", v)}
+                >
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue placeholder="Select city" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cities.map((c) => (
+                      <SelectItem key={c.id} value={c.name}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -398,6 +492,7 @@ export function TadaClaimEditForm({
                 <Label className="text-xs">From Date</Label>
                 <Input
                   type="date"
+                  min="2026-01-01"
                   value={form.fromDate}
                   onChange={(e) => updateField("fromDate", e.target.value)}
                   required
@@ -407,6 +502,7 @@ export function TadaClaimEditForm({
                 <Label className="text-xs">To Date</Label>
                 <Input
                   type="date"
+                  min="2026-01-01"
                   value={form.toDate}
                   onChange={(e) => updateField("toDate", e.target.value)}
                   required
@@ -497,11 +593,7 @@ export function TadaClaimEditForm({
             placeholder="Upload bill copy or enter path"
           />
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing TADA claim")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-3">
             <Button
@@ -535,7 +627,7 @@ export function TadaApprovalActions({
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [remarks, setRemarks] = useState("");
   const [paymentMode, setPaymentMode] = useState("");
 
@@ -563,9 +655,11 @@ export function TadaApprovalActions({
 
     if (!res.success) {
       setError(res.error ?? "Failed to process approval");
+      toast.error(res.error ?? "Failed to process approval");
       return;
     }
 
+    toast.success("Approval processed successfully");
     router.refresh();
     onClose();
   }
@@ -618,11 +712,7 @@ export function TadaApprovalActions({
             />
           </div>
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "TADA approval action")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex flex-wrap gap-2">
             {actions.map((a) => (

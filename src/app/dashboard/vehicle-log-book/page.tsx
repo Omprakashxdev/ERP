@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getVehicles, getJourneyLogs } from "@/lib/actions/vehicle-log-book";
+import { getStaff } from "@/lib/actions/staff";
+import { getMasterList } from "@/lib/actions/masters";
 import { serialize } from "@/lib/utils";
 import { VehicleLogBookTable } from "./vehicle-log-book-table";
 import { VehicleLogBookFilters } from "./vehicle-log-book-filters";
@@ -64,13 +66,19 @@ export default async function VehicleLogBookPage({
       ? { search: params.search }
       : vehicleFilter;
 
-  const [vehiclesResult, journeyLogsResult] = await Promise.all([
-    getVehicles(vehicleFilter, activeTab === "vehicles" ? page : 1, pageSize),
+  // When on journeys tab, fetch all vehicles without filters so the
+  // vehicle dropdown in the JourneyLogForm is always fully populated.
+  const vehicleFetchFilter = activeTab === "vehicles" ? vehicleFilter : {};
+
+  const [vehiclesResult, journeyLogsResult, staffResult, citiesResult] = await Promise.all([
+    getVehicles(vehicleFetchFilter, activeTab === "vehicles" ? page : 1, activeTab === "vehicles" ? pageSize : 1000),
     getJourneyLogs(
       journeyLogFilter,
       activeTab === "journeys" ? page : 1,
       pageSize
     ),
+    getStaff(),
+    getMasterList("city"),
   ]);
 
   const vehicleRows = vehiclesResult.success
@@ -86,6 +94,11 @@ export default async function VehicleLogBookPage({
   const journeyTotal = journeyLogsResult.success
     ? (journeyLogsResult.data?.total ?? 0)
     : 0;
+
+  const staff = staffResult.success ? (staffResult.data ?? []) : [];
+  const cities = citiesResult.success
+    ? (citiesResult.data as { id: string; name: string }[] ?? [])
+    : [];
 
   const total = activeTab === "journeys" ? journeyTotal : vehicleTotal;
   const totalPages = Math.ceil(total / pageSize);
@@ -140,6 +153,8 @@ export default async function VehicleLogBookPage({
           totalPages={totalPages}
           vehicleFilter={vehicleFilter}
           journeyLogFilter={journeyLogFilter}
+          staff={serialize(staff) as { id: string; name: string }[]}
+          cities={cities.map((c) => ({ id: c.id, name: c.name }))}
         />
       ) : (
         <Card className="shadow-sm">

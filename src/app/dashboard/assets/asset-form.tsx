@@ -26,11 +26,15 @@ import {
   updateAsset,
 } from "@/lib/actions/asset";
 import { FileUploadField } from "@/components/ui/file-upload-field";
+import type { MasterData } from "@/lib/master-data";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface AssetFormProps {
   asset?: Asset;
   mode: "create" | "edit";
+  masters?: MasterData;
   onClose: () => void;
 }
 
@@ -81,13 +85,13 @@ function getInitialForm(asset?: Asset) {
   };
 }
 
-export function AssetForm({ asset, mode, onClose }: AssetFormProps) {
+export function AssetForm({ asset, mode, masters, onClose }: AssetFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
 
   const [form, setForm] = useState(() => getInitialForm(asset));
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -137,15 +141,19 @@ export function AssetForm({ asset, mode, onClose }: AssetFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save asset.");
+        toast.error(result.error ?? "Failed to save asset.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Asset created successfully" : "Asset updated successfully");
     router.refresh();
     onClose();
   }
@@ -178,12 +186,30 @@ export function AssetForm({ asset, mode, onClose }: AssetFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  value={form.category}
-                  onChange={(e) => updateField("category", e.target.value)}
-                  placeholder="e.g. Furniture, Electronics"
-                />
+                {masters && masters.assetCategories.length > 0 ? (
+                  <Select
+                    value={form.category}
+                    onValueChange={(v) => updateField("category", v ?? "")}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {masters.assetCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="category"
+                    value={form.category}
+                    onChange={(e) => updateField("category", e.target.value)}
+                    placeholder="e.g. Furniture, Electronics"
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -209,22 +235,60 @@ export function AssetForm({ asset, mode, onClose }: AssetFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="make">Make</Label>
-                <Input
-                  id="make"
-                  value={form.make}
-                  onChange={(e) => updateField("make", e.target.value)}
-                  placeholder="Manufacturer"
-                />
+                {masters && masters.assetMakes.length > 0 ? (
+                  <Select
+                    value={form.make}
+                    onValueChange={(v) => updateField("make", v ?? "")}
+                  >
+                    <SelectTrigger id="make">
+                      <SelectValue placeholder="Select make" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {masters.assetMakes.map((m) => (
+                        <SelectItem key={m.id} value={m.name}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="make"
+                    value={form.make}
+                    onChange={(e) => updateField("make", e.target.value)}
+                    placeholder="Manufacturer"
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="model">Model</Label>
-                <Input
-                  id="model"
-                  value={form.model}
-                  onChange={(e) => updateField("model", e.target.value)}
-                  placeholder="Model number"
-                />
+                {masters && masters.assetModels.length > 0 ? (
+                  <Select
+                    value={form.model}
+                    onValueChange={(v) => updateField("model", v ?? "")}
+                  >
+                    <SelectTrigger id="model">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {masters.assetModels
+                        .filter((m) => !form.make || m.makeId === masters.assetMakes.find((mk) => mk.name === form.make)?.id)
+                        .map((m) => (
+                          <SelectItem key={m.id} value={m.name}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="model"
+                    value={form.model}
+                    onChange={(e) => updateField("model", e.target.value)}
+                    placeholder="Model number"
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -332,11 +396,7 @@ export function AssetForm({ asset, mode, onClose }: AssetFormProps) {
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating asset" : "Editing asset")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

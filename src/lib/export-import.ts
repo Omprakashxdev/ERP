@@ -12,6 +12,7 @@ export interface ModuleExportConfig {
   intFields: string[];
   enumFields: Record<string, string[]>;
   relationFields: string[];
+  booleanFields?: string[];
 }
 
 export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
@@ -229,6 +230,167 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     },
     relationFields: ["assignedTo", "assignedBy", "project"],
   },
+  clients: {
+    label: "Clients",
+    model: "client",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: ["contacts"],
+  },
+  staff: {
+    label: "Staff",
+    model: "staff",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: ["region"],
+    booleanFields: ["isActive"],
+  },
+  masters_region: {
+    label: "Master - Region",
+    model: "region",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_department: {
+    label: "Master - Department",
+    model: "department",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_designation: {
+    label: "Master - Designation",
+    model: "designation",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_state: {
+    label: "Master - State",
+    model: "state",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_city: {
+    label: "Master - City",
+    model: "city",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: ["state"],
+  },
+  masters_platform: {
+    label: "Master - Platform",
+    model: "platform",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_paymentType: {
+    label: "Master - Payment Type",
+    model: "paymentType",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_assetCategory: {
+    label: "Master - Asset Category",
+    model: "assetCategory",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_assetMake: {
+    label: "Master - Asset Make",
+    model: "assetMake",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_assetModel: {
+    label: "Master - Asset Model",
+    model: "assetModel",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: ["make"],
+  },
+  masters_orderMaster: {
+    label: "Master - Order Master",
+    model: "orderMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_workMaster: {
+    label: "Master - Work Master",
+    model: "workMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_dprMaster: {
+    label: "Master - DPR Master",
+    model: "dprMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
+  masters_tsAaMaster: {
+    label: "Master - TS/AA Master",
+    model: "tsAaMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+  },
 };
 
 export const EXPORTABLE_MODULES = Object.keys(MODULE_EXPORT_CONFIGS);
@@ -265,6 +427,10 @@ function flattenRow(
       (value instanceof Prisma.Decimal || typeof value === "object")
     ) {
       flat[key] = String(value);
+      continue;
+    }
+    if (config.booleanFields?.includes(key) && typeof value === "boolean") {
+      flat[key] = value ? "Active" : "Inactive";
       continue;
     }
     if (value === null || value === undefined) {
@@ -348,7 +514,10 @@ export function parseCsv(csvContent: string): Record<string, string>[] {
     headers.forEach((header, idx) => {
       row[header] = values[idx] ?? "";
     });
-    rows.push(row);
+    const isEmpty = Object.values(row).every((v) => v.trim() === "");
+    if (!isEmpty) {
+      rows.push(row);
+    }
   }
 
   return rows;

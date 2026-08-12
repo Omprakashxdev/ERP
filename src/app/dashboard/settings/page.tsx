@@ -8,7 +8,8 @@ import { NotificationsPanel } from "./notifications-panel";
 import { AuditLogPanel } from "./audit-log-panel";
 import { UserManagementPanel } from "./user-management-panel";
 import { UserRightsPanel } from "./user-rights-panel";
-import { Settings, Download, Bell, Shield, Users, KeyRound } from "lucide-react";
+import { Settings, Download, Bell, Shield, Users, KeyRound, Network } from "lucide-react";
+import { OrgChartPanel } from "./org-chart-panel";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -22,9 +23,10 @@ export default async function SettingsPage() {
   const canManageUsers = hasPermission(session.user.role, "userManagement", "read");
 
   const canViewRights = true;
+  const canViewOrgChart = true;
 
   const hasAnyAccess =
-    canExportImport || canManageNotifications || canViewAuditLog || canManageUsers || canViewRights;
+    canExportImport || canManageNotifications || canViewAuditLog || canManageUsers || canViewRights || canViewOrgChart;
 
   if (!hasAnyAccess) {
     redirect("/unauthorized");
@@ -45,7 +47,7 @@ export default async function SettingsPage() {
       </div>
 
       <Tabs defaultValue="export">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           {canExportImport && (
             <TabsTrigger value="export">
               <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -74,6 +76,12 @@ export default async function SettingsPage() {
             <TabsTrigger value="rights">
               <KeyRound className="mr-1.5 h-3.5 w-3.5" />
               Rights
+            </TabsTrigger>
+          )}
+          {canViewOrgChart && (
+            <TabsTrigger value="orgchart">
+              <Network className="mr-1.5 h-3.5 w-3.5" />
+              Org Chart
             </TabsTrigger>
           )}
         </TabsList>
@@ -123,6 +131,15 @@ export default async function SettingsPage() {
             <Card className="shadow-sm">
               <CardContent className="p-4">
                 <UserRightsPanel isAdmin={session.user.role === "ADMIN"} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+        {canViewOrgChart && (
+          <TabsContent value="orgchart">
+            <Card className="shadow-sm">
+              <CardContent className="p-4">
+                <OrgChartPanel />
               </CardContent>
             </Card>
           </TabsContent>

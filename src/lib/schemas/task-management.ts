@@ -10,6 +10,11 @@ export const taskCreateSchema = z.object({
   priority: z
     .enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
     .default("MEDIUM"),
+  department: cleanedString(100).optional().nullable(),
+  reviewerId: z.string().cuid().optional().nullable(),
+  percentageCompletion: z.number().int().min(0).max(100).optional(),
+  sourceModule: cleanedString(50).optional().nullable(),
+  sourceEntityId: z.string().cuid().optional().nullable(),
 });
 
 export const taskUpdateSchema = taskCreateSchema

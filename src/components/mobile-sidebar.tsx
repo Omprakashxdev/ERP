@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LogOut, Menu, X } from "lucide-react";
 import { navGroups } from "@/lib/nav";
+import { withBasePath } from "@/lib/base-path";
 
 export function MobileSidebar() {
   const [open, setOpen] = useState(false);
@@ -38,7 +39,7 @@ export function MobileSidebar() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2 px-2">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white p-0.5 shadow-sm overflow-hidden">
-                  <img src="/saes-logo.jpg" alt="SAEC Logo" className="h-full w-full rounded-lg object-cover" />
+                  <img src={withBasePath("/saes-logo.jpg")} alt="SAEC Logo" className="h-full w-full rounded-lg object-cover" />
                 </div>
                 <div>
                   <div className="font-bold tracking-tight text-sidebar-foreground">SAEC ERP</div>

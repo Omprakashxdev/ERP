@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
@@ -12,6 +13,36 @@ enum Role {
   MANAGER
   STAFF
   AUDITOR
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model RegistrationRequest {
+  id              String             @id @default(cuid())
+  name            String
+  email           String             @unique
+  hashedPassword  String
+  employeeCode    String?
+  designation     String?
+  regionId        String?
+  reportingManagerId String?
+  status          RegistrationStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectedReason  String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  region          Region?            @relation("RegistrationRegion", fields: [regionId], references: [id], onDelete: SetNull)
+  reportingManager Staff?           @relation("RegistrationReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  reviewedBy      User?              @relation("RegistrationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([regionId])
 }
 
 model User {
@@ -28,6 +59,8 @@ model User {
   auditLogs     AuditLog[]
   notifications Notification[]
   tasksAssignedBy Task[]       @relation("TaskAssignedBy")
+  forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
+  reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
 }
 
 model AuditLog {
@@ -125,6 +158,17 @@ enum AssetStatus {
   ASSIGNED
   UNDER_MAINTENANCE
   DISPOSED
+  NOT_WORKING
+}
+
+enum AssetMovementType {
+  ASSIGNED_TO_EMPLOYEE
+  RETURNED_FROM_EMPLOYEE
+  GONE_FOR_REPAIR
+  RETURNED_FROM_REPAIR
+  TRASH
+  NOT_WORKING
+  TRANSFERRED
 }
 
 // Shareable master-data models
@@ -137,8 +181,10 @@ model Region {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  projects Project[]
-  staff    Staff[]
+  projects  Project[]
+  staff     Staff[]
+  tadaClaims TadaClaim[] @relation("TadaClaimRegion")
+  registrationRequests RegistrationRequest[] @relation("RegistrationRegion")
 }
 
 model Client {
@@ -146,6 +192,10 @@ model Client {
   name         String
   abbreviation String?         @db.VarChar(8)
   address      String?
+  gstNumber    String?
+  panNumber    String?
+  phone        String?
+  website      String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -179,10 +229,13 @@ model Staff {
   designation  String?
   regionId     String?
   isActive     Boolean   @default(true)
+  reportingManagerId String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   region      Region?           @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  reportingManager  Staff?     @relation("StaffReportingManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  subordinates      Staff[]    @relation("StaffReportingManager")
   assignments ProjectAssignment[]
   wipHoCoordinator WorkInProgress[] @relation("WipHoCoordinator")
   wipRoCoordinator WorkInProgress[] @relation("WipRoCoordinator")
@@ -191,12 +244,18 @@ model Staff {
   actionSuggestedEntries InOutRegister[]        @relation("ActionSuggestedStaff")
   tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
   tasksAssigned          Task[]                 @relation("TaskAssignedTo")
+  journeyLogApprovals    JourneyLog[]           @relation("JourneyLogApprovedBy")
+  assetMovementsFrom     AssetMovement[]        @relation("AssetMovementFrom")
+  assetMovementsTo       AssetMovement[]        @relation("AssetMovementTo")
+  heldAssets             Asset[]                @relation("AssetCurrentHolder")
+  forwardsReceived      ForwardRecord[]        @relation("ForwardToStaff")
   employeeDetail         EmployeeDetail?
+  attendance             Attendance[]
+  registrationRequests   RegistrationRequest[] @relation("RegistrationReportingManager")
 
   @@index([regionId])
+  @@index([reportingManagerId])
 }
-
-// Project and contract entities
 
 model Contractor {
   id                          String        @id @default(cuid())
@@ -359,25 +418,43 @@ model JourneyLog {
   endKm              Decimal               @db.Decimal(10, 2)
   totalKm            Decimal               @db.Decimal(10, 2)
 
-  fuelExpense        Decimal?              @db.Decimal(19, 2)
-  serviceExpense     Decimal?              @db.Decimal(19, 2)
-  maintenanceExpense Decimal?              @db.Decimal(19, 2)
-  taxExpense         Decimal?              @db.Decimal(19, 2)
+  startKmPhotoPath   String?
+  endKmPhotoPath     String?
 
+  fuelExpense        Decimal?              @db.Decimal(19, 2)
+  fuelBillPath       String?
+
+  serviceParticulars String?
+  serviceExpense     Decimal?              @db.Decimal(19, 2)
+  serviceBillPath    String?
+
+  maintenanceParticulars String?
+  maintenanceExpense Decimal?              @db.Decimal(19, 2)
+  maintenanceBillPath String?
+
+  taxExpense         Decimal?              @db.Decimal(19, 2)
+  taxReceiptPath     String?
+
+  personsTravelling  String?
   driverName         String?
   purpose            String?
+  remarks            String?
+
   approvalStatus     JourneyApprovalStatus @default(PENDING)
   rejectedReason     String?
+  approvedById       String?
 
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
 
   vehicle            Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   photos             JourneyLogPhoto[]
+  approvedBy         Staff?                @relation("JourneyLogApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
   @@index([journeyDate])
   @@index([approvalStatus])
+  @@index([approvedById])
 }
 
 model JourneyLogPhoto {
@@ -410,15 +487,40 @@ model Asset {
   assignedQuantity  Decimal?    @db.Decimal(10, 2)
   responsiblePerson String?
 
+  currentHolderId   String?
   status            AssetStatus @default(AVAILABLE)
   remarks           String?
 
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
+  movements         AssetMovement[]
+  currentHolder     Staff?      @relation("AssetCurrentHolder", fields: [currentHolderId], references: [id], onDelete: SetNull)
+
   @@index([category])
   @@index([status])
   @@index([itemCode])
+  @@index([currentHolderId])
+}
+
+model AssetMovement {
+  id          String              @id @default(cuid())
+  assetId     String
+  movementType AssetMovementType
+  fromStaffId String?
+  toStaffId   String?
+  notes       String?
+  movementDate DateTime           @default(now())
+  createdAt   DateTime            @default(now())
+
+  asset       Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fromStaff   Staff?              @relation("AssetMovementFrom", fields: [fromStaffId], references: [id], onDelete: SetNull)
+  toStaff     Staff?              @relation("AssetMovementTo", fields: [toStaffId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([movementType])
+  @@index([fromStaffId])
+  @@index([toStaffId])
 }
 
 enum InOutDirection {
@@ -439,6 +541,8 @@ model InOutRegister {
   actionSuggestedStaffId String?
   replyDate              DateTime?
   replyRefNo             String?                 @unique
+  inwardType             String?
+  receivedByPersonName   String?
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -566,7 +670,8 @@ model FundFlow {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  monthlyData   FundFlowMonthly[]
 }
 
 // Due Bills Status module
@@ -782,6 +887,7 @@ model TadaClaim {
   fromDate          DateTime
   toDate            DateTime
   location          String
+  regionId          String?
 
   travelExpense     Decimal         @db.Decimal(19, 2) @default("0.00")
   accommodationExp  Decimal         @db.Decimal(19, 2) @default("0.00")
@@ -815,11 +921,13 @@ model TadaClaim {
   updatedAt         DateTime        @updatedAt
 
   staff             Staff           @relation("TadaClaimStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  region            Region?         @relation("TadaClaimRegion", fields: [regionId], references: [id], onDelete: SetNull)
 
   @@index([staffId])
   @@index([status])
   @@index([fromDate])
   @@index([toDate])
+  @@index([regionId])
 }
 
 // Task Management module
@@ -851,6 +959,16 @@ model Task {
   assignedById    String?
   projectId       String?
 
+  // Task enhancements
+  department      String?
+  reviewerId      String?
+  percentageCompletion Int     @default(0)
+  activityLog     String?
+
+  // Source linking (WIP, Tender, etc.)
+  sourceModule    String?
+  sourceEntityId  String?
+
   dueDate         DateTime?
   completedAt     DateTime?
   reworkCount     Int           @default(0)
@@ -869,6 +987,8 @@ model Task {
   @@index([status])
   @@index([priority])
   @@index([dueDate])
+  @@index([sourceModule])
+  @@index([sourceEntityId])
 }
 
 // HR module — extends Staff with HR-specific fields
@@ -902,6 +1022,9 @@ model EmployeeDetail {
   addressProofPath      String?
   degreeCertificatePath String?
   letterOfGuaranteePath String?
+  officeTimeFramePath   String?  // Annexure-A
+  dailyReportingPath    String?  // Form-2
+  leavePolicyPath       String?  // Form-3
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -910,6 +1033,156 @@ model EmployeeDetail {
 
   @@index([department])
   @@index([presentCity])
+}
+
+// ─── Lookup Masters ───────────────────────────────────────────
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Designation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model State {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cities    City[]
+}
+
+model City {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  stateId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  state     State?   @relation(fields: [stateId], references: [id], onDelete: SetNull)
+
+  @@index([stateId])
+}
+
+model Platform {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  url       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PaymentType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AssetCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AssetMake {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models    AssetModel[]
+}
+
+model AssetModel {
+  id        String   @id @default(cuid())
+  name      String
+  makeId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  make      AssetMake? @relation(fields: [makeId], references: [id], onDelete: SetNull)
+
+  @@unique([name, makeId])
+  @@index([makeId])
+}
+
+model OrderMaster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkMaster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DprMaster {
+  id              String   @id @default(cuid())
+  referenceNumber String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model TsAaMaster {
+  id              String   @id @default(cuid())
+  referenceNumber String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Fund Flow Monthly Projection ─────────────────────────────
+
+model FundFlowMonthly {
+  id        String   @id @default(cuid())
+  fundFlowId String
+  month     Int      // 1-12
+  year      Int
+  income    Decimal  @db.Decimal(19, 2) @default("0.00")
+  expense   Decimal  @db.Decimal(19, 2) @default("0.00")
+  net       Decimal  @db.Decimal(19, 2) @default("0.00")
+  cumulative Decimal @db.Decimal(19, 2) @default("0.00")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fundFlow  FundFlow @relation(fields: [fundFlowId], references: [id], onDelete: Cascade)
+
+  @@unique([fundFlowId, month, year])
+  @@index([fundFlowId])
+}
+
+// ─── Employee Attendance (TADA linkage) ───────────────────────
+
+model Attendance {
+  id        String   @id @default(cuid())
+  staffId   String
+  date      DateTime
+  status    String   @default("PRESENT") // PRESENT, ABSENT, HALF_DAY, LEAVE, WFH
+  checkIn   DateTime?
+  checkOut  DateTime?
+  remarks   String?
+  tadaClaimId String? // link to TADA claim if travel-based absence
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+  @@index([staffId])
+  @@index([date])
 }
 
 // Editable role-based permissions
@@ -932,4 +1205,32 @@ model SystemSetting {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Unified Forwarding / Handoff Tracking
+
+enum ForwardStatus {
+  PENDING
+  ACKNOWLEDGED
+  ACTIONED
+  RETURNED
+}
+
+model ForwardRecord {
+  id             String       @id @default(cuid())
+  entityType     String
+  entityId       String
+  fromUserId     String?
+  toStaffId      String?
+  remarks        String?
+  status         ForwardStatus @default(PENDING)
+  forwardedAt    DateTime     @default(now())
+  acknowledgedAt DateTime?
+
+  fromUser       User?        @relation("ForwardFromUser", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toStaff        Staff?       @relation("ForwardToStaff", fields: [toStaffId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([toStaffId])
+  @@index([status])
 }

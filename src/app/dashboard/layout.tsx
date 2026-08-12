@@ -9,6 +9,7 @@ import { MobileSidebar } from "@/components/mobile-sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { AiAssistant } from "@/components/ai-assistant";
+import { withBasePath } from "@/lib/base-path";
 
 export default async function DashboardLayout({
   children,
@@ -27,7 +28,7 @@ export default async function DashboardLayout({
         {/* Logo / Brand */}
         <div className="flex items-center gap-3 px-5 py-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-0.5 shadow-sm overflow-hidden">
-            <img src="/saes-logo.jpg" alt="SAEC Logo" className="h-full w-full rounded-lg object-cover" />
+            <img src={withBasePath("/saes-logo.jpg")} alt="SAEC Logo" className="h-full w-full rounded-lg object-cover" />
           </div>
           <div>
             <div className="text-base font-bold tracking-tight text-sidebar-foreground">
@@ -64,7 +65,7 @@ export default async function DashboardLayout({
           <form
             action={async () => {
               "use server";
-              await signOut({ redirectTo: "/login" });
+              await signOut({ redirectTo: withBasePath("/login") });
             }}
           >
             <Button

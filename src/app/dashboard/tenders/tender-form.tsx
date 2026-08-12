@@ -29,11 +29,16 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { createTender, updateTender } from "@/lib/actions/tender";
+import type { MasterData } from "@/lib/master-data";
+import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface TenderFormProps {
   tender?: Tender;
   mode: "create" | "edit";
+  masters?: MasterData;
   onClose: () => void;
 }
 
@@ -133,14 +138,14 @@ function getInitialForm(tender?: Tender) {
   };
 }
 
-export function TenderForm({ tender, mode, onClose }: TenderFormProps) {
+export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
 
   const [form, setForm] = useState(() => getInitialForm(tender));
   const [activeTab, setActiveTab] = useState("details");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -210,15 +215,19 @@ export function TenderForm({ tender, mode, onClose }: TenderFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save tender.");
+        toast.error(result.error ?? "Failed to save tender.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Tender created successfully" : "Tender updated successfully");
     router.refresh();
     onClose();
   }
@@ -309,40 +318,122 @@ export function TenderForm({ tender, mode, onClose }: TenderFormProps) {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    value={form.department}
-                    onChange={(e) => updateField("department", e.target.value)}
-                    placeholder="Name of department"
-                  />
+                  {masters && masters.departments.length > 0 ? (
+                    <Select
+                      value={form.department}
+                      onValueChange={(v) => updateField("department", v ?? "")}
+                    >
+                      <SelectTrigger id="department">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.departments.map((d) => (
+                          <SelectItem key={d.id} value={d.name}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="department"
+                      value={form.department}
+                      onChange={(e) => updateField("department", e.target.value)}
+                      placeholder="Name of department"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    value={form.state}
-                    onChange={(e) => updateField("state", e.target.value)}
-                  />
+                  {masters && masters.states.length > 0 ? (
+                    <Select
+                      value={form.state}
+                      onValueChange={(v) => {
+                        updateField("state", v ?? "");
+                        updateField("city", "");
+                      }}
+                    >
+                      <SelectTrigger id="state">
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.states.map((s) => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="state"
+                      value={form.state}
+                      onChange={(e) => updateField("state", e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    value={form.city}
-                    onChange={(e) => updateField("city", e.target.value)}
-                  />
+                  {masters && masters.cities.length > 0 ? (
+                    <Select
+                      value={form.city}
+                      onValueChange={(v) => updateField("city", v ?? "")}
+                    >
+                      <SelectTrigger id="city">
+                        <SelectValue placeholder="Select city" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.cities
+                          .filter((c) => {
+                            if (!form.state) return true;
+                            const selectedState = masters.states.find((s) => s.name === form.state);
+                            if (!selectedState) return true;
+                            return c.stateId === selectedState.id;
+                          })
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.name}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="city"
+                      value={form.city}
+                      onChange={(e) => updateField("city", e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="platform">Platform</Label>
-                  <Input
-                    id="platform"
-                    value={form.platform}
-                    onChange={(e) => updateField("platform", e.target.value)}
-                    placeholder="e.g. npro.gov.in"
-                  />
+                  {masters && masters.platforms.length > 0 ? (
+                    <Select
+                      value={form.platform}
+                      onValueChange={(v) => updateField("platform", v ?? "")}
+                    >
+                      <SelectTrigger id="platform">
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.platforms.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="platform"
+                      value={form.platform}
+                      onChange={(e) => updateField("platform", e.target.value)}
+                      placeholder="e.g. npro.gov.in"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
@@ -613,14 +704,12 @@ export function TenderForm({ tender, mode, onClose }: TenderFormProps) {
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="advertisementCopyPath">Advertisement copy path</Label>
-                  <Input
-                    id="advertisementCopyPath"
+                  <FileUploadField
+                    id="tender-advertisement"
+                    label="Advertisement copy"
                     value={form.advertisementCopyPath}
-                    onChange={(e) =>
-                      updateField("advertisementCopyPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded advertisement"
+                    onChange={(v) => updateField("advertisementCopyPath", v)}
+                    placeholder="Upload advertisement copy or enter path"
                   />
                 </div>
 
@@ -641,11 +730,7 @@ export function TenderForm({ tender, mode, onClose }: TenderFormProps) {
 
           <Separator className="my-4" />
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating tender" : "Editing tender")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button

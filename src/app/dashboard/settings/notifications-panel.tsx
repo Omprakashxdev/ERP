@@ -20,6 +20,8 @@ import {
   triggerNotificationCheck,
 } from "@/lib/actions/notifications";
 import { Plus, Trash2, Loader2, Zap, Bell } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface Rule {
   id: string;
@@ -245,7 +247,7 @@ function NotificationRuleForm({
   const [module, setModule] = useState("paymentSchedules");
   const [thresholdDays, setThresholdDays] = useState("7");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -263,12 +265,16 @@ function NotificationRuleForm({
       });
 
       if (res.success) {
+        toast.success("Notification rule created successfully");
         onCreated();
       } else {
         setError(res.error ?? "Failed to create rule.");
+        toast.error(res.error ?? "Failed to create rule.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -343,11 +349,7 @@ function NotificationRuleForm({
             </div>
           </div>
 
-          {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Creating notification rule")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>

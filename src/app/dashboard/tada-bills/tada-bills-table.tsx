@@ -61,6 +61,8 @@ export function TadaClaimTable({
   page,
   pageSize,
   staff,
+  regions,
+  cities,
   userRole,
 }: {
   claims: TadaClaimRow[];
@@ -68,6 +70,8 @@ export function TadaClaimTable({
   page: number;
   pageSize: number;
   staff: { id: string; name: string }[];
+  regions: { id: string; name: string }[];
+  cities: { id: string; name: string }[];
   userRole: string;
 }) {
   const [editClaim, setEditClaim] = useState<TadaClaimRow | null>(null);
@@ -210,6 +214,8 @@ export function TadaClaimTable({
         <TadaClaimEditForm
           claim={editClaim}
           staff={staff}
+          regions={regions}
+          cities={cities}
           onClose={() => setEditClaim(null)}
         />
       )}
@@ -221,6 +227,7 @@ export function TadaClaimTable({
           onClose={() => setApprovalClaim(null)}
         />
       )}
+
     </div>
   );
 }

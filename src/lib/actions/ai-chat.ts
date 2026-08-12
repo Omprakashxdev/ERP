@@ -1,7 +1,7 @@
 "use server";
 
 import { generateText } from "ai";
-import { getGroqChatModel } from "@/lib/ai/groq";
+import { getChatModel } from "@/lib/ai/openrouter";
 import { requireAuth } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { ActionResult } from "./wrapper";
@@ -287,7 +287,7 @@ export async function sendAiChatMessage(
     const dynamicPrompt = chatSystemPrompt + `\n\nIMPORTANT: You only have access to these data modules: ${moduleList}. If the user asks about data outside these modules, tell them you don't have access to that information and suggest they contact an administrator.`;
 
     const { text } = await generateText({
-      model: getGroqChatModel(),
+      model: getChatModel(),
       system: dynamicPrompt,
       prompt: `Current ERP data snapshot:\n${context}\n\nUser question: ${message}`,
       temperature: 0.3,

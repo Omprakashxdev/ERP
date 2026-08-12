@@ -1,8 +1,11 @@
-import { Asset } from "@prisma/client";
+import { Asset, AssetMovement, Staff } from "@prisma/client";
 
-export type AssetListRow = Asset;
+export type AssetListRow = Asset & {
+  currentHolder?: Staff | null;
+};
 
 export type AssetWithComputed = AssetListRow & {
   remainingQuantity: number;
   isWarrantyDocumentMissing: boolean;
+  movements?: AssetMovement[];
 };

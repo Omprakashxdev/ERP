@@ -29,7 +29,7 @@ function generateReplyRefNo(): string {
 function computeAgeInDays(receivedDate: Date): number {
   const msPerDay = 1000 * 60 * 60 * 24;
   const diff = new Date().getTime() - new Date(receivedDate).getTime();
-  return Math.floor(diff / msPerDay);
+  return Math.max(0, Math.floor(diff / msPerDay));
 }
 
 function computeInOutRegisterFlags(entry: {

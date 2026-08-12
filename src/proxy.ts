@@ -8,12 +8,13 @@ export default auth((req) => {
   const isAuthApiRoute = nextUrl.pathname.startsWith("/api/auth");
   const isCronApiRoute = nextUrl.pathname.startsWith("/api/notifications/check");
   const isLoginPage = nextUrl.pathname === "/login";
+  const isRegisterPage = nextUrl.pathname === "/register";
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next") ||
     nextUrl.pathname.startsWith("/static") ||
     nextUrl.pathname === "/favicon.ico";
 
-  if (isPublicAsset || isAuthApiRoute || isLoginPage || isCronApiRoute) {
+  if (isPublicAsset || isAuthApiRoute || isLoginPage || isRegisterPage || isCronApiRoute) {
     return NextResponse.next();
   }
 
@@ -27,3 +28,4 @@ export default auth((req) => {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg)).*)"],
 };
+

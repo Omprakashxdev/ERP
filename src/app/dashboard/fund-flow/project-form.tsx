@@ -33,6 +33,8 @@ import { getClients } from "@/lib/actions/client";
 import { getStaff } from "@/lib/actions/staff";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface ProjectFormProps {
   project?: FundFlowWithComputed;
@@ -163,7 +165,7 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
   );
   const [feeStages, setFeeStages] = useState(() => getInitialFeeStages(project));
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [activeTab, setActiveTab] = useState("details");
 
   useEffect(() => {
@@ -301,15 +303,19 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save project.");
+        toast.error(result.error ?? "Failed to save project.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Project created successfully" : "Project updated successfully");
     router.refresh();
     onClose();
   }
@@ -360,7 +366,9 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                         onValueChange={(v) => updateField("regionId", v ?? "")}
                       >
                         <SelectTrigger id="region">
-                          <SelectValue placeholder="Select region" />
+                          <SelectValue placeholder="Select region">
+                            {(value: string) => master.regions.find((r) => r.id === value)?.name ?? "Select region"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {master.regions.map((r) => (
@@ -389,7 +397,9 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                       onValueChange={(v) => updateField("clientId", v ?? "")}
                     >
                       <SelectTrigger id="client">
-                        <SelectValue placeholder="Select client" />
+                        <SelectValue placeholder="Select client">
+                          {(value: string) => master.clients.find((c) => c.id === value)?.name ?? "Select client"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {master.clients.map((c) => (
@@ -652,7 +662,9 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                           }
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Select staff" />
+                            <SelectValue placeholder="Select staff">
+                              {(value: string) => master.staff.find((s) => s.id === value)?.name ?? "Select staff"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {master.staff.map((s) => (
@@ -808,11 +820,7 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
 
             <Separator className="my-4" />
 
-            {error && (
-              <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-                {error}
-              </p>
-            )}
+            <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating project" : "Editing project")} askingAi={askingAi} aiResponse={aiResponse} />
 
             <div className="flex justify-end gap-2">
               <Button

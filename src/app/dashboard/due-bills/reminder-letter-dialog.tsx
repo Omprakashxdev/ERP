@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer, Mail, CheckCircle2 } from "lucide-react";
 import { generateReminderLetter } from "@/lib/actions/due-bill-reminder";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface ReminderLetterDialogProps {
   bill: {
@@ -36,7 +38,7 @@ interface ReminderLetterDialogProps {
 export function ReminderLetterDialog({ bill, onClose }: ReminderLetterDialogProps) {
   const [loading, setLoading] = useState(false);
   const [taskCreated, setTaskCreated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const billDateStr = bill.billDate
     ? new Date(bill.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })
@@ -58,9 +60,11 @@ export function ReminderLetterDialog({ bill, onClose }: ReminderLetterDialogProp
     const res = await generateReminderLetter({ billId: bill.id });
     setLoading(false);
     if (res.success) {
+      toast.success("Reminder letter generated successfully");
       setTaskCreated(true);
     } else {
       setError(res.error ?? "Failed to create reminder task");
+      toast.error(res.error ?? "Failed to create reminder task");
     }
   }
 
@@ -152,11 +156,7 @@ export function ReminderLetterDialog({ bill, onClose }: ReminderLetterDialogProp
           </div>
         </div>
 
-        {error && (
-          <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
+        <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Generating reminder letter")} askingAi={askingAi} aiResponse={aiResponse} />
 
         {taskCreated && (
           <div className="mt-3 flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">

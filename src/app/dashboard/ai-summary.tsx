@@ -5,11 +5,13 @@ import { generateDashboardSummary } from "@/lib/actions/ai-dashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkles, RefreshCw, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 export function AiDashboardSummary() {
   const [summary, setSummary] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   async function handleGenerate() {
     setLoading(true);
@@ -18,8 +20,10 @@ export function AiDashboardSummary() {
     const result = await generateDashboardSummary();
     if (result.success && result.data) {
       setSummary(result.data);
+      toast.success("AI summary generated successfully");
     } else {
       setError(result.error ?? "Failed to generate summary");
+      toast.error(result.error ?? "Failed to generate summary");
     }
     setLoading(false);
   }
@@ -67,15 +71,7 @@ export function AiDashboardSummary() {
 
         {error && !loading && (
           <div className="space-y-3">
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-              <div>
-                <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                  Failed to generate summary
-                </p>
-                <p className="text-xs text-red-600 dark:text-red-500">{error}</p>
-              </div>
-            </div>
+            <ErrorBanner error={error} onAskAi={(e) => askAi(e, "AI dashboard summary")} askingAi={askingAi} aiResponse={aiResponse} />
             <Button onClick={handleGenerate} variant="outline" size="sm" className="gap-2">
               <RefreshCw className="h-3.5 w-3.5" />
               Try Again

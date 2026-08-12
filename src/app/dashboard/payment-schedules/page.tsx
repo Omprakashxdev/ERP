@@ -10,6 +10,7 @@ import { PaymentScheduleFilterInput } from "@/lib/schemas/payment-schedule";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface PaymentSchedulesPageProps {
   searchParams: Promise<{
@@ -52,7 +53,11 @@ export default async function PaymentSchedulesPage({
     dueDateTo: parseDate(params.dueDateTo),
   };
 
-  const paymentSchedulesResult = await getPaymentSchedules(filter, page, pageSize);
+  const [paymentSchedulesResult, masters] = await Promise.all([
+    getPaymentSchedules(filter, page, pageSize),
+    fetchAllMasters(),
+  ]);
+  const masterData = masters as unknown as MasterData;
 
   const rows = paymentSchedulesResult.success
     ? (paymentSchedulesResult.data?.rows ?? [])
@@ -96,6 +101,7 @@ export default async function PaymentSchedulesPage({
           total={total}
           totalPages={totalPages}
           filter={filter}
+          masters={masterData}
         />
       ) : (
         <Card className="shadow-sm">

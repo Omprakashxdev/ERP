@@ -25,7 +25,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { createWip, updateWip } from "@/lib/actions/wip";
 import { WipWithComputed } from "@/types/wip";
+import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface WipFormProps {
   wip?: WipWithComputed;
@@ -162,7 +165,7 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
   );
   const [activeTab, setActiveTab] = useState("details");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   const totals = useMemo(() => {
     const raAmounts = [
@@ -287,15 +290,19 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save WIP record.");
+        toast.error(result.error ?? "Failed to save WIP record.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "WIP record created successfully" : "WIP record updated successfully");
     router.refresh();
     onClose();
   }
@@ -344,7 +351,9 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                       }
                     >
                       <SelectTrigger id="project">
-                        <SelectValue placeholder="Select project" />
+                        <SelectValue placeholder="Select project">
+                          {(value: string) => projects.find((p) => p.id === value)?.name ?? "Select project"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {projects.map((p) => (
@@ -557,7 +566,9 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                     }
                   >
                     <SelectTrigger id="hoCoordinatorId">
-                      <SelectValue placeholder="Select staff" />
+                      <SelectValue placeholder="Select staff">
+                        {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "Select staff" : "Select staff"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">None</SelectItem>
@@ -579,7 +590,9 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                     }
                   >
                     <SelectTrigger id="roCoordinatorId">
-                      <SelectValue placeholder="Select staff" />
+                      <SelectValue placeholder="Select staff">
+                        {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "Select staff" : "Select staff"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">None</SelectItem>
@@ -628,7 +641,9 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select staff" />
+                          <SelectValue placeholder="Select staff">
+                            {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select staff"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {staff.map((s) => (
@@ -791,28 +806,22 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="annexure3aPath">Annexure 3A path</Label>
-                  <Input
-                    id="annexure3aPath"
+                  <FileUploadField
+                    id="wip"
+                    label="Annexure 3A document"
                     value={form.annexure3aPath}
-                    onChange={(e) =>
-                      updateField("annexure3aPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded document"
+                    onChange={(v) => updateField("annexure3aPath", v)}
+                    placeholder="Upload Annexure 3A or enter path"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="completionCertificatePath">
-                    Completion certificate path
-                  </Label>
-                  <Input
-                    id="completionCertificatePath"
+                  <FileUploadField
+                    id="wip"
+                    label="Completion certificate"
                     value={form.completionCertificatePath}
-                    onChange={(e) =>
-                      updateField("completionCertificatePath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded document"
+                    onChange={(v) => updateField("completionCertificatePath", v)}
+                    placeholder="Upload completion certificate or enter path"
                   />
                 </div>
 
@@ -833,11 +842,7 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
 
           <Separator className="my-4" />
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating WIP record" : "Editing WIP record")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button

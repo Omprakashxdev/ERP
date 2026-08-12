@@ -29,11 +29,16 @@ import {
   createPaymentSchedule,
   updatePaymentSchedule,
 } from "@/lib/actions/payment-schedule";
+import { FileUploadField } from "@/components/ui/file-upload-field";
+import type { MasterData } from "@/lib/master-data";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface PaymentScheduleFormProps {
   paymentSchedule?: PaymentSchedule;
   mode: "create" | "edit";
+  masters?: MasterData;
   onClose: () => void;
 }
 
@@ -86,6 +91,7 @@ function getInitialForm(paymentSchedule?: PaymentSchedule) {
 export function PaymentScheduleForm({
   paymentSchedule,
   mode,
+  masters,
   onClose,
 }: PaymentScheduleFormProps) {
   const router = useRouter();
@@ -93,7 +99,7 @@ export function PaymentScheduleForm({
 
   const [form, setForm] = useState(() => getInitialForm(paymentSchedule));
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -138,15 +144,19 @@ export function PaymentScheduleForm({
 
       if (!result.success) {
         setError(result.error ?? "Failed to save payment schedule.");
+        toast.error(result.error ?? "Failed to save payment schedule.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Payment schedule created successfully" : "Payment schedule updated successfully");
     router.refresh();
     onClose();
   }
@@ -231,12 +241,30 @@ export function PaymentScheduleForm({
 
               <div className="space-y-1.5">
                 <Label htmlFor="paymentType">Payment type</Label>
-                <Input
-                  id="paymentType"
-                  value={form.paymentType}
-                  onChange={(e) => updateField("paymentType", e.target.value)}
-                  placeholder="e.g. Scheduled / Due payment"
-                />
+                {masters && masters.paymentTypes.length > 0 ? (
+                  <Select
+                    value={form.paymentType}
+                    onValueChange={(v) => updateField("paymentType", v ?? "")}
+                  >
+                    <SelectTrigger id="paymentType">
+                      <SelectValue placeholder="Select payment type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {masters.paymentTypes.map((p) => (
+                        <SelectItem key={p.id} value={p.name}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="paymentType"
+                    value={form.paymentType}
+                    onChange={(e) => updateField("paymentType", e.target.value)}
+                    placeholder="e.g. Scheduled / Due payment"
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -261,12 +289,12 @@ export function PaymentScheduleForm({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="billCopyPath">Bill copy path</Label>
-                <Input
-                  id="billCopyPath"
+                <FileUploadField
+                  id="payment-schedules"
+                  label="Bill copy / document"
                   value={form.billCopyPath}
-                  onChange={(e) => updateField("billCopyPath", e.target.value)}
-                  placeholder="Path or reference to uploaded bill copy"
+                  onChange={(v) => updateField("billCopyPath", v)}
+                  placeholder="Upload scanned bill copy or enter path"
                 />
               </div>
 
@@ -283,11 +311,7 @@ export function PaymentScheduleForm({
             </div>
           </div>
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating payment schedule" : "Editing payment schedule")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-4">
             <Button

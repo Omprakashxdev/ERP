@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TenderFilterInput } from "@/lib/schemas/tender";
 import { TenderWithComputed } from "@/types/tender";
 import { TenderForm } from "./tender-form";
+import type { MasterData } from "@/lib/master-data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ interface TendersTableProps {
   total: number;
   totalPages: number;
   filter: TenderFilterInput;
+  masters?: MasterData;
 }
 
 const statusVariantMap: Record<TenderStatus, string> = {
@@ -80,6 +82,7 @@ export function TendersTable({
   total,
   totalPages,
   filter,
+  masters,
 }: TendersTableProps) {
   const router = useRouter();
   const [selectedTender, setSelectedTender] =
@@ -283,12 +286,13 @@ export function TendersTable({
         <TenderForm
           tender={selectedTender}
           mode="edit"
+          masters={masters}
           onClose={() => setSelectedTender(null)}
         />
       )}
 
       {createTenderOpen && (
-        <TenderForm mode="create" onClose={() => setCreateTenderOpen(false)} />
+        <TenderForm mode="create" masters={masters} onClose={() => setCreateTenderOpen(false)} />
       )}
     </div>
   );

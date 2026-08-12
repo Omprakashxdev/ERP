@@ -283,7 +283,7 @@ export async function generateDashboardSummary(): Promise<ActionResult<string>> 
     const userPrompt = buildDashboardPrompt(metrics);
 
     const { text } = await generateText({
-      model: getGroqChatModel(),
+      model: getChatModel(),
       system: dashboardSystemPrompt,
       prompt: userPrompt,
       temperature: 0.3,

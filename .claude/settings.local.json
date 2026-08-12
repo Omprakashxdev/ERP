@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ide__executeCode",
+      "Bash(python3 *)",
+      "Bash(node zod4-test.js)",
+      "Bash(npm run *)",
+      "Bash(/opt/homebrew/opt/postgresql@15/bin/psql *)",
+      "Bash(npx tsc *)",
+      "Bash(ssh *)"
+    ]
+  }
+}

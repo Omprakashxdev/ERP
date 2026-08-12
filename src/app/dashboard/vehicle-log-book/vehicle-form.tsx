@@ -23,7 +23,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { createVehicle, updateVehicle } from "@/lib/actions/vehicle-log-book";
+import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface VehicleFormProps {
   vehicle?: Vehicle;
@@ -90,7 +93,7 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
   const [form, setForm] = useState(() => getInitialForm(vehicle));
   const [activeTab, setActiveTab] = useState("details");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -137,17 +140,22 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
 
       if (!result.success) {
         setError(result.error ?? "Failed to save vehicle.");
+        toast.error(result.error ?? "Failed to save vehicle.");
         return;
       }
 
+      toast.success(mode === "create" ? "Vehicle created successfully" : "Vehicle updated successfully");
       router.refresh();
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("fetch") || message.includes("network") || message.includes("proxy")) {
-        setError("Unable to reach the server. Please check your connection and try again.");
+        const friendlyMsg = "Unable to reach the server. Please check your connection and try again.";
+        setError(friendlyMsg);
+        toast.error(friendlyMsg);
       } else {
         setError(message || "An unexpected error occurred.");
+        toast.error(message || "An unexpected error occurred.");
       }
     } finally {
       setSubmitting(false);
@@ -269,12 +277,12 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="rcCopyPath">R.C. copy path</Label>
-                  <Input
-                    id="rcCopyPath"
+                  <FileUploadField
+                    id="vehicle-rc"
+                    label="R.C. copy"
                     value={form.rcCopyPath}
-                    onChange={(e) => updateField("rcCopyPath", e.target.value)}
-                    placeholder="Path or reference to uploaded R.C. copy"
+                    onChange={(v) => updateField("rcCopyPath", v)}
+                    placeholder="Upload R.C. copy or enter path"
                   />
                 </div>
 
@@ -300,13 +308,12 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="insuranceCopyPath">Insurance copy path</Label>
-                  <Input
-                    id="insuranceCopyPath"
+                  <FileUploadField
+                    id="vehicle-insurance"
+                    label="Insurance copy"
                     value={form.insuranceCopyPath}
-                    onChange={(e) => updateField("insuranceCopyPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded insurance copy"
+                    onChange={(v) => updateField("insuranceCopyPath", v)}
+                    placeholder="Upload insurance copy or enter path"
                   />
                 </div>
 
@@ -321,12 +328,12 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="pucCopyPath">P.U.C copy path</Label>
-                  <Input
-                    id="pucCopyPath"
+                  <FileUploadField
+                    id="vehicle-puc"
+                    label="P.U.C copy"
                     value={form.pucCopyPath}
-                    onChange={(e) => updateField("pucCopyPath", e.target.value)}
-                    placeholder="Path or reference to uploaded P.U.C copy"
+                    onChange={(v) => updateField("pucCopyPath", v)}
+                    placeholder="Upload P.U.C copy or enter path"
                   />
                 </div>
               </div>
@@ -366,11 +373,7 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
 
           <Separator className="my-4" />
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating vehicle" : "Editing vehicle")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button

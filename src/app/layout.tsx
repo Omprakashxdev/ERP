@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "SAEC ERP",
@@ -19,9 +14,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col font-sans">
         <Providers>{children}</Providers>
+        <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
   );

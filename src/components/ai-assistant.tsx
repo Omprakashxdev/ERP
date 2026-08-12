@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Send, Loader2 } from "lucide-react";
 import { sendAiChatMessage } from "@/lib/actions/ai-chat";
+import { withBasePath } from "@/lib/base-path";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -97,7 +98,7 @@ export function AiAssistant() {
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-0.5 shadow-sm overflow-hidden">
-                  <img src="/saes-logo.jpg" alt="SAEC" className="h-full w-full rounded-md object-cover" />
+                  <img src={withBasePath("/saes-logo.jpg")} alt="SAEC" className="h-full w-full rounded-md object-cover" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">AI Assistant</p>
@@ -119,7 +120,7 @@ export function AiAssistant() {
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-white p-0.5 shadow-md overflow-hidden">
-                    <img src="/saes-logo.jpg" alt="SAEC" className="h-full w-full rounded-lg object-cover" />
+                    <img src={withBasePath("/saes-logo.jpg")} alt="SAEC" className="h-full w-full rounded-lg object-cover" />
                   </div>
                   <p className="text-sm font-medium text-foreground">Ask me anything</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -146,7 +147,7 @@ export function AiAssistant() {
                 >
                   {msg.role === "assistant" && (
                     <div className="mr-2 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white p-0.5 overflow-hidden">
-                      <img src="/saes-logo.jpg" alt="SAEC" className="h-full w-full rounded-sm object-cover" />
+                      <img src={withBasePath("/saes-logo.jpg")} alt="SAEC" className="h-full w-full rounded-sm object-cover" />
                     </div>
                   )}
                   <div
@@ -164,7 +165,7 @@ export function AiAssistant() {
               {loading && (
                 <div className="mb-3 flex justify-start">
                   <div className="mr-2 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white p-0.5 overflow-hidden">
-                    <img src="/saes-logo.jpg" alt="SAEC" className="h-full w-full rounded-sm object-cover" />
+                    <img src={withBasePath("/saes-logo.jpg")} alt="SAEC" className="h-full w-full rounded-sm object-cover" />
                   </div>
                   <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

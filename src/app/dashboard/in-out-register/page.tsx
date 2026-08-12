@@ -64,6 +64,7 @@ export default async function InOutRegisterPage({
       orderBy: { name: "asc" },
     }),
     prisma.staff.findMany({
+      where: { isActive: true },
       select: { id: true, name: true, employeeCode: true },
       orderBy: { name: "asc" },
     }),

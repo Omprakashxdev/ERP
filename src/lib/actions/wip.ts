@@ -19,6 +19,7 @@ import {
   sanitizeForAudit,
   ActionResult,
 } from "./wrapper";
+import { createWipLinkedTasks, deleteLinkedTasks } from "./task-linking";
 
 function toDecimal(value: Decimal | null | undefined): Decimal {
   return value ? new Decimal(value.toString()) : new Decimal("0.00");
@@ -132,7 +133,20 @@ export async function createWip(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    // Auto-create linked tasks for LOI, Agreement, Work Order, Security Deposit
+    await createWipLinkedTasks({
+      wipId: wip.id,
+      projectId: parsed.projectId,
+      loiReceiptDate: parsed.loiReceiptDate,
+      agreementDate: parsed.agreementDate,
+      workOrderDate: parsed.workOrderDate,
+      securityDepositReturnDate: parsed.securityDepositReturnDate,
+      hoCoordinatorId: parsed.hoCoordinatorId,
+      roCoordinatorId: parsed.roCoordinatorId,
+    }).catch(() => {});
+
     revalidatePath("/dashboard/wip");
+    revalidatePath("/dashboard/tasks");
     return { id: wip.id };
   });
 }
@@ -174,7 +188,20 @@ export async function updateWip(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    // Auto-create linked tasks for any newly added dates
+    await createWipLinkedTasks({
+      wipId: wip.id,
+      projectId: wip.projectId,
+      loiReceiptDate: parsed.loiReceiptDate,
+      agreementDate: parsed.agreementDate,
+      workOrderDate: parsed.workOrderDate,
+      securityDepositReturnDate: parsed.securityDepositReturnDate,
+      hoCoordinatorId: parsed.hoCoordinatorId,
+      roCoordinatorId: parsed.roCoordinatorId,
+    }).catch(() => {});
+
     revalidatePath("/dashboard/wip");
+    revalidatePath("/dashboard/tasks");
     return { id: wip.id };
   });
 }
@@ -186,6 +213,8 @@ export async function deleteWip(
     await checkRateLimit(user.id);
 
     const wip = await prisma.workInProgress.delete({ where: { id } });
+
+    await deleteLinkedTasks("WIP", id).catch(() => {});
 
     await audit(user.id, "delete", "WorkInProgress", wip.id, {});
 

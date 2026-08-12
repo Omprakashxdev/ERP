@@ -4,7 +4,8 @@ import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Upload, Loader2, X, FileCheck } from "lucide-react";
+import { Upload, Loader2, X, FileCheck, ExternalLink } from "lucide-react";
+import { withBasePath } from "@/lib/base-path";
 
 interface FileUploadFieldProps {
   id: string;
@@ -39,7 +40,7 @@ export function FileUploadField({
       formData.append("file", file);
       formData.append("module", id);
 
-      const res = await fetch("/api/upload", {
+      const res = await fetch(withBasePath("/api/upload"), {
         method: "POST",
         body: formData,
       });
@@ -104,6 +105,17 @@ export function FileUploadField({
           </Button>
         )}
       </div>
+      {value && (
+        <a
+          href={withBasePath(value)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          View uploaded file
+        </a>
+      )}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );

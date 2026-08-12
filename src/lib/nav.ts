@@ -14,6 +14,8 @@ import {
   BarChart3,
   Settings,
   Users,
+  Database,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,6 +69,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/clients",
         icon: Users,
         description: "Client master",
+      },
+      {
+        label: "Staff",
+        href: "/dashboard/staff",
+        icon: UserCog,
+        description: "Staff master",
       },
     ],
   },
@@ -147,6 +155,12 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/settings",
         icon: Settings,
         description: "Configuration",
+      },
+      {
+        label: "Masters",
+        href: "/dashboard/masters",
+        icon: Database,
+        description: "Manage lookup data",
       },
     ],
   },

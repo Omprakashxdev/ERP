@@ -5,6 +5,7 @@ import { requireAuth, requireRole, hasPermissionWithOverrides } from "@/lib/auth
 import { logAuditEvent } from "@/lib/audit";
 import { rateLimitByIp } from "@/lib/rate-limit";
 import { Role } from "@/types/auth";
+import { ZodError } from "zod";
 
 export interface ActionResult<T> {
   success: boolean;
@@ -19,6 +20,33 @@ export interface SessionUser {
   role: Role;
 }
 
+function formatError(error: unknown): string {
+  if (error instanceof ZodError) {
+    const messages = error.issues.map((e) => {
+      const field = e.path.length > 0 ? e.path.join(".") : "value";
+      return `${field}: ${e.message}`;
+    });
+    return messages.join("; ");
+  }
+  
+  // Handle Prisma Unique Constraint Violation
+  if (typeof error === "object" && error !== null) {
+    const anyErr = error as Record<string, any>;
+    if (anyErr.code === "P2002") {
+      const target = anyErr.meta?.target;
+      if (Array.isArray(target)) {
+        return `A record with this ${target.join(" and ")} already exists.`;
+      } else if (typeof target === "string") {
+        return `A record with this ${target} already exists.`;
+      }
+      return "A record with this information already exists.";
+    }
+  }
+
+  if (error instanceof Error) return error.message;
+  return "Action failed";
+}
+
 export async function withAuth<T>(
   action: (user: SessionUser) => Promise<T>,
   allowedRoles?: Role[]
@@ -30,7 +58,7 @@ export async function withAuth<T>(
     const data = await action(user);
     return { success: true, data };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Action failed";
+    const message = formatError(error);
     return { success: false, error: message };
   }
 }
@@ -47,7 +75,7 @@ export async function withPermission<T>(
     }
     return { success: true, data: await fn(user) };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Action failed";
+    const message = formatError(error);
     return { success: false, error: message };
   }
 }

@@ -134,6 +134,11 @@ const permissionMatrix: Record<
     [Role.MANAGER]: ["create", "read", "update"],
     [Role.AUDITOR]: ["read"],
   },
+  staffManagement: {
+    [Role.ADMIN]: ["create", "read", "update", "delete", "admin"],
+    [Role.MANAGER]: ["create", "read", "update"],
+    [Role.AUDITOR]: ["read"],
+  },
 };
 
 export function hasPermission(

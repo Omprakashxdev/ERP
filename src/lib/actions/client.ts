@@ -27,6 +27,10 @@ export async function createClient(
         name: parsed.name,
         abbreviation: parsed.abbreviation,
         address: parsed.address,
+        gstNumber: parsed.gstNumber,
+        panNumber: parsed.panNumber,
+        phone: parsed.phone,
+        website: parsed.website,
         contacts: parsed.contacts
           ? {
               create: parsed.contacts
@@ -47,6 +51,7 @@ export async function createClient(
     });
 
     revalidatePath("/dashboard/fund-flow");
+    revalidatePath("/dashboard/clients");
     return client;
   }, mutationRoles);
 }
@@ -101,6 +106,7 @@ export async function updateClient(
     });
 
     revalidatePath("/dashboard/fund-flow");
+    revalidatePath("/dashboard/clients");
     return { id: client.id };
   }, mutationRoles);
 }

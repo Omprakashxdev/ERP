@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { cleanedString, cuid, money } from "./shared";
+import { cleanedString, cuid, positiveMoney } from "./shared";
 
 function notFutureDate(d: Date) {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return d <= now;
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return d <= endOfToday;
 }
 
 const tadaClaimBaseSchema = z.object({
@@ -18,12 +18,13 @@ const tadaClaimBaseSchema = z.object({
     message: "To date cannot be in the future",
   }),
   location: cleanedString(200),
-  travelExpense: money.default(new Prisma.Decimal("0.00")),
-  accommodationExp: money.default(new Prisma.Decimal("0.00")),
-  foodExpense: money.default(new Prisma.Decimal("0.00")),
-  localConveyance: money.default(new Prisma.Decimal("0.00")),
-  otherExpense: money.default(new Prisma.Decimal("0.00")),
-  advanceAmount: money.optional().nullable(),
+  regionId: z.string().cuid().optional().nullable(),
+  travelExpense: positiveMoney.default(new Prisma.Decimal("0.00")),
+  accommodationExp: positiveMoney.default(new Prisma.Decimal("0.00")),
+  foodExpense: positiveMoney.default(new Prisma.Decimal("0.00")),
+  localConveyance: positiveMoney.default(new Prisma.Decimal("0.00")),
+  otherExpense: positiveMoney.default(new Prisma.Decimal("0.00")),
+  advanceAmount: positiveMoney.optional().nullable(),
   billCopyPath: cleanedString(500).optional().nullable(),
 });
 

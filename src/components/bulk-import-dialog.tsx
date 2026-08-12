@@ -11,7 +11,8 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Upload, Download, Loader2, AlertCircle, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { Upload, Download, Loader2, AlertCircle, CheckCircle2, FileSpreadsheet, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 import { importModule, getModuleTemplate } from "@/lib/actions/export-import";
 
 interface BulkImportDialogProps {
@@ -25,33 +26,46 @@ export function BulkImportDialog({ module, moduleLabel }: BulkImportDialogProps)
   const [templateLoading, setTemplateLoading] = useState(false);
   const [importData, setImportData] = useState("");
   const [result, setResult] = useState<
-    { type: "success" | "error"; message: string; errors?: string[] } | null
+    { type: "success" | "error"; message: string; errors?: string[]; corrections?: string[] } | null
   >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleDownloadTemplate(format: "csv" | "xlsx") {
     setTemplateLoading(true);
-    const res = await getModuleTemplate(module);
-    setTemplateLoading(false);
+    try {
+      const res = await getModuleTemplate(module);
 
-    if (res.success && res.data) {
-      if (format === "xlsx") {
-        const rows = [res.data.content.split(",")];
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Template");
-        XLSX.writeFile(wb, res.data.filename.replace(".csv", ".xlsx"));
+      if (res.success && res.data) {
+        if (format === "xlsx") {
+          const lines = res.data.content.trim().split("\n");
+          const rows = lines.map((line) => line.split(","));
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Template");
+          XLSX.writeFile(wb, res.data.filename.replace(".csv", ".xlsx"));
+        } else {
+          const blob = new Blob([res.data.content], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = res.data.filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+        toast.success("Template downloaded successfully");
       } else {
-        const blob = new Blob([res.data.content], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = res.data.filename;
-        a.click();
-        URL.revokeObjectURL(url);
+        const errMsg = res.error ?? "Failed to generate template";
+        setResult({ type: "error", message: errMsg });
+        toast.error(errMsg);
       }
-    } else {
-      setResult({ type: "error", message: res.error ?? "Failed to generate template" });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Failed to download template";
+      setResult({ type: "error", message: errMsg });
+      toast.error(errMsg);
+    } finally {
+      setTemplateLoading(false);
     }
   }
 
@@ -89,32 +103,47 @@ export function BulkImportDialog({ module, moduleLabel }: BulkImportDialogProps)
     setLoading(true);
     setResult(null);
 
-    const res = await importModule({
-      module: module as never,
-      format: "csv",
-      data: importData,
-    });
-
-    setLoading(false);
-
-    if (res.success && res.data) {
-      const { imported, errors } = res.data;
-      setResult({
-        type: "success",
-        message: `Imported ${imported} record(s)${errors.length > 0 ? ` with ${errors.length} error(s)` : ""}.`,
-        errors: errors.length > 0 ? errors : undefined,
+    try {
+      const res = await importModule({
+        module: module as never,
+        format: "csv",
+        data: importData,
       });
-      if (errors.length === 0) {
-        setImportData("");
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        setTimeout(() => {
-          setOpen(false);
-          setResult(null);
-          window.location.reload();
-        }, 1500);
+
+      if (res.success && res.data) {
+        const { imported, errors, corrections } = res.data;
+        setResult({
+          type: "success",
+          message: `Imported ${imported} record(s)${errors.length > 0 ? ` with ${errors.length} error(s)` : ""}${corrections.length > 0 ? ` and ${corrections.length} auto-correction(s)` : ""}.`,
+          errors: errors.length > 0 ? errors : undefined,
+          corrections: corrections.length > 0 ? corrections : undefined,
+        });
+        if (imported > 0) {
+          toast.success(`Imported ${imported} record(s) successfully`);
+        }
+        if (errors.length > 0) {
+          toast.error(`${errors.length} error(s) during import`);
+        }
+        if (errors.length === 0 && imported > 0) {
+          setImportData("");
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          setTimeout(() => {
+            setOpen(false);
+            setResult(null);
+            window.location.reload();
+          }, 1500);
+        }
+      } else {
+        const errMsg = res.error ?? "Import failed.";
+        setResult({ type: "error", message: errMsg });
+        toast.error(errMsg);
       }
-    } else {
-      setResult({ type: "error", message: res.error ?? "Import failed." });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "An unexpected error occurred during import.";
+      setResult({ type: "error", message: errMsg });
+      toast.error(errMsg);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -247,6 +276,20 @@ Upload a CSV or Excel file to bulk import {moduleLabel.toLowerCase()} records. D
                   ))}
                   {result.errors.length > 10 && (
                     <div className="py-0.5 font-medium">…and {result.errors.length - 10} more</div>
+                  )}
+                </div>
+              )}
+              {result.corrections && result.corrections.length > 0 && (
+                <div className="mt-2 max-h-32 overflow-y-auto rounded bg-amber-100/50 p-2 text-xs text-amber-800">
+                  <div className="flex items-center gap-1 py-0.5 font-medium">
+                    <Wand2 className="h-3 w-3" />
+                    Auto-corrections applied:
+                  </div>
+                  {result.corrections.slice(0, 10).map((cor, i) => (
+                    <div key={i} className="py-0.5">{cor}</div>
+                  ))}
+                  {result.corrections.length > 10 && (
+                    <div className="py-0.5 font-medium">…and {result.corrections.length - 10} more</div>
                   )}
                 </div>
               )}

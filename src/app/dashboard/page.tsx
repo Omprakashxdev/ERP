@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { AiDashboardSummary } from "./ai-summary";
+import { withBasePath } from "@/lib/base-path";
 import {
   FileText,
   ClipboardList,
@@ -153,7 +154,7 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-4 rounded-2xl border border-border bg-gradient-to-r from-card to-muted/30 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white p-1 shadow-sm overflow-hidden">
-            <img src="/saes-logo.jpg" alt="SAEC Logo" className="h-full w-full rounded-xl object-cover" />
+            <img src={withBasePath("/saes-logo.jpg")} alt="SAEC Logo" className="h-full w-full rounded-xl object-cover" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Welcome, {userName.split(" ")[0]}</h1>

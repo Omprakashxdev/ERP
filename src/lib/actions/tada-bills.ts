@@ -44,18 +44,43 @@ export async function createTadaClaim(
       );
     }
 
+    const staffRecord = await prisma.staff.findUnique({
+      where: { id: parsed.staffId },
+      select: { reportingManagerId: true, isActive: true },
+    });
+
+    if (!staffRecord?.isActive) {
+      throw new Error("Cannot create claim for an inactive staff member");
+    }
+
     const claim = await prisma.tadaClaim.create({
       data: {
         ...parsed,
         totalClaimAmount,
         adjustedAmount: parsed.advanceAmount ? new Prisma.Decimal("0.00") : null,
         balanceAmount,
+        status: TadaClaimStatus.SUBMITTED,
       },
     });
+
+    // Auto-route to reporting manager
+    if (staffRecord?.reportingManagerId) {
+      await prisma.forwardRecord.create({
+        data: {
+          entityType: "TADA_CLAIM",
+          entityId: claim.id,
+          toStaffId: staffRecord.reportingManagerId,
+          fromUserId: user.id,
+          remarks: "Auto-routed to reporting manager",
+          status: "PENDING",
+        },
+      });
+    }
 
     await audit(user.id, "create", "TadaClaim", claim.id, {
       staffId: parsed.staffId,
       totalClaimAmount: totalClaimAmount.toString(),
+      autoRouted: true,
     });
 
     revalidatePath("/dashboard/tada-bills");

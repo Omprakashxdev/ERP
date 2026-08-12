@@ -38,6 +38,7 @@ interface DueBillsTableProps {
   totalPages: number;
   filter: DueBillFilterInput;
   projects: { id: string; name: string }[];
+  staff?: { id: string; name: string }[];
 }
 
 const statusVariantMap: Record<DueBillStatus, string> = {
@@ -74,6 +75,7 @@ export function DueBillsTable({
   totalPages,
   filter,
   projects,
+  staff,
 }: DueBillsTableProps) {
   const router = useRouter();
   const [selectedBill, setSelectedBill] = useState<DueBillWithComputed | null>(
@@ -314,6 +316,7 @@ export function DueBillsTable({
           onClose={() => setReminderBill(null)}
         />
       )}
+
     </div>
   );
 }

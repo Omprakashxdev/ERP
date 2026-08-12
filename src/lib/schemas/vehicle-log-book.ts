@@ -10,7 +10,7 @@ export const vehicleCreateSchema = z.object({
   registrationNumber: cleanedString(50),
   make: cleanedString(100).optional().nullable(),
   model: cleanedString(100).optional().nullable(),
-  year: z.coerce.number().int().min(1900).optional().nullable(),
+  year: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 1).optional().nullable(),
   status: z.nativeEnum(VehicleStatus).default(VehicleStatus.ACTIVE),
 
   rcNumber: cleanedString(100).optional().nullable(),
@@ -61,17 +61,33 @@ export const journeyLogCreateSchema = z.object({
   endKm: kmField,
   totalKm: kmField.optional().nullable(),
 
-  fuelExpense: money.optional().nullable(),
-  serviceExpense: money.optional().nullable(),
-  maintenanceExpense: money.optional().nullable(),
-  taxExpense: money.optional().nullable(),
+  startKmPhotoPath: cleanedString(500).optional().nullable(),
+  endKmPhotoPath: cleanedString(500).optional().nullable(),
 
+  fuelExpense: money.optional().nullable(),
+  fuelBillPath: cleanedString(500).optional().nullable(),
+
+  serviceParticulars: cleanedString(500).optional().nullable(),
+  serviceExpense: money.optional().nullable(),
+  serviceBillPath: cleanedString(500).optional().nullable(),
+
+  maintenanceParticulars: cleanedString(500).optional().nullable(),
+  maintenanceExpense: money.optional().nullable(),
+  maintenanceBillPath: cleanedString(500).optional().nullable(),
+
+  taxExpense: money.optional().nullable(),
+  taxReceiptPath: cleanedString(500).optional().nullable(),
+
+  personsTravelling: cleanedString(500).optional().nullable(),
   driverName: cleanedString(120).optional().nullable(),
   purpose: cleanedString(500).optional().nullable(),
+  remarks: cleanedString(1000).optional().nullable(),
+
   approvalStatus: z
     .nativeEnum(JourneyApprovalStatus)
     .default(JourneyApprovalStatus.PENDING),
   rejectedReason: cleanedString(500).optional().nullable(),
+  approvedById: cleanedString(100).optional().nullable(),
 
   photos: z.array(cleanedString(500)).optional(),
 });

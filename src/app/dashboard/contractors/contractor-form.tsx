@@ -24,11 +24,16 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { createContractor, updateContractor } from "@/lib/actions/contractor";
+import { FileUploadField } from "@/components/ui/file-upload-field";
+import type { MasterData } from "@/lib/master-data";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface ContractorFormProps {
   contractor?: Contractor;
   mode: "create" | "edit";
+  masters?: MasterData;
   onClose: () => void;
 }
 
@@ -111,6 +116,7 @@ function getInitialForm(contractor?: Contractor) {
 export function ContractorForm({
   contractor,
   mode,
+  masters,
   onClose,
 }: ContractorFormProps) {
   const router = useRouter();
@@ -119,7 +125,7 @@ export function ContractorForm({
   const [form, setForm] = useState(() => getInitialForm(contractor));
   const [activeTab, setActiveTab] = useState("details");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -178,15 +184,19 @@ export function ContractorForm({
 
       if (!result.success) {
         setError(result.error ?? "Failed to save contractor.");
+        toast.error(result.error ?? "Failed to save contractor.");
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(msg);
+      toast.error(msg);
       return;
     } finally {
       setSubmitting(false);
     }
 
+    toast.success(mode === "create" ? "Contractor created successfully" : "Contractor updated successfully");
     router.refresh();
     onClose();
   }
@@ -329,22 +339,58 @@ export function ContractorForm({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="detailedOrder">Detailed order / department</Label>
-                  <Input
-                    id="detailedOrder"
-                    value={form.detailedOrder}
-                    onChange={(e) =>
-                      updateField("detailedOrder", e.target.value)
-                    }
-                  />
+                  {masters && masters.orderMasters.length > 0 ? (
+                    <Select
+                      value={form.detailedOrder}
+                      onValueChange={(v) => updateField("detailedOrder", v ?? "")}
+                    >
+                      <SelectTrigger id="detailedOrder">
+                        <SelectValue placeholder="Select order" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.orderMasters.map((o) => (
+                          <SelectItem key={o.id} value={o.name}>
+                            {o.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="detailedOrder"
+                      value={form.detailedOrder}
+                      onChange={(e) =>
+                        updateField("detailedOrder", e.target.value)
+                      }
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="workName">Name of work</Label>
-                  <Input
-                    id="workName"
-                    value={form.workName}
-                    onChange={(e) => updateField("workName", e.target.value)}
-                  />
+                  {masters && masters.workMasters.length > 0 ? (
+                    <Select
+                      value={form.workName}
+                      onValueChange={(v) => updateField("workName", v ?? "")}
+                    >
+                      <SelectTrigger id="workName">
+                        <SelectValue placeholder="Select work" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.workMasters.map((w) => (
+                          <SelectItem key={w.id} value={w.name}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="workName"
+                      value={form.workName}
+                      onChange={(e) => updateField("workName", e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -393,22 +439,58 @@ export function ContractorForm({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="dprReference">DPR reference</Label>
-                  <Input
-                    id="dprReference"
-                    value={form.dprReference}
-                    onChange={(e) => updateField("dprReference", e.target.value)}
-                  />
+                  {masters && masters.dprMasters.length > 0 ? (
+                    <Select
+                      value={form.dprReference}
+                      onValueChange={(v) => updateField("dprReference", v ?? "")}
+                    >
+                      <SelectTrigger id="dprReference">
+                        <SelectValue placeholder="Select DPR reference" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.dprMasters.map((d) => (
+                          <SelectItem key={d.id} value={d.referenceNumber}>
+                            {d.referenceNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="dprReference"
+                      value={form.dprReference}
+                      onChange={(e) => updateField("dprReference", e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="tsAaReference">Ts/Aa reference</Label>
-                  <Input
-                    id="tsAaReference"
-                    value={form.tsAaReference}
-                    onChange={(e) =>
-                      updateField("tsAaReference", e.target.value)
-                    }
-                  />
+                  {masters && masters.tsAaMasters.length > 0 ? (
+                    <Select
+                      value={form.tsAaReference}
+                      onValueChange={(v) => updateField("tsAaReference", v ?? "")}
+                    >
+                      <SelectTrigger id="tsAaReference">
+                        <SelectValue placeholder="Select TS/AA reference" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.tsAaMasters.map((t) => (
+                          <SelectItem key={t.id} value={t.referenceNumber}>
+                            {t.referenceNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="tsAaReference"
+                      value={form.tsAaReference}
+                      onChange={(e) =>
+                        updateField("tsAaReference", e.target.value)
+                      }
+                    />
+                  )}
                 </div>
               </div>
             </TabsContent>
@@ -432,13 +514,12 @@ export function ContractorForm({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="scheduleBPath">Schedule B path</Label>
-                  <Input
-                    id="scheduleBPath"
+                  <FileUploadField
+                    id="contractors"
+                    label="Schedule B document"
                     value={form.scheduleBPath}
-                    onChange={(e) => updateField("scheduleBPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded Schedule B"
+                    onChange={(v) => updateField("scheduleBPath", v)}
+                    placeholder="Upload Schedule B or enter path"
                   />
                 </div>
 
@@ -485,37 +566,32 @@ export function ContractorForm({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="workOrderCopyPath">Work order copy path</Label>
-                  <Input
-                    id="workOrderCopyPath"
+                  <FileUploadField
+                    id="contractors"
+                    label="Work order copy"
                     value={form.workOrderCopyPath}
-                    onChange={(e) =>
-                      updateField("workOrderCopyPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded work order"
+                    onChange={(v) => updateField("workOrderCopyPath", v)}
+                    placeholder="Upload work order or enter path"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="drawingsPath">Drawings path</Label>
-                  <Input
-                    id="drawingsPath"
+                  <FileUploadField
+                    id="contractors"
+                    label="Drawings"
                     value={form.drawingsPath}
-                    onChange={(e) => updateField("drawingsPath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded drawings"
+                    onChange={(v) => updateField("drawingsPath", v)}
+                    placeholder="Upload drawings or enter path"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="completionCertificatePath">Completion certificate path</Label>
-                  <Input
-                    id="completionCertificatePath"
+                  <FileUploadField
+                    id="contractors"
+                    label="Completion certificate"
                     value={form.completionCertificatePath}
-                    onChange={(e) =>
-                      updateField("completionCertificatePath", e.target.value)
-                    }
-                    placeholder="Path or reference to uploaded completion certificate"
+                    onChange={(v) => updateField("completionCertificatePath", v)}
+                    placeholder="Upload completion certificate or enter path"
                   />
                 </div>
               </div>
@@ -524,11 +600,7 @@ export function ContractorForm({
 
           <Separator className="my-4" />
 
-          {error && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating contractor" : "Editing contractor")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
             <Button

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTadaClaims } from "@/lib/actions/tada-bills";
 import { getStaff } from "@/lib/actions/staff";
 import { serialize } from "@/lib/utils";
+import { prisma } from "@/lib/prisma";
 import { TadaClaimTable } from "./tada-bills-table";
 import { TadaBillsFilters } from "./tada-bills-filters";
 import { TadaBillsSkeleton } from "./tada-bills-skeleton";
@@ -38,9 +39,11 @@ export default async function TadaBillsPage({ searchParams }: TadaBillsPageProps
     status: params.status as never,
   };
 
-  const [claimsResult, staffResult] = await Promise.all([
+  const [claimsResult, staffResult, regions, cities] = await Promise.all([
     getTadaClaims(filter, page, pageSize),
     getStaff(),
+    prisma.region.findMany({ orderBy: { name: "asc" } }),
+    prisma.city.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const claims = claimsResult.success ? claimsResult.data!.rows : [];
@@ -63,7 +66,7 @@ export default async function TadaBillsPage({ searchParams }: TadaBillsPageProps
         </div>
         <div className="flex items-center gap-2">
           <BulkImportDialog module="tadaBills" moduleLabel="TADA Bills" />
-          <TadaClaimFormDialog staff={serialize(staff) as never} />
+          <TadaClaimFormDialog staff={serialize(staff) as never} regions={serialize(regions) as never} cities={serialize(cities) as never} />
         </div>
       </div>
 
@@ -77,6 +80,8 @@ export default async function TadaBillsPage({ searchParams }: TadaBillsPageProps
           page={page}
           pageSize={pageSize}
           staff={serialize(staff) as never}
+          regions={serialize(regions) as never}
+          cities={serialize(cities) as never}
           userRole={session.user.role}
         />
       </Suspense>
