@@ -1097,17 +1097,21 @@ async function runVehicleTravelling(_params?: { dateFrom?: Date; dateTo?: Date }
 
 async function runAssetAge(_params?: { dateFrom?: Date; dateTo?: Date }) {
   const now = new Date();
+  const currentYear = now.getFullYear();
   const assets = await prisma.asset.findMany({ take: 1000 });
   return {
     columns: ["Item Code", "Name", "Category", "Year", "Age (years)", "Qty"],
     rows: assets.map((a) => {
-      const age = a.yearOfPurchase ? now.getFullYear() - a.yearOfPurchase : 0;
+      const isFutureYear = a.yearOfPurchase != null && a.yearOfPurchase > currentYear;
+      const age = a.yearOfPurchase
+        ? Math.max(0, currentYear - a.yearOfPurchase)
+        : 0;
       return {
         "Item Code": a.itemCode,
         Name: a.name,
         Category: a.category ?? "—",
-        Year: a.yearOfPurchase ?? "—",
-        "Age (years)": age,
+        Year: isFutureYear ? `${a.yearOfPurchase} ⚠ Invalid` : (a.yearOfPurchase ?? "—"),
+        "Age (years)": isFutureYear ? "Invalid year" : age,
         Qty: Number(a.quantity),
       };
     }),
@@ -1118,9 +1122,21 @@ async function runAssetAge(_params?: { dateFrom?: Date; dateTo?: Date }) {
 // --- Asset Office Wise Report ---
 
 async function runAssetOffice(_params?: { dateFrom?: Date; dateTo?: Date }) {
-  const assets = await prisma.asset.findMany({ take: 1000 });
+  // Only fetch assets assigned to an OFFICE (not to a person), plus unassigned ones
+  const assets = await prisma.asset.findMany({
+    where: {
+      OR: [
+        { assigneeType: "OFFICE" },
+        { assigneeType: null },
+        { assignee: null },
+      ],
+    },
+    take: 1000,
+  });
   const byOffice: Record<string, Record<string, number>> = {};
   for (const a of assets) {
+    // Only group by office name; skip person-assigned assets
+    if (a.assigneeType === "PERSON") continue;
     const office = a.assignee ?? "Unassigned";
     const cat = a.category ?? "Uncategorized";
     if (!byOffice[office]) byOffice[office] = {};
@@ -1135,7 +1151,7 @@ async function runAssetOffice(_params?: { dateFrom?: Date; dateTo?: Date }) {
   return {
     columns: ["Office", "Category", "Qty"],
     rows,
-    summary: { "Total offices": Object.keys(byOffice).length },
+    summary: { "Total offices": Object.keys(byOffice).filter((k) => k !== "Unassigned").length },
   };
 }
 
@@ -1872,9 +1888,32 @@ async function runTaskAssignment(params?: { dateFrom?: Date; dateTo?: Date }) {
     byAssignee[assignee] = (byAssignee[assignee] ?? 0) + 1;
   }
   return {
-    columns: ["Assigned By", "Tasks Assigned"],
-    rows: Object.entries(byAssigner).map(([by, count]) => ({ "Assigned By": by, "Tasks Assigned": count })),
-    summary: { "Total assignees": Object.keys(byAssignee).length },
+    columns: ["Assigned By", "Tasks Assigned", "Assigned To", "Tasks Received"],
+    rows: (() => {
+      const assigners = Object.entries(byAssigner).map(([by, count]) => ({
+        "Assigned By": by,
+        "Tasks Assigned": count,
+        "Assigned To": "",
+        "Tasks Received": "",
+      }));
+      const assignees = Object.entries(byAssignee).map(([to, count]) => ({
+        "Assigned By": "",
+        "Tasks Assigned": "",
+        "Assigned To": to,
+        "Tasks Received": count,
+      }));
+      const maxLen = Math.max(assigners.length, assignees.length);
+      return Array.from({ length: maxLen }, (_, i) => ({
+        "Assigned By": assigners[i]?.["Assigned By"] ?? "",
+        "Tasks Assigned": assigners[i]?.["Tasks Assigned"] ?? "",
+        "Assigned To": assignees[i]?.["Assigned To"] ?? "",
+        "Tasks Received": assignees[i]?.["Tasks Received"] ?? "",
+      }));
+    })(),
+    summary: {
+      "Total assigners": Object.keys(byAssigner).length,
+      "Total assignees": Object.keys(byAssignee).length,
+    },
   };
 }
 

@@ -192,6 +192,7 @@ export function PaymentScheduleForm({
                 <Input
                   id="dueDate"
                   type="date"
+                  min={form.date || undefined}
                   value={form.dueDate}
                   onChange={(e) => updateField("dueDate", e.target.value)}
                 />
@@ -222,6 +223,7 @@ export function PaymentScheduleForm({
                 <Label htmlFor="status">Status</Label>
                 <Select
                   value={form.status}
+                  disabled={!isEdit}
                   onValueChange={(v) =>
                     updateField("status", v as PaymentScheduleStatus)
                   }
@@ -273,6 +275,7 @@ export function PaymentScheduleForm({
                   id="amount"
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.amount}
                   onChange={(e) => updateField("amount", e.target.value)}
                 />

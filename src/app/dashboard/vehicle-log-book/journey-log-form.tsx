@@ -288,26 +288,28 @@ export function JourneyLogForm({
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="approvalStatus">Approval status</Label>
-                <Select
-                  value={form.approvalStatus}
-                  onValueChange={(v) =>
-                    updateField("approvalStatus", v as JourneyApprovalStatus)
-                  }
-                >
-                  <SelectTrigger id="approvalStatus">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.values(JourneyApprovalStatus).map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s.toLowerCase().replace(/_/g, " ")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {isEdit && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="approvalStatus">Approval status</Label>
+                  <Select
+                    value={form.approvalStatus}
+                    onValueChange={(v) =>
+                      updateField("approvalStatus", v as JourneyApprovalStatus)
+                    }
+                  >
+                    <SelectTrigger id="approvalStatus">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(JourneyApprovalStatus).map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s.toLowerCase().replace(/_/g, " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="fromLocation">From</Label>

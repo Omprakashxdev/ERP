@@ -187,7 +187,7 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Location (City)</Label>
-              <Select value={location} onValueChange={setLocation}>
+              <Select value={location} onValueChange={(v) => setLocation(v ?? "")}>
                 <SelectTrigger className="w-full" size="sm">
                   <SelectValue placeholder="Select city" />
                 </SelectTrigger>
@@ -461,7 +461,7 @@ export function TadaClaimEditForm({
                 <Label className="text-xs">Location (City)</Label>
                 <Select
                   value={form.location}
-                  onValueChange={(v) => updateField("location", v)}
+                  onValueChange={(v) => updateField("location", v ?? "")}
                 >
                   <SelectTrigger className="w-full" size="sm">
                     <SelectValue placeholder="Select city" />
@@ -502,7 +502,7 @@ export function TadaClaimEditForm({
                 <Label className="text-xs">To Date</Label>
                 <Input
                   type="date"
-                  min="2026-01-01"
+                  min={form.fromDate || "2026-01-01"}
                   value={form.toDate}
                   onChange={(e) => updateField("toDate", e.target.value)}
                   required
@@ -516,6 +516,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.travelExpense}
                   onChange={(e) => updateField("travelExpense", e.target.value)}
                 />
@@ -525,6 +526,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.accommodationExp}
                   onChange={(e) => updateField("accommodationExp", e.target.value)}
                 />
@@ -534,6 +536,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.foodExpense}
                   onChange={(e) => updateField("foodExpense", e.target.value)}
                 />
@@ -543,6 +546,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.localConveyance}
                   onChange={(e) => updateField("localConveyance", e.target.value)}
                 />
@@ -552,6 +556,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.otherExpense}
                   onChange={(e) => updateField("otherExpense", e.target.value)}
                 />
@@ -561,6 +566,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={form.advanceAmount}
                   onChange={(e) => updateField("advanceAmount", e.target.value)}
                 />

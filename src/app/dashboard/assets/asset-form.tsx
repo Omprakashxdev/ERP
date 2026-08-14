@@ -35,6 +35,7 @@ interface AssetFormProps {
   asset?: Asset;
   mode: "create" | "edit";
   masters?: MasterData;
+  staff?: { id: string; name: string }[];
   onClose: () => void;
 }
 
@@ -85,7 +86,13 @@ function getInitialForm(asset?: Asset) {
   };
 }
 
-export function AssetForm({ asset, mode, masters, onClose }: AssetFormProps) {
+export function AssetForm({
+  asset,
+  mode,
+  masters,
+  staff = [],
+  onClose,
+}: AssetFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
 
@@ -354,12 +361,30 @@ export function AssetForm({ asset, mode, masters, onClose }: AssetFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="assignee">Assignee name</Label>
-                <Input
-                  id="assignee"
-                  value={form.assignee}
-                  onChange={(e) => updateField("assignee", e.target.value)}
-                  placeholder="Person or office name"
-                />
+                {form.assigneeType === "PERSON" && staff.length > 0 ? (
+                  <Select
+                    value={form.assignee}
+                    onValueChange={(v) => updateField("assignee", v ?? "")}
+                  >
+                    <SelectTrigger id="assignee">
+                      <SelectValue placeholder="Select staff member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="assignee"
+                    value={form.assignee}
+                    onChange={(e) => updateField("assignee", e.target.value)}
+                    placeholder={form.assigneeType === "OFFICE" ? "Office name" : "Person or office name"}
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -375,12 +400,31 @@ export function AssetForm({ asset, mode, masters, onClose }: AssetFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="responsiblePerson">Responsible person</Label>
-                <Input
-                  id="responsiblePerson"
-                  value={form.responsiblePerson}
-                  onChange={(e) => updateField("responsiblePerson", e.target.value)}
-                  placeholder="Name of responsible person"
-                />
+                {staff.length > 0 ? (
+                  <Select
+                    value={form.responsiblePerson}
+                    onValueChange={(v) => updateField("responsiblePerson", v ?? "")}
+                  >
+                    <SelectTrigger id="responsiblePerson">
+                      <SelectValue placeholder="Select responsible person" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="responsiblePerson"
+                    value={form.responsiblePerson}
+                    onChange={(e) => updateField("responsiblePerson", e.target.value)}
+                    placeholder="Name of responsible person"
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">

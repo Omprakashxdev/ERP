@@ -339,7 +339,7 @@ export function ContractorForm({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="detailedOrder">Detailed order / department</Label>
-                  {masters && masters.orderMasters.length > 0 ? (
+                  {masters && (masters.orderMasters.length > 0 || masters.departments.length > 0) ? (
                     <Select
                       value={form.detailedOrder}
                       onValueChange={(v) => updateField("detailedOrder", v ?? "")}
@@ -348,9 +348,20 @@ export function ContractorForm({
                         <SelectValue placeholder="Select order" />
                       </SelectTrigger>
                       <SelectContent>
+                        {masters.orderMasters.length > 0 && (
+                          <div className="px-2 py-1.5 text-xs font-semibold text-zinc-500">Orders</div>
+                        )}
                         {masters.orderMasters.map((o) => (
-                          <SelectItem key={o.id} value={o.name}>
+                          <SelectItem key={`order-${o.id}`} value={o.name}>
                             {o.name}
+                          </SelectItem>
+                        ))}
+                        {masters.departments.length > 0 && (
+                          <div className="px-2 py-1.5 text-xs font-semibold text-zinc-500">Departments</div>
+                        )}
+                        {masters.departments.map((d) => (
+                          <SelectItem key={`dept-${d.id}`} value={d.name}>
+                            {d.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

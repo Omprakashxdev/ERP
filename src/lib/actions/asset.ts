@@ -114,6 +114,7 @@ export async function getAssets(
     const [rows, total] = await Promise.all([
       prisma.asset.findMany({
         where,
+        include: { currentHolder: true },
         orderBy: { itemCode: "asc" },
         skip: (page - 1) * pageSize,
         take: pageSize,

@@ -269,6 +269,7 @@ export function AssetsTable({
           asset={selectedAsset}
           mode="edit"
           masters={masters}
+          staff={staff}
           onClose={() => setSelectedAsset(null)}
         />
       )}
@@ -290,7 +291,7 @@ export function AssetsTable({
       )}
 
       {createAssetOpen && (
-        <AssetForm mode="create" masters={masters} onClose={() => setCreateAssetOpen(false)} />
+        <AssetForm mode="create" masters={masters} staff={staff} onClose={() => setCreateAssetOpen(false)} />
       )}
     </div>
   );

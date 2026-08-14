@@ -502,7 +502,7 @@ export function exportData(
 
 export function parseCsv(csvContent: string): Record<string, string>[] {
   const rows: Record<string, string>[] = [];
-  const lines = csvContent.split("\n").filter((l) => l.trim());
+  const lines = csvContent.split(/\r?\n/).filter((l) => l.trim());
 
   if (lines.length === 0) return rows;
 

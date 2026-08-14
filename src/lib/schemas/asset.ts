@@ -8,7 +8,7 @@ const assetBaseSchema = z.object({
   category: cleanedString(100).optional().nullable(),
   make: cleanedString(100).optional().nullable(),
   model: cleanedString(100).optional().nullable(),
-  yearOfPurchase: z.coerce.number().int().min(1900).optional().nullable(),
+  yearOfPurchase: z.coerce.number().int().min(1900).max(new Date().getFullYear()).optional().nullable(),
   quantity: money.default(new Prisma.Decimal("1.00")),
   securityCode: cleanedString(100).optional().nullable(),
   billWarrantyPath: cleanedString(500).optional().nullable(),

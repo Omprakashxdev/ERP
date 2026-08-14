@@ -384,7 +384,9 @@ export function MastersManager() {
                 <Select value={formStateId} onValueChange={(v) => setFormStateId(v ?? "")}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select state (optional)">
-                      {(value: string) => states.find((s) => s.id === value)?.name ?? "Select state (optional)"}
+                      {formStateId
+                        ? states.find((s) => s.id === formStateId)?.name || "Unknown State"
+                        : "Select state (optional)"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -404,7 +406,9 @@ export function MastersManager() {
                 <Select value={formMakeId} onValueChange={(v) => setFormMakeId(v ?? "")}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select make (optional)">
-                      {(value: string) => makes.find((m) => m.id === value)?.name ?? "Select make (optional)"}
+                      {formMakeId
+                        ? makes.find((m) => m.id === formMakeId)?.name || "Unknown Make"
+                        : "Select make (optional)"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>

@@ -186,6 +186,31 @@ export function InOutRegisterForm({
     setSubmitting(true);
     setError(null);
 
+    // Frontend validation: reply date cannot be before received/sent date
+    if (
+      form.replyDate &&
+      form.receivedDate &&
+      form.replyDate < form.receivedDate
+    ) {
+      setError("Reply date cannot be before the received/sent date.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Frontend validation: dates cannot be in the future
+    const today = new Date().toISOString().split("T")[0];
+    if (form.documentDate && form.documentDate > today) {
+      setError("Document date cannot be in the future.");
+      setSubmitting(false);
+      return;
+    }
+    if (form.receivedDate && form.receivedDate > today) {
+      setError("Received/Sent date cannot be in the future.");
+      setSubmitting(false);
+      return;
+    }
+
+
     try {
       const payload = buildPayload();
       const result = isEdit
@@ -258,6 +283,7 @@ export function InOutRegisterForm({
                   id="documentDate"
                   type="date"
                   value={form.documentDate}
+                  max={new Date().toISOString().split("T")[0]}
                   onChange={(e) =>
                     updateField("documentDate", e.target.value)
                   }
@@ -270,6 +296,7 @@ export function InOutRegisterForm({
                   id="receivedDate"
                   type="date"
                   value={form.receivedDate}
+                  max={new Date().toISOString().split("T")[0]}
                   onChange={(e) =>
                     updateField("receivedDate", e.target.value)
                   }

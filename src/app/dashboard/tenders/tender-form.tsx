@@ -388,8 +388,9 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                         {masters.cities
                           .filter((c) => {
                             if (!form.state) return true;
+                            if (masters.states.length === 0) return true;
                             const selectedState = masters.states.find((s) => s.name === form.state);
-                            if (!selectedState) return true;
+                            if (!selectedState) return false;
                             return c.stateId === selectedState.id;
                           })
                           .map((c) => (

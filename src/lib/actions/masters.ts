@@ -98,7 +98,7 @@ export async function createMaster(
     const item = await (prisma as any)[type].create({ data, select: { id: true } });
 
     await audit(user.id, "create", type, item.id, { input });
-    revalidatePath("/dashboard/masters");
+    revalidatePath("/dashboard", "layout");
     return item;
   }, mutationRoles);
 }
@@ -137,7 +137,7 @@ export async function updateMaster(
     const item = await (prisma as any)[type].update({ where: { id }, data, select: { id: true } });
 
     await audit(user.id, "update", type, item.id, { input });
-    revalidatePath("/dashboard/masters");
+    revalidatePath("/dashboard", "layout");
     return item;
   }, mutationRoles);
 }
@@ -150,7 +150,7 @@ export async function deleteMaster(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const item = await (prisma as any)[type].delete({ where: { id }, select: { id: true } });
     await audit(user.id, "delete", type, id, {});
-    revalidatePath("/dashboard/masters");
+    revalidatePath("/dashboard", "layout");
     return item;
   }, mutationRoles);
 }
