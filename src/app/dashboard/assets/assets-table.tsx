@@ -130,6 +130,7 @@ export function AssetsTable({
             <TableHeader className="sticky top-0 z-10 bg-white">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="whitespace-nowrap">Item Code</TableHead>
+                <TableHead className="whitespace-nowrap">Security Code</TableHead>
                 <TableHead className="whitespace-nowrap">Name</TableHead>
                 <TableHead className="whitespace-nowrap">Category</TableHead>
                 <TableHead className="whitespace-nowrap">Make / Model</TableHead>
@@ -148,6 +149,9 @@ export function AssetsTable({
                 <TableRow key={row.id}>
                   <TableCell className="whitespace-nowrap font-medium">
                     {row.itemCode}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap font-mono text-zinc-600">
+                    {row.securityCode || "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{row.name}</TableCell>
                   <TableCell className="whitespace-nowrap">

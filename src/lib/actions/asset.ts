@@ -48,6 +48,22 @@ function generateItemCode(): string {
   return `AST-${Date.now()}-${random}`;
 }
 
+async function generateSecurityCode(
+  category?: string | null,
+  name?: string | null,
+  make?: string | null
+): Promise<string> {
+  const catPart = category ? category.trim().slice(0, 3) : "Ast";
+  const namePart = name ? name.trim().split(/\s+/)[0].slice(0, 10) : "Item";
+  const makePart = make ? make.trim().split(/\s+/)[0].slice(0, 10) : "Gen";
+
+  const count = await prisma.asset.count({
+    where: category ? { category: { equals: category, mode: "insensitive" } } : undefined,
+  });
+
+  return `${catPart}/${namePart}/${makePart}/${count + 1}`;
+}
+
 export async function createAsset(
   input: AssetCreateInput
 ): Promise<ActionResult<{ id: string }>> {
@@ -55,8 +71,16 @@ export async function createAsset(
     const parsed = assetCreateSchema.parse(input);
     await checkRateLimit(user.id);
 
+    const securityCode =
+      parsed.securityCode?.trim() ||
+      (await generateSecurityCode(parsed.category, parsed.name, parsed.make));
+
     const asset = await prisma.asset.create({
-      data: { ...parsed, itemCode: generateItemCode() },
+      data: {
+        ...parsed,
+        itemCode: generateItemCode(),
+        securityCode,
+      },
     });
 
     await audit(user.id, "create", "Asset", asset.id, {

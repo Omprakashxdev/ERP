@@ -380,9 +380,20 @@ export async function importModule(
           case "paymentSchedules":
             await prisma.paymentSchedule.create({ data: data as never });
             break;
-          case "assets":
+          case "assets": {
+            if (!data.itemCode || String(data.itemCode).trim() === "") {
+              data.itemCode = `AST-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+            }
+            if (!data.securityCode || String(data.securityCode).trim() === "") {
+              const cat = data.category ? String(data.category).slice(0, 3) : "Ast";
+              const name = data.name ? String(data.name).split(/\s+/)[0].slice(0, 10) : "Item";
+              const make = data.make ? String(data.make).split(/\s+/)[0].slice(0, 10) : "Gen";
+              const count = await prisma.asset.count();
+              data.securityCode = `${cat}/${name}/${make}/${count + 1}`;
+            }
             await prisma.asset.create({ data: data as never });
             break;
+          }
           case "fundFlow": {
             await prisma.fundFlow.create({ data: data as never });
             break;
