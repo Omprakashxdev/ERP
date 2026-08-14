@@ -30,6 +30,7 @@ import {
   Plus,
   ArrowRightLeft,
   History,
+  FileText,
 } from "lucide-react";
 
 interface AssetsTableProps {
@@ -140,6 +141,7 @@ export function AssetsTable({
                 <TableHead className="whitespace-nowrap">Assignee</TableHead>
                 <TableHead className="whitespace-nowrap">Responsible</TableHead>
                 <TableHead className="whitespace-nowrap">Current Holder</TableHead>
+                <TableHead className="whitespace-nowrap">Bills & Warranty</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
@@ -189,12 +191,27 @@ export function AssetsTable({
                     {row.currentHolder?.name ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
+                    {row.billWarrantyPath ? (
+                      <a
+                        href={row.billWarrantyPath}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
+                        title="View scanned bill or warranty"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-blue-600" />
+                        <span>View doc</span>
+                      </a>
+                    ) : (
+                      <span className="text-xs text-zinc-400">No doc</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge
                       variant="outline"
                       className={statusVariantMap[row.status]}
                     >
                       {formatEnum(row.status)}
-                      {row.isWarrantyDocumentMissing ? " (no docs)" : ""}
                     </Badge>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right">
