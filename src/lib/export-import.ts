@@ -248,7 +248,7 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     decimalFields: [],
     intFields: [],
     enumFields: {},
-    relationFields: ["region"],
+    relationFields: ["region", "reportingManager"],
     booleanFields: ["isActive"],
   },
   masters_region: {

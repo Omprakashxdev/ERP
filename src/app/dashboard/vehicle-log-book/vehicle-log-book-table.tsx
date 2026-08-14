@@ -427,10 +427,16 @@ export function VehicleLogBookTable({
       {selectedJourney && (
         <JourneyLogForm
           journeyLog={selectedJourney}
-          vehicles={typedVehicles.map((v) => ({
-            id: v.id,
-            registrationNumber: v.registrationNumber,
-          }))}
+          vehicles={typedVehicles
+            .filter(
+              (v) =>
+                v.status === VehicleStatus.ACTIVE ||
+                v.id === selectedJourney.vehicleId
+            )
+            .map((v) => ({
+              id: v.id,
+              registrationNumber: v.registrationNumber,
+            }))}
           staff={staff}
           cities={cities}
           mode="edit"
@@ -440,10 +446,12 @@ export function VehicleLogBookTable({
 
       {createJourneyOpen && (
         <JourneyLogForm
-          vehicles={typedVehicles.map((v) => ({
-            id: v.id,
-            registrationNumber: v.registrationNumber,
-          }))}
+          vehicles={typedVehicles
+            .filter((v) => v.status === VehicleStatus.ACTIVE)
+            .map((v) => ({
+              id: v.id,
+              registrationNumber: v.registrationNumber,
+            }))}
           staff={staff}
           cities={cities}
           mode="create"

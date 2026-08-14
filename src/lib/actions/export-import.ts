@@ -87,6 +87,25 @@ function parseImportDate(value: string): Date | null {
   return null;
 }
 
+async function generateImportEmployeeCode(): Promise<string> {
+  const latestStaff = await prisma.staff.findFirst({
+    where: { employeeCode: { startsWith: "EMP" } },
+    orderBy: { employeeCode: "desc" },
+  });
+
+  if (!latestStaff || !latestStaff.employeeCode) {
+    return "EMP001";
+  }
+
+  const match = latestStaff.employeeCode.match(/EMP(\d+)/);
+  if (match && match[1]) {
+    const num = parseInt(match[1], 10);
+    return `EMP${String(num + 1).padStart(3, "0")}`;
+  }
+
+  return `EMP${Date.now().toString().slice(-6)}`;
+}
+
 function autoCorrectNumber(value: string): string {
   // Strip currency symbols, "Rs"/"Rs." prefixes, commas, and spaces — but keep decimal dots
   let corrected = value.replace(/[\u20B9]/g, "").replace(/Rs\.?/gi, "").replace(/,/g, "").replace(/\s/g, "");
@@ -217,7 +236,7 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
 
     case "staff":
       return prisma.staff.findMany({
-        include: { region: true },
+        include: { region: true, reportingManager: true },
       }) as Promise<Record<string, unknown>[]>;
 
     default:
@@ -398,6 +417,15 @@ export async function importModule(
             break;
           }
           case "staff": {
+            if (!data.employeeCode || String(data.employeeCode).trim() === "") {
+              data.employeeCode = await generateImportEmployeeCode();
+              corrections.push(
+                `Row ${i + 1}: Auto-generated Employee Code "${data.employeeCode}"`
+              );
+            }
+            if (data.isActive === undefined) {
+              data.isActive = true;
+            }
             await prisma.staff.create({ data: data as never });
             break;
           }

@@ -190,9 +190,19 @@ export async function createAssetMovement(
       asset.status === "ASSIGNED"
     ) {
       throw new Error(
-        "This asset is already assigned. Please return it or use 'Transfer' instead."
+        "This asset is already assigned. Please return it first, or use 'Transfer to another Employee' instead."
       );
     }
+
+    if (
+      parsed.movementType === "TRANSFERRED" &&
+      asset.status !== "ASSIGNED"
+    ) {
+      throw new Error(
+        "Cannot transfer an asset that is not currently assigned to anyone. Use 'Given to Employee' instead."
+      );
+    }
+
 
     const newStatus = MOVEMENT_STATUS_MAP[parsed.movementType] ?? asset.status;
     const newHolderId =
