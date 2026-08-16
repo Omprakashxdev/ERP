@@ -2,8 +2,6 @@ import { Decimal } from "@prisma/client/runtime/library";
 import {
   Project,
   ProjectStatus,
-  ServiceType,
-  WorkType,
   FundFlow,
   Client,
   Region,
@@ -29,4 +27,4 @@ export type FundFlowWithComputed = FundFlowListRow & {
   remainingFee: Decimal;
 };
 
-export { ProjectStatus, ServiceType, WorkType };
+export { ProjectStatus };

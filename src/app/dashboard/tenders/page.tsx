@@ -93,7 +93,7 @@ export default async function TendersPage({
 
       <Card className="shadow-sm">
         <CardContent className="p-4">
-          <TendersFilters initialFilter={filter} />
+          <TendersFilters initialFilter={filter} masters={masterData} />
         </CardContent>
       </Card>
 

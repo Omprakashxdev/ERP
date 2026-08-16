@@ -78,6 +78,20 @@ interface WipLinkData {
   agreementDate?: Date | null;
   workOrderDate?: Date | null;
   securityDepositReturnDate?: Date | null;
+  raBill1Date?: Date | null;
+  raBill1Amount?: unknown;
+  raBill1Path?: string | null;
+  raBill2Date?: Date | null;
+  raBill2Amount?: unknown;
+  raBill2Path?: string | null;
+  raBill3Date?: Date | null;
+  raBill3Amount?: unknown;
+  raBill3Path?: string | null;
+  raBill4Date?: Date | null;
+  raBill4Amount?: unknown;
+  raBill4Path?: string | null;
+  annexure3aPath?: string | null;
+  completionDate?: Date | null;
   hoCoordinatorId?: string | null;
   roCoordinatorId?: string | null;
 }
@@ -143,6 +157,43 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
     });
   }
 
+  // RA Bills 1–4 tasks & reminders for Concerned Authority
+  const raBills = [
+    { n: 1, date: data.raBill1Date, amt: data.raBill1Amount, path: data.raBill1Path },
+    { n: 2, date: data.raBill2Date, amt: data.raBill2Amount, path: data.raBill2Path },
+    { n: 3, date: data.raBill3Date, amt: data.raBill3Amount, path: data.raBill3Path },
+    { n: 4, date: data.raBill4Date, amt: data.raBill4Amount, path: data.raBill4Path },
+  ];
+
+  for (const b of raBills) {
+    if (b.date || b.path || b.amt) {
+      tasks.push({
+        title: `RA Bill ${b.n} — ${projectName}`,
+        description: `RA Bill ${b.n} details & copy uploaded for project "${projectName}". Upload details and verify with concern authority.`,
+        dueDate: b.date ?? new Date(),
+        sourceModule: "WIP",
+        sourceEntityId: data.wipId,
+        projectId: data.projectId,
+        assignedToId: data.roCoordinatorId ?? data.hoCoordinatorId ?? null,
+        priority: "MEDIUM",
+      });
+    }
+  }
+
+  // 3A Certificate / Annexure 3A closure task
+  if (data.annexure3aPath || data.completionDate) {
+    tasks.push({
+      title: `3A Certificate & Project Closure — ${projectName}`,
+      description: `3A Certificate / Annexure 3A submitted for project "${projectName}". Project close after 3A certificate — upload detail to concern authority.`,
+      dueDate: data.completionDate ?? new Date(),
+      sourceModule: "WIP",
+      sourceEntityId: data.wipId,
+      projectId: data.projectId,
+      assignedToId: data.hoCoordinatorId ?? data.roCoordinatorId ?? null,
+      priority: "HIGH",
+    });
+  }
+
   for (const task of tasks) {
     await createLinkedTask(task);
   }
@@ -159,6 +210,8 @@ interface TenderLinkData {
   biddingLastDate?: Date | null;
   dateOfOpening?: Date | null;
   preBidMeetingDate?: Date | null;
+  negotiationMeetingDate?: Date | null;
+  concernAuthorityId?: string | null;
 }
 
 export async function createTenderLinkedTasks(data: TenderLinkData): Promise<void> {
@@ -171,6 +224,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.tenderFeeDate,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "HIGH",
     });
   }
@@ -182,6 +236,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.emdDate,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "HIGH",
     });
   }
@@ -193,6 +248,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.emdReturnCollectionDate,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "MEDIUM",
     });
   }
@@ -204,6 +260,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.biddingLastDate,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "HIGH",
     });
   }
@@ -215,6 +272,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.dateOfOpening,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "HIGH",
     });
   }
@@ -226,6 +284,19 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
       dueDate: data.preBidMeetingDate,
       sourceModule: "TENDER",
       sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
+      priority: "MEDIUM",
+    });
+  }
+
+  if (data.negotiationMeetingDate) {
+    tasks.push({
+      title: `Negotiation meeting — ${data.tenderName}`,
+      description: `Negotiation meeting for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
+      dueDate: data.negotiationMeetingDate,
+      sourceModule: "TENDER",
+      sourceEntityId: data.tenderId,
+      assignedToId: data.concernAuthorityId ?? null,
       priority: "MEDIUM",
     });
   }
@@ -234,3 +305,55 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
     await createLinkedTask(task);
   }
 }
+
+// ─── In-Out Register Linking ───
+
+interface InOutRegisterLinkData {
+  inOutRegisterId: string;
+  documentRefNo: string;
+  details?: string | null;
+  receivedDate?: Date | null;
+  actionSuggestedStaffId?: string | null;
+  ccStaffIds?: string[];
+}
+
+export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData): Promise<void> {
+  const tasks: CreateLinkedTaskInput[] = [];
+
+  if (data.actionSuggestedStaffId) {
+    tasks.push({
+      title: `Action required: Doc #${data.documentRefNo}`,
+      description: data.details
+        ? `Inward doc #${data.documentRefNo}: ${data.details}`
+        : `Action required for inward document #${data.documentRefNo}.`,
+      dueDate: data.receivedDate ?? new Date(),
+      sourceModule: "IN_OUT_REGISTER",
+      sourceEntityId: data.inOutRegisterId,
+      assignedToId: data.actionSuggestedStaffId,
+      priority: "HIGH",
+    });
+  }
+
+  if (data.ccStaffIds && data.ccStaffIds.length > 0) {
+    for (const staffId of data.ccStaffIds) {
+      if (staffId !== data.actionSuggestedStaffId) {
+        tasks.push({
+          title: `CC Notification: Doc #${data.documentRefNo}`,
+          description: data.details
+            ? `CC marking on inward doc #${data.documentRefNo}: ${data.details}`
+            : `You have been marked CC on inward document #${data.documentRefNo}.`,
+          dueDate: data.receivedDate ?? new Date(),
+          sourceModule: "IN_OUT_REGISTER",
+          sourceEntityId: data.inOutRegisterId,
+          assignedToId: staffId,
+          priority: "LOW",
+        });
+      }
+    }
+  }
+
+  for (const task of tasks) {
+    await createLinkedTask(task);
+  }
+}
+

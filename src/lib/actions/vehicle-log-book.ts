@@ -337,6 +337,9 @@ export async function getJourneyLogs(
         include: {
           vehicle: true,
           photos: true,
+          approvedBy: {
+            select: { id: true, name: true, designation: true },
+          },
         },
         orderBy: { journeyDate: "desc" },
         skip: (page - 1) * pageSize,
@@ -360,7 +363,13 @@ export async function getJourneyLogById(
   return withPermission("vehicleLogBook", "read", async () => {
     const journeyLog = await prisma.journeyLog.findUnique({
       where: { id },
-      include: { vehicle: true, photos: true },
+      include: {
+        vehicle: true,
+        photos: true,
+        approvedBy: {
+          select: { id: true, name: true, designation: true },
+        },
+      },
     });
 
     if (!journeyLog) return null;

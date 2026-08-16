@@ -61,7 +61,7 @@ export async function createTender(
     await checkRateLimit(user.id);
 
     const tender = await prisma.tender.create({
-      data: parsed,
+      data: parsed as any,
     });
 
     await audit(user.id, "create", "Tender", tender.id, {
@@ -78,6 +78,8 @@ export async function createTender(
       biddingLastDate: parsed.biddingLastDate,
       dateOfOpening: parsed.dateOfOpening,
       preBidMeetingDate: parsed.preBidMeetingDate,
+      negotiationMeetingDate: parsed.negotiationMeetingDate,
+      concernAuthorityId: parsed.concernAuthorityId,
     }).catch(() => {});
 
     revalidatePath("/dashboard/tenders");
@@ -101,7 +103,7 @@ export async function updateTender(
 
     const tender = await prisma.tender.update({
       where: { id },
-      data,
+      data: data as any,
     });
 
     let clientCreated: string | undefined;
@@ -192,6 +194,8 @@ export async function updateTender(
       biddingLastDate: parsed.biddingLastDate,
       dateOfOpening: parsed.dateOfOpening,
       preBidMeetingDate: parsed.preBidMeetingDate,
+      negotiationMeetingDate: parsed.negotiationMeetingDate,
+      concernAuthorityId: parsed.concernAuthorityId,
     }).catch(() => {});
 
     revalidatePath("/dashboard/tenders");

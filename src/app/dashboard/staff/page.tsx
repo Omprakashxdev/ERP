@@ -21,9 +21,12 @@ export default async function StaffPage() {
 
   const canManage = hasPermission(session.user.role, "staffManagement", "create");
 
-  const [staffResult, regions] = await Promise.all([
+  const [staffResult, regions, departments, designations, cities] = await Promise.all([
     getStaff(undefined, false),
     prisma.region.findMany({ orderBy: { name: "asc" } }),
+    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.designation.findMany({ orderBy: { name: "asc" } }),
+    prisma.city.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const staff = staffResult.success ? (staffResult.data ?? []) : [];
@@ -50,6 +53,9 @@ export default async function StaffPage() {
           <StaffTable
             staff={serialize(staff) as never}
             regions={serialize(regions) as never}
+            departments={serialize(departments) as never}
+            designations={serialize(designations) as never}
+            cities={serialize(cities) as never}
             canManage={canManage}
           />
         </CardContent>

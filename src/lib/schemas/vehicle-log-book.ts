@@ -21,6 +21,7 @@ export const vehicleCreateSchema = z.object({
   insuranceExpiryDate: z.coerce.date().optional().nullable(),
   insuranceCopyPath: cleanedString(500).optional().nullable(),
 
+  pucNumber: cleanedString(100).optional().nullable(),
   pucExpiryDate: z.coerce.date().optional().nullable(),
   pucCopyPath: cleanedString(500).optional().nullable(),
 
@@ -55,6 +56,8 @@ const kmField = z
 export const journeyLogCreateSchema = z.object({
   vehicleId: cuid,
   journeyDate: z.coerce.date(),
+  timeIn: cleanedString(10).optional().nullable(),
+  timeOut: cleanedString(10).optional().nullable(),
   fromLocation: cleanedString(200),
   toLocation: cleanedString(200),
   startKm: kmField,
@@ -65,21 +68,29 @@ export const journeyLogCreateSchema = z.object({
   endKmPhotoPath: cleanedString(500).optional().nullable(),
 
   fuelExpense: money.optional().nullable(),
+  fuelLitre: money.optional().nullable(),
+  fuelRate: money.optional().nullable(),
   fuelBillPath: cleanedString(500).optional().nullable(),
+  fuelOdometerPhotoPath: cleanedString(500).optional().nullable(),
 
   serviceParticulars: cleanedString(500).optional().nullable(),
   serviceExpense: money.optional().nullable(),
   serviceBillPath: cleanedString(500).optional().nullable(),
+  serviceOdometerPhotoPath: cleanedString(500).optional().nullable(),
 
   maintenanceParticulars: cleanedString(500).optional().nullable(),
   maintenanceExpense: money.optional().nullable(),
   maintenanceBillPath: cleanedString(500).optional().nullable(),
+  maintenanceOdometerPhotoPath: cleanedString(500).optional().nullable(),
 
+  taxParticulars: cleanedString(500).optional().nullable(),
   taxExpense: money.optional().nullable(),
   taxReceiptPath: cleanedString(500).optional().nullable(),
+  fastagBalance: money.optional().nullable(),
 
   personsTravelling: cleanedString(500).optional().nullable(),
   driverName: cleanedString(120).optional().nullable(),
+  driverAllowanceDetails: cleanedString(500).optional().nullable(),
   purpose: cleanedString(500).optional().nullable(),
   remarks: cleanedString(1000).optional().nullable(),
 

@@ -1,5 +1,5 @@
 import { Decimal } from "@prisma/client/runtime/library";
-import { Tender, TenderStatus, WorkType, ServiceType } from "@prisma/client";
+import { Tender, TenderStatus } from "@prisma/client";
 
 export type TenderListRow = Tender;
 
@@ -9,4 +9,4 @@ export type TenderWithComputed = TenderListRow & {
   lowestQuotedAmount: Decimal | null;
 };
 
-export { TenderStatus, WorkType, ServiceType };
+export { TenderStatus };

@@ -24,8 +24,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { createWip, updateWip } from "@/lib/actions/wip";
-import { WipWithComputed } from "@/types/wip";
 import { FileUploadField } from "@/components/ui/file-upload-field";
+import { WipWithComputed } from "@/types/wip";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
@@ -74,8 +74,11 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
       projectId: projectId ?? "",
       status: WipStatus.NOT_STARTED,
       loiReceiptDate: "",
+      loiCopyPath: "",
       agreementDate: "",
+      agreementCopyPath: "",
       workOrderDate: "",
+      workOrderCopyPath: "",
       timeLimitMonths: "",
       stipulatedCompletionDate: "",
       targetCompletionDate: "",
@@ -84,6 +87,7 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
       securityDepositAmount: "",
       securityDepositStatus: "",
       securityDepositReturnDate: "",
+      securityDepositCopyPath: "",
       amountOfWorkDone: "",
       finalProgressAmount: "",
       raBill1Amount: "",
@@ -102,6 +106,11 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
       raBill4Date: "",
       raBill4SaecFee: "",
       raBill4ProjectExpense: "",
+      raBill1Path: "",
+      raBill2Path: "",
+      raBill3Path: "",
+      raBill4Path: "",
+      finalProgressPath: "",
       annexure3aPath: "",
       completionCertificatePath: "",
       completionDate: "",
@@ -112,8 +121,11 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
     projectId: wip.projectId,
     status: wip.status,
     loiReceiptDate: toInputDate(wip.loiReceiptDate),
+    loiCopyPath: (wip as any).loiCopyPath ?? "",
     agreementDate: toInputDate(wip.agreementDate),
+    agreementCopyPath: (wip as any).agreementCopyPath ?? "",
     workOrderDate: toInputDate(wip.workOrderDate),
+    workOrderCopyPath: (wip as any).workOrderCopyPath ?? "",
     timeLimitMonths: toMonthsString(wip.timeLimitMonths),
     stipulatedCompletionDate: toInputDate(wip.stipulatedCompletionDate),
     targetCompletionDate: toInputDate(wip.targetCompletionDate),
@@ -122,6 +134,7 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
     securityDepositAmount: toMoneyString(wip.securityDepositAmount),
     securityDepositStatus: wip.securityDepositStatus ?? "",
     securityDepositReturnDate: toInputDate(wip.securityDepositReturnDate),
+    securityDepositCopyPath: (wip as any).securityDepositCopyPath ?? "",
     amountOfWorkDone: toMoneyString(wip.amountOfWorkDone),
     finalProgressAmount: toMoneyString(wip.finalProgressAmount),
     raBill1Amount: toMoneyString(wip.raBill1Amount),
@@ -140,6 +153,11 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
     raBill4Date: toInputDate(wip.raBill4Date),
     raBill4SaecFee: toMoneyString(wip.raBill4SaecFee),
     raBill4ProjectExpense: toMoneyString(wip.raBill4ProjectExpense),
+    raBill1Path: (wip as any).raBill1Path ?? "",
+    raBill2Path: (wip as any).raBill2Path ?? "",
+    raBill3Path: (wip as any).raBill3Path ?? "",
+    raBill4Path: (wip as any).raBill4Path ?? "",
+    finalProgressPath: (wip as any).finalProgressPath ?? "",
     annexure3aPath: wip.annexure3aPath ?? "",
     completionCertificatePath: wip.completionCertificatePath ?? "",
     completionDate: toInputDate(wip.completionDate),
@@ -148,11 +166,13 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
 }
 
 function getInitialAssignments(wip?: WipWithComputed): AssignmentRow[] {
-  if (!wip) return [];
-  return wip.assignments.map((a) => ({
-    staffId: a.staff.id,
-    level: a.level as WipCoordinatorLevel,
-  }));
+  const existing = wip?.assignments ?? [];
+  return [
+    { level: WipCoordinatorLevel.L1, staffId: existing.find(a => a.level === WipCoordinatorLevel.L1)?.staff?.id ?? "" },
+    { level: WipCoordinatorLevel.L2, staffId: existing.find(a => a.level === WipCoordinatorLevel.L2)?.staff?.id ?? "" },
+    { level: WipCoordinatorLevel.L3, staffId: existing.find(a => a.level === WipCoordinatorLevel.L3)?.staff?.id ?? "" },
+    { level: WipCoordinatorLevel.L4, staffId: existing.find(a => a.level === WipCoordinatorLevel.L4)?.staff?.id ?? "" },
+  ];
 }
 
 export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
@@ -203,32 +223,21 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function addAssignment() {
-    setAssignments((prev) => [
-      ...prev,
-      {
-        staffId: staff[0]?.id ?? "",
-        level: WipCoordinatorLevel.L1,
-      },
-    ]);
-  }
-
-  function updateAssignment(index: number, patch: Partial<AssignmentRow>) {
+  function updateAssignment(index: number, staffId: string | null) {
     setAssignments((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      prev.map((row, i) => (i === index ? { ...row, staffId: staffId || "" } : row))
     );
-  }
-
-  function removeAssignment(index: number) {
-    setAssignments((prev) => prev.filter((_, i) => i !== index));
   }
 
   function buildPayload() {
     const base = {
       status: form.status,
       loiReceiptDate: form.loiReceiptDate || null,
+      loiCopyPath: emptyToNull(form.loiCopyPath),
       agreementDate: form.agreementDate || null,
+      agreementCopyPath: emptyToNull(form.agreementCopyPath),
       workOrderDate: form.workOrderDate || null,
+      workOrderCopyPath: emptyToNull(form.workOrderCopyPath),
       timeLimitMonths: form.timeLimitMonths || null,
       stipulatedCompletionDate: form.stipulatedCompletionDate || null,
       targetCompletionDate: form.targetCompletionDate || null,
@@ -237,6 +246,7 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
       securityDepositAmount: form.securityDepositAmount || null,
       securityDepositStatus: emptyToNull(form.securityDepositStatus),
       securityDepositReturnDate: form.securityDepositReturnDate || null,
+      securityDepositCopyPath: emptyToNull(form.securityDepositCopyPath),
       amountOfWorkDone: form.amountOfWorkDone || null,
       finalProgressAmount: form.finalProgressAmount || null,
       raBill1Amount: form.raBill1Amount || null,
@@ -255,16 +265,16 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
       raBill4Date: form.raBill4Date || null,
       raBill4SaecFee: form.raBill4SaecFee || null,
       raBill4ProjectExpense: form.raBill4ProjectExpense || null,
+      raBill1Path: emptyToNull(form.raBill1Path),
+      raBill2Path: emptyToNull(form.raBill2Path),
+      raBill3Path: emptyToNull(form.raBill3Path),
+      raBill4Path: emptyToNull(form.raBill4Path),
+      finalProgressPath: emptyToNull(form.finalProgressPath),
       annexure3aPath: emptyToNull(form.annexure3aPath),
       completionCertificatePath: emptyToNull(form.completionCertificatePath),
       completionDate: form.completionDate || null,
       remarks: emptyToNull(form.remarks),
-      assignments:
-        assignments.length > 0
-          ? assignments
-              .filter((a) => a.staffId && a.level)
-              .map((a) => ({ staffId: a.staffId, level: a.level }))
-          : undefined,
+      assignments: assignments.filter((a) => a.staffId),
     };
 
     if (isEdit) {
@@ -387,40 +397,64 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="loiReceiptDate">LOI receipt date</Label>
-                  <Input
-                    id="loiReceiptDate"
-                    type="date"
-                    value={form.loiReceiptDate}
-                    onChange={(e) =>
-                      updateField("loiReceiptDate", e.target.value)
-                    }
-                  />
+                <div className="space-y-4 sm:col-span-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loiReceiptDate">LOI receipt date</Label>
+                    <Input
+                      id="loiReceiptDate"
+                      type="date"
+                      value={form.loiReceiptDate}
+                      onChange={(e) => updateField("loiReceiptDate", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FileUploadField
+                      id="loiCopyPath"
+                      label="Upload LOI"
+                      value={form.loiCopyPath ?? ""}
+                      onChange={(url: string) => updateField("loiCopyPath", url)}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="agreementDate">Agreement date</Label>
-                  <Input
-                    id="agreementDate"
-                    type="date"
-                    value={form.agreementDate}
-                    onChange={(e) =>
-                      updateField("agreementDate", e.target.value)
-                    }
-                  />
+                <div className="space-y-4 sm:col-span-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="agreementDate">Agreement date</Label>
+                    <Input
+                      id="agreementDate"
+                      type="date"
+                      value={form.agreementDate}
+                      onChange={(e) => updateField("agreementDate", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FileUploadField
+                      id="agreementCopyPath"
+                      label="Upload Agreement"
+                      value={form.agreementCopyPath ?? ""}
+                      onChange={(url: string) => updateField("agreementCopyPath", url)}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="workOrderDate">Work order date</Label>
-                  <Input
-                    id="workOrderDate"
-                    type="date"
-                    value={form.workOrderDate}
-                    onChange={(e) =>
-                      updateField("workOrderDate", e.target.value)
-                    }
-                  />
+                <div className="space-y-4 sm:col-span-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="workOrderDate">Work order date</Label>
+                    <Input
+                      id="workOrderDate"
+                      type="date"
+                      value={form.workOrderDate}
+                      onChange={(e) => updateField("workOrderDate", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FileUploadField
+                      id="workOrderCopyPath"
+                      label="Upload Work Order"
+                      value={form.workOrderCopyPath ?? ""}
+                      onChange={(url: string) => updateField("workOrderCopyPath", url)}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -495,18 +529,24 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="securityDepositReturnDate">
-                    Security deposit return date
-                  </Label>
-                  <Input
-                    id="securityDepositReturnDate"
-                    type="date"
-                    value={form.securityDepositReturnDate}
-                    onChange={(e) =>
-                      updateField("securityDepositReturnDate", e.target.value)
-                    }
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="securityDepositReturnDate">Security deposit return date</Label>
+                    <Input
+                      id="securityDepositReturnDate"
+                      type="date"
+                      value={form.securityDepositReturnDate}
+                      onChange={(e) => updateField("securityDepositReturnDate", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FileUploadField
+                      id="securityDepositCopyPath"
+                      label="Upload Security Deposit Details"
+                      value={form.securityDepositCopyPath ?? ""}
+                      onChange={(url: string) => updateField("securityDepositCopyPath", url)}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -536,6 +576,15 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                     onChange={(e) =>
                       updateField("finalProgressAmount", e.target.value)
                     }
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <FileUploadField
+                    id="finalProgressPath"
+                    label="Upload Final Progress Format"
+                    value={form.finalProgressPath}
+                    onChange={(url: string) => updateField("finalProgressPath", url)}
                   />
                 </div>
 
@@ -606,46 +655,31 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">Level assignments</h4>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={addAssignment}
-                    disabled={staff.length === 0}
-                  >
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add assignment
-                  </Button>
+                  <h4 className="text-sm font-medium">Other staff detail</h4>
                 </div>
 
-                {assignments.length === 0 && (
-                  <p className="text-sm text-zinc-500">
-                    No level assignments yet. Click &quot;Add assignment&quot; to assign L1–L4 staff.
-                  </p>
-                )}
-
-                {assignments.map((row, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[1fr,auto,auto] items-end gap-2"
-                  >
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Staff</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                  {assignments.map((row, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[80px,1fr] items-center gap-2"
+                    >
+                      <Label className="text-sm text-right font-semibold text-zinc-700">{`> L ${index + 1}`}</Label>
                       <Select
                         value={row.staffId}
                         onValueChange={(v) =>
-                          updateAssignment(index, { staffId: v ?? "" })
+                          updateAssignment(index, v === "none" ? "" : (v || ""))
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select staff">
-                            {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select staff"}
+                          <SelectValue placeholder="Staff member list in master">
+                            {(value: string) => value && value !== "none" ? staff.find((s) => s.id === value)?.name ?? "Select staff" : "Staff member list in master"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
                           {staff.map((s) => (
                             <SelectItem key={s.id} value={s.id}>
                               {s.name ?? s.id}
@@ -654,40 +688,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Level</Label>
-                      <Select
-                        value={row.level}
-                        onValueChange={(v) =>
-                          updateAssignment(index, {
-                            level: v as WipCoordinatorLevel,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.values(WipCoordinatorLevel).map((l) => (
-                            <SelectItem key={l} value={l}>
-                              {l}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => removeAssignment(index)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                    </Button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </TabsContent>
 
@@ -753,6 +755,15 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                       </div>
+                      <div className="mt-3">
+                        <FileUploadField
+                          id={`raBill${n}Path`}
+                          label={`Upload RA Bill ${n} Detail to Concern Authority`}
+                          value={form[`raBill${n}Path` as keyof typeof form] as string ?? ""}
+                          onChange={(url: string) => updateField(`raBill${n}Path` as keyof typeof form, url as any)}
+                          placeholder={`Upload RA Bill ${n} file or enter path`}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -807,8 +818,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <FileUploadField
-                    id="wip"
-                    label="Annexure 3A document"
+                    id="annexure3aPath"
+                    label="3A Certificate (Annexure 3A - Project close after 3A certi)"
                     value={form.annexure3aPath}
                     onChange={(v) => updateField("annexure3aPath", v)}
                     placeholder="Upload Annexure 3A or enter path"
@@ -817,8 +828,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
 
                 <div className="space-y-1.5">
                   <FileUploadField
-                    id="wip"
-                    label="Completion certificate"
+                    id="completionCertificatePath"
+                    label="Completion Certificate (Annexure 3A)"
                     value={form.completionCertificatePath}
                     onChange={(v) => updateField("completionCertificatePath", v)}
                     placeholder="Upload completion certificate or enter path"

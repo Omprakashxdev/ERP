@@ -371,16 +371,60 @@ export async function importModule(
         await checkDuplicates(parsed.module, data);
 
         switch (parsed.module) {
-          case "contractors":
-            await prisma.contractor.create({ data: data as never });
+          case "contractors": {
+            const allowedFields = [
+              "name", "contactPerson", "phone", "email", "address", "contractAmount",
+              "agreementDate", "workOrderDate", "tenderId", "detailedOrder", "workName",
+              "workType", "serviceType", "dprReference", "tsAaReference", "scheduleBAmount",
+              "scheduleBPath", "raBillDetails", "raBillsPath", "finalProgressAmount",
+              "finalProgressProjectExpense", "finalProgressPath", "dprDocumentPath",
+              "tsAaDocumentPath", "tenderCopyPath", "contactProofPath", "workOrderCopyPath",
+              "drawingsPath", "completionCertificatePath"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.contractor.create({ data: cleanData as never });
             break;
-          case "tenders":
-            await prisma.tender.create({ data: data as never });
+          }
+          case "tenders": {
+            const allowedFields = [
+              "name", "tenderId", "department", "state", "city", "platform", "workName",
+              "workType", "serviceType", "tenderDate", "preBidMeetingDate", "preBidMeetingAttended",
+              "biddingLastDate", "dateOfOpening", "tenderFeeAmount", "tenderFeeDate",
+              "tenderFeeMode", "emdAmount", "emdDate", "emdMode", "emdReturnCollectionDate",
+              "l1ContractorName", "l1City", "l1Amount", "l2ContractorName", "l2City", "l2Amount",
+              "l3ContractorName", "l3City", "l3Amount", "negotiationMeeting", "advertisementCopyPath",
+              "remarks", "status"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.tender.create({ data: cleanData as never });
             break;
-          case "paymentSchedules":
-            await prisma.paymentSchedule.create({ data: data as never });
+          }
+          case "paymentSchedules": {
+            const allowedFields = [
+              "date", "paymentType", "category", "detail", "amount", "dueDate", "status",
+              "paymentFrequency", "receiptPath", "remarks"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.paymentSchedule.create({ data: cleanData as never });
             break;
+          }
           case "assets": {
+            if (data.officeLocation) {
+              if (!data.assignee) {
+                data.assignee = data.officeLocation;
+                data.assigneeType = "OFFICE";
+              }
+              delete data.officeLocation;
+            }
             if (!data.itemCode || String(data.itemCode).trim() === "") {
               data.itemCode = `AST-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
             }
@@ -391,40 +435,148 @@ export async function importModule(
               const count = await prisma.asset.count();
               data.securityCode = `${cat}/${name}/${make}/${count + 1}`;
             }
-            await prisma.asset.create({ data: data as never });
+            const allowedAssetFields = [
+              "itemCode", "name", "category", "make", "model", "yearOfPurchase",
+              "quantity", "securityCode", "billWarrantyPath", "assigneeType",
+              "assignee", "assignedQuantity", "responsiblePerson", "currentHolderId",
+              "status", "remarks"
+            ];
+            const cleanAssetData: Record<string, unknown> = {};
+            for (const key of allowedAssetFields) {
+              if (data[key] !== undefined && data[key] !== null) {
+                cleanAssetData[key] = data[key];
+              }
+            }
+            await prisma.asset.create({ data: cleanAssetData as never });
             break;
           }
           case "fundFlow": {
-            await prisma.fundFlow.create({ data: data as never });
+            const allowedFields = [
+              "projectId", "miscExp", "staffExp", "totalProjectCost", "completedWorkAmt",
+              "proposedDueBillAmount", "feeReceived"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.fundFlow.create({ data: cleanData as never });
             break;
           }
           case "dueBills": {
-            await prisma.dueBill.create({ data: data as never });
+            const allowedFields = [
+              "projectId", "scheme", "grossAmount", "sgst", "cgst", "billAmount",
+              "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate",
+              "status", "remarks", "billCopyPath"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.dueBill.create({ data: cleanData as never });
             break;
           }
           case "wip": {
-            await prisma.workInProgress.create({ data: data as never });
+            const allowedFields = [
+              "projectId", "status", "loiReceiptDate", "loiCopyPath", "agreementDate",
+              "agreementCopyPath", "workOrderDate", "workOrderCopyPath", "timeLimitMonths",
+              "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinatorId", "roCoordinatorId",
+              "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate",
+              "securityDepositCopyPath", "amountOfWorkDone", "finalProgressAmount", "finalProgressPath",
+              "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill1Path",
+              "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill2Path",
+              "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill3Path",
+              "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "raBill4Path",
+              "annexure3aPath", "completionCertificatePath", "completionDate"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.workInProgress.create({ data: cleanData as never });
             break;
           }
           case "vehicleLogBook": {
-            await prisma.vehicle.create({ data: data as never });
+            const allowedFields = [
+              "registrationNumber", "make", "model", "year", "status", "rcExpiryDate",
+              "insuranceExpiryDate", "pucExpiryDate", "tyreWarrantyExpiryDate",
+              "batteryWarrantyExpiryDate", "rcDocumentPath", "insuranceDocumentPath",
+              "pucDocumentPath", "assignedStaffId"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.vehicle.create({ data: cleanData as never });
             break;
           }
           case "inOutRegister": {
-            await prisma.inOutRegister.create({ data: data as never });
+            if (data.subject) {
+              if (data.details) {
+                data.details = `${data.subject}: ${data.details}`;
+              } else {
+                data.details = String(data.subject);
+              }
+            }
+            const allowedFields = [
+              "direction", "documentDate", "receivedDate", "documentRefNo", "clientId",
+              "details", "actionSuggestedStaffId", "replyDate", "replyRefNo",
+              "inwardType", "receivedByPersonName"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.inOutRegister.create({ data: cleanData as never });
             break;
           }
           case "tadaBills": {
-            await prisma.tadaClaim.create({ data: data as never });
+            const allowedFields = [
+              "staffId", "fromDate", "toDate", "location", "tourPurpose", "travelExpense",
+              "accommodationExp", "foodExpense", "localConveyance", "otherExpense",
+              "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount",
+              "status", "paymentMode", "paidAt", "remarks"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.tadaClaim.create({ data: cleanData as never });
             break;
           }
           case "tasks": {
-            await prisma.task.create({ data: data as never });
+            const allowedFields = [
+              "title", "description", "assignedToId", "assignedById", "projectId",
+              "department", "reviewerId", "percentageCompletion", "activityLog",
+              "sourceModule", "sourceEntityId", "dueDate", "completedAt", "status",
+              "priority", "reworkCount", "reworkReason"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.task.create({ data: cleanData as never });
             break;
           }
           case "clients": {
-            const { contacts, ...clientData } = data;
-            await prisma.client.create({ data: clientData as never });
+            if (data.code && !data.abbreviation) {
+              data.abbreviation = String(data.code).slice(0, 8);
+            }
+            if (data.gstin && !data.gstNumber) {
+              data.gstNumber = String(data.gstin);
+            }
+            if (data.pan && !data.panNumber) {
+              data.panNumber = String(data.pan);
+            }
+            const allowedClientFields = [
+              "name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"
+            ];
+            const cleanClientData: Record<string, unknown> = {};
+            for (const key of allowedClientFields) {
+              if (data[key] !== undefined && data[key] !== null) {
+                cleanClientData[key] = data[key];
+              }
+            }
+            await prisma.client.create({ data: cleanClientData as never });
             break;
           }
           case "staff": {
@@ -437,7 +589,15 @@ export async function importModule(
             if (data.isActive === undefined) {
               data.isActive = true;
             }
-            await prisma.staff.create({ data: data as never });
+            const allowedFields = [
+              "name", "email", "phone", "employeeCode", "designation", "regionId",
+              "isActive", "reportingManagerId"
+            ];
+            const cleanData: Record<string, unknown> = {};
+            for (const key of allowedFields) {
+              if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
+            }
+            await prisma.staff.create({ data: cleanData as never });
             break;
           }
           case "masters_region":
@@ -481,6 +641,18 @@ export async function importModule(
             break;
           case "masters_tsAaMaster":
             await prisma.tsAaMaster.create({ data: data as never });
+            break;
+          case "masters_typeMaster":
+            await (prisma as any).typeMaster.create({ data: data as never });
+            break;
+          case "masters_workOrderMaster":
+            await (prisma as any).workOrderMaster.create({ data: data as never });
+            break;
+          case "masters_drawingMaster":
+            await (prisma as any).drawingMaster.create({ data: data as never });
+            break;
+          case "masters_contactMaster":
+            await (prisma as any).contactMaster.create({ data: data as never });
             break;
           default:
             errors.push(`Row ${i + 1}: Import not supported for module ${parsed.module}`);

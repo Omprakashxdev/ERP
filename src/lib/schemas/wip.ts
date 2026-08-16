@@ -12,8 +12,11 @@ export const wipCreateSchema = z.object({
   status: z.nativeEnum(WipStatus).default(WipStatus.NOT_STARTED),
 
   loiReceiptDate: z.coerce.date().optional().nullable(),
+  loiCopyPath: cleanedString(500).optional().nullable(),
   agreementDate: z.coerce.date().optional().nullable(),
+  agreementCopyPath: cleanedString(500).optional().nullable(),
   workOrderDate: z.coerce.date().optional().nullable(),
+  workOrderCopyPath: cleanedString(500).optional().nullable(),
   timeLimitMonths: months.optional().nullable(),
   stipulatedCompletionDate: z.coerce.date().optional().nullable(),
   targetCompletionDate: z.coerce.date().optional().nullable(),
@@ -24,29 +27,35 @@ export const wipCreateSchema = z.object({
   securityDepositAmount: money.optional().nullable(),
   securityDepositStatus: cleanedString(40).optional().nullable(),
   securityDepositReturnDate: z.coerce.date().optional().nullable(),
+  securityDepositCopyPath: cleanedString(500).optional().nullable(),
 
   amountOfWorkDone: money.optional().nullable(),
   finalProgressAmount: money.optional().nullable(),
+  finalProgressPath: cleanedString(500).optional().nullable(),
 
   raBill1Amount: money.optional().nullable(),
   raBill1Date: z.coerce.date().optional().nullable(),
   raBill1SaecFee: money.optional().nullable(),
   raBill1ProjectExpense: money.optional().nullable(),
+  raBill1Path: cleanedString(500).optional().nullable(),
 
   raBill2Amount: money.optional().nullable(),
   raBill2Date: z.coerce.date().optional().nullable(),
   raBill2SaecFee: money.optional().nullable(),
   raBill2ProjectExpense: money.optional().nullable(),
+  raBill2Path: cleanedString(500).optional().nullable(),
 
   raBill3Amount: money.optional().nullable(),
   raBill3Date: z.coerce.date().optional().nullable(),
   raBill3SaecFee: money.optional().nullable(),
   raBill3ProjectExpense: money.optional().nullable(),
+  raBill3Path: cleanedString(500).optional().nullable(),
 
   raBill4Amount: money.optional().nullable(),
   raBill4Date: z.coerce.date().optional().nullable(),
   raBill4SaecFee: money.optional().nullable(),
   raBill4ProjectExpense: money.optional().nullable(),
+  raBill4Path: cleanedString(500).optional().nullable(),
 
   annexure3aPath: cleanedString(500).optional().nullable(),
   completionCertificatePath: cleanedString(500).optional().nullable(),

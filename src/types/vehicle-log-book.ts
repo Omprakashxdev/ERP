@@ -11,6 +11,7 @@ export type VehicleWithComputed = VehicleListRow & {
 export type JourneyLogListRow = JourneyLog & {
   vehicle: Vehicle;
   photos: JourneyLogPhoto[];
+  approvedBy?: { id: string; name: string; designation?: string | null } | null;
 };
 
 export type JourneyLogWithComputed = JourneyLogListRow & {

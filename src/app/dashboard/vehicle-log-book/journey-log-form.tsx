@@ -66,6 +66,8 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
     return {
       vehicleId: "",
       journeyDate: toInputDate(new Date()),
+      timeIn: "",
+      timeOut: "",
       fromLocation: "",
       toLocation: "",
       startKm: "",
@@ -74,17 +76,25 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
       startKmPhotoPath: "",
       endKmPhotoPath: "",
       fuelExpense: "",
+      fuelLitre: "",
+      fuelRate: "",
       fuelBillPath: "",
+      fuelOdometerPhotoPath: "",
       serviceParticulars: "",
       serviceExpense: "",
       serviceBillPath: "",
+      serviceOdometerPhotoPath: "",
       maintenanceParticulars: "",
       maintenanceExpense: "",
       maintenanceBillPath: "",
+      maintenanceOdometerPhotoPath: "",
+      taxParticulars: "",
       taxExpense: "",
       taxReceiptPath: "",
+      fastagBalance: "",
       personsTravelling: "",
       driverName: "",
+      driverAllowanceDetails: "",
       purpose: "",
       remarks: "",
       approvalStatus: JourneyApprovalStatus.PENDING,
@@ -96,6 +106,8 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
   return {
     vehicleId: journeyLog.vehicleId,
     journeyDate: toInputDate(journeyLog.journeyDate),
+    timeIn: (journeyLog as any).timeIn ?? "",
+    timeOut: (journeyLog as any).timeOut ?? "",
     fromLocation: journeyLog.fromLocation 
       ? (cities.some(c => c.name === journeyLog.fromLocation) ? journeyLog.fromLocation : "__other__" + journeyLog.fromLocation)
       : "",
@@ -108,17 +120,25 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
     startKmPhotoPath: journeyLog.startKmPhotoPath ?? "",
     endKmPhotoPath: journeyLog.endKmPhotoPath ?? "",
     fuelExpense: toMoneyString(journeyLog.fuelExpense),
+    fuelLitre: toMoneyString((journeyLog as any).fuelLitre),
+    fuelRate: toMoneyString((journeyLog as any).fuelRate),
     fuelBillPath: journeyLog.fuelBillPath ?? "",
+    fuelOdometerPhotoPath: (journeyLog as any).fuelOdometerPhotoPath ?? "",
     serviceParticulars: journeyLog.serviceParticulars ?? "",
     serviceExpense: toMoneyString(journeyLog.serviceExpense),
     serviceBillPath: journeyLog.serviceBillPath ?? "",
+    serviceOdometerPhotoPath: (journeyLog as any).serviceOdometerPhotoPath ?? "",
     maintenanceParticulars: journeyLog.maintenanceParticulars ?? "",
     maintenanceExpense: toMoneyString(journeyLog.maintenanceExpense),
     maintenanceBillPath: journeyLog.maintenanceBillPath ?? "",
+    maintenanceOdometerPhotoPath: (journeyLog as any).maintenanceOdometerPhotoPath ?? "",
+    taxParticulars: (journeyLog as any).taxParticulars ?? "",
     taxExpense: toMoneyString(journeyLog.taxExpense),
     taxReceiptPath: journeyLog.taxReceiptPath ?? "",
+    fastagBalance: toMoneyString((journeyLog as any).fastagBalance),
     personsTravelling: journeyLog.personsTravelling ?? "",
     driverName: journeyLog.driverName ?? "",
+    driverAllowanceDetails: (journeyLog as any).driverAllowanceDetails ?? "",
     purpose: journeyLog.purpose ?? "",
     remarks: journeyLog.remarks ?? "",
     approvalStatus: journeyLog.approvalStatus,
@@ -171,6 +191,8 @@ export function JourneyLogForm({
     const base = {
       vehicleId: form.vehicleId,
       journeyDate: form.journeyDate || undefined,
+      timeIn: emptyToNull(form.timeIn),
+      timeOut: emptyToNull(form.timeOut),
       fromLocation: emptyToNull(form.fromLocation.replace(/^__other__/, "")) ?? "",
       toLocation: emptyToNull(form.toLocation.replace(/^__other__/, "")) ?? "",
       startKm: form.startKm || null,
@@ -179,17 +201,25 @@ export function JourneyLogForm({
       startKmPhotoPath: emptyToNull(form.startKmPhotoPath),
       endKmPhotoPath: emptyToNull(form.endKmPhotoPath),
       fuelExpense: form.fuelExpense || null,
+      fuelLitre: form.fuelLitre || null,
+      fuelRate: form.fuelRate || null,
       fuelBillPath: emptyToNull(form.fuelBillPath),
+      fuelOdometerPhotoPath: emptyToNull(form.fuelOdometerPhotoPath),
       serviceParticulars: emptyToNull(form.serviceParticulars),
       serviceExpense: form.serviceExpense || null,
       serviceBillPath: emptyToNull(form.serviceBillPath),
+      serviceOdometerPhotoPath: emptyToNull(form.serviceOdometerPhotoPath),
       maintenanceParticulars: emptyToNull(form.maintenanceParticulars),
       maintenanceExpense: form.maintenanceExpense || null,
       maintenanceBillPath: emptyToNull(form.maintenanceBillPath),
+      maintenanceOdometerPhotoPath: emptyToNull(form.maintenanceOdometerPhotoPath),
+      taxParticulars: emptyToNull(form.taxParticulars),
       taxExpense: form.taxExpense || null,
       taxReceiptPath: emptyToNull(form.taxReceiptPath),
+      fastagBalance: form.fastagBalance || null,
       personsTravelling: emptyToNull(form.personsTravelling),
       driverName: emptyToNull(form.driverName),
+      driverAllowanceDetails: emptyToNull(form.driverAllowanceDetails),
       purpose: emptyToNull(form.purpose),
       remarks: emptyToNull(form.remarks),
       approvalStatus: form.approvalStatus,
@@ -285,6 +315,26 @@ export function JourneyLogForm({
                   type="date"
                   value={form.journeyDate}
                   onChange={(e) => updateField("journeyDate", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="timeIn">Time in</Label>
+                <Input
+                  id="timeIn"
+                  type="time"
+                  value={form.timeIn}
+                  onChange={(e) => updateField("timeIn", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="timeOut">Time out</Label>
+                <Input
+                  id="timeOut"
+                  type="time"
+                  value={form.timeOut}
+                  onChange={(e) => updateField("timeOut", e.target.value)}
                 />
               </div>
 
@@ -446,14 +496,47 @@ export function JourneyLogForm({
                 />
               </div>
 
-              <div className="space-y-1.5 sm:col-span-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="fuelLitre">Fuel (Litres)</Label>
+                <Input
+                  id="fuelLitre"
+                  type="number"
+                  step="0.01"
+                  value={form.fuelLitre}
+                  onChange={(e) => updateField("fuelLitre", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="fuelRate">Fuel rate (₹ / L)</Label>
+                <Input
+                  id="fuelRate"
+                  type="number"
+                  step="0.01"
+                  value={form.fuelRate}
+                  onChange={(e) => updateField("fuelRate", e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <FileUploadField
                   id="journey-fuel-bill"
-                  label="Fuel bill + odometer photo"
+                  label="Fuel bill"
                   value={form.fuelBillPath}
                   onChange={(v) => updateField("fuelBillPath", v)}
                   accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload petrol bill & odometer photo"
+                  placeholder="Upload petrol / diesel bill"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <FileUploadField
+                  id="journey-fuel-odometer"
+                  label="Fuel odometer photo"
+                  value={form.fuelOdometerPhotoPath}
+                  onChange={(v) => updateField("fuelOdometerPhotoPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload odometer photo at fuel station"
                 />
               </div>
 
@@ -478,14 +561,25 @@ export function JourneyLogForm({
                 />
               </div>
 
-              <div className="space-y-1.5 sm:col-span-2">
+              <div className="space-y-1.5">
                 <FileUploadField
                   id="journey-service-bill"
-                  label="Service bill + odometer photo"
+                  label="Service bill"
                   value={form.serviceBillPath}
                   onChange={(v) => updateField("serviceBillPath", v)}
                   accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload service bill & odometer photo"
+                  placeholder="Upload service bill"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <FileUploadField
+                  id="journey-service-odometer"
+                  label="Service odometer photo"
+                  value={form.serviceOdometerPhotoPath}
+                  onChange={(v) => updateField("serviceOdometerPhotoPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload odometer photo at service"
                 />
               </div>
 
@@ -510,14 +604,35 @@ export function JourneyLogForm({
                 />
               </div>
 
-              <div className="space-y-1.5 sm:col-span-2">
+              <div className="space-y-1.5">
                 <FileUploadField
                   id="journey-maintenance-bill"
-                  label="Maintenance bill + odometer photo"
+                  label="Maintenance bill"
                   value={form.maintenanceBillPath}
                   onChange={(v) => updateField("maintenanceBillPath", v)}
                   accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload maintenance bill & odometer photo"
+                  placeholder="Upload maintenance bill"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <FileUploadField
+                  id="journey-maintenance-odometer"
+                  label="Maintenance odometer photo"
+                  value={form.maintenanceOdometerPhotoPath}
+                  onChange={(v) => updateField("maintenanceOdometerPhotoPath", v)}
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  placeholder="Upload odometer photo at maintenance"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="taxParticulars">Tax / toll particulars</Label>
+                <Input
+                  id="taxParticulars"
+                  value={form.taxParticulars}
+                  onChange={(e) => updateField("taxParticulars", e.target.value)}
+                  placeholder="e.g. Fastag recharge, Toll tax, Highway tax"
                 />
               </div>
 
@@ -532,6 +647,17 @@ export function JourneyLogForm({
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="fastagBalance">Fastag balance (₹)</Label>
+                <Input
+                  id="fastagBalance"
+                  type="number"
+                  step="0.01"
+                  value={form.fastagBalance}
+                  onChange={(e) => updateField("fastagBalance", e.target.value)}
+                />
+              </div>
+
               <div className="space-y-1.5 sm:col-span-2">
                 <FileUploadField
                   id="journey-tax-receipt"
@@ -539,7 +665,7 @@ export function JourneyLogForm({
                   value={form.taxReceiptPath}
                   onChange={(v) => updateField("taxReceiptPath", v)}
                   accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload tax receipt"
+                  placeholder="Upload tax receipt / Fastag statement"
                 />
               </div>
 
@@ -562,6 +688,16 @@ export function JourneyLogForm({
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="driverAllowanceDetails">Driver allowance details</Label>
+                <Input
+                  id="driverAllowanceDetails"
+                  value={form.driverAllowanceDetails}
+                  onChange={(e) => updateField("driverAllowanceDetails", e.target.value)}
+                  placeholder="e.g. ₹300 per day"
+                />
+              </div>
+
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="purpose">Purpose of travel</Label>
                 <Input
@@ -573,12 +709,12 @@ export function JourneyLogForm({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="remarks">Remarks</Label>
+                <Label htmlFor="remarks">Remarks (if any)</Label>
                 <Input
                   id="remarks"
                   value={form.remarks}
                   onChange={(e) => updateField("remarks", e.target.value)}
-                  placeholder="Any additional remarks"
+                  placeholder="Any additional remarks (if any)"
                 />
               </div>
 

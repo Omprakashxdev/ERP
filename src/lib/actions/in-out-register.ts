@@ -18,6 +18,7 @@ import {
   sanitizeForAudit,
   ActionResult,
 } from "./wrapper";
+import { createInOutRegisterLinkedTasks, deleteLinkedTasks } from "./task-linking";
 
 function generateReplyRefNo(): string {
   const random = Math.floor(Math.random() * 1000)
@@ -80,7 +81,17 @@ export async function createInOutRegister(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    await createInOutRegisterLinkedTasks({
+      inOutRegisterId: entry.id,
+      documentRefNo: entry.documentRefNo,
+      details: entry.details,
+      receivedDate: entry.receivedDate,
+      actionSuggestedStaffId: entry.actionSuggestedStaffId,
+      ccStaffIds: ccStaffIds,
+    }).catch(() => {});
+
     revalidatePath("/dashboard/in-out-register");
+    revalidatePath("/dashboard/tasks");
     return { id: entry.id };
   });
 }
@@ -138,7 +149,10 @@ export async function deleteInOutRegister(
 
     await audit(user.id, "delete", "InOutRegister", entry.id, {});
 
+    await deleteLinkedTasks("IN_OUT_REGISTER", id).catch(() => {});
+
     revalidatePath("/dashboard/in-out-register");
+    revalidatePath("/dashboard/tasks");
     return { id: entry.id };
   });
 }

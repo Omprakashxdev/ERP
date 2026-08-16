@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   ProjectStatus,
   ProjectRole,
-  WorkType,
-  ServiceType,
 } from "@prisma/client";
 import {
   Dialog,
@@ -104,8 +102,8 @@ function getInitialForm(project?: FundFlowWithComputed) {
       estimatedCost: "",
       totalFee: "",
       status: ProjectStatus.ACTIVE,
-      workType: WorkType.BUILDING,
-      serviceType: ServiceType.DPR,
+      workType: "",
+      serviceType: "",
     };
   }
   return {
@@ -455,44 +453,40 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="workType">Work type</Label>
-                    <Select
+                    <Input
+                      id="workType"
                       value={form.workType}
-                      onValueChange={(v) =>
-                        updateField("workType", v as WorkType)
-                      }
-                    >
-                      <SelectTrigger id="workType">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(WorkType).map((w) => (
-                          <SelectItem key={w} value={w}>
-                            {w.toLowerCase().replace(/_/g, " ")}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      onChange={(e) => updateField("workType", e.target.value)}
+                      placeholder="e.g. Building, Road, Water"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="serviceType">Service type</Label>
-                    <Select
-                      value={form.serviceType}
-                      onValueChange={(v) =>
-                        updateField("serviceType", v as ServiceType)
-                      }
-                    >
-                      <SelectTrigger id="serviceType">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(ServiceType).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s.toLowerCase().replace(/_/g, " ")}
-                          </SelectItem>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="serviceType">Service type (PMC / TPI)</Label>
+                      <div className="flex flex-wrap gap-1">
+                        {["PMC", "TPI", "EPC", "Consultancy"].map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => updateField("serviceType", t)}
+                            className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                              form.serviceType === t
+                                ? "bg-zinc-900 text-white border-zinc-900"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200"
+                            }`}
+                          >
+                            {t}
+                          </button>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    </div>
+                    <Input
+                      id="serviceType"
+                      value={form.serviceType}
+                      onChange={(e) => updateField("serviceType", e.target.value)}
+                      placeholder="e.g. PMC, TPI"
+                    />
                   </div>
 
                   <div className="space-y-1.5">

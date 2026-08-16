@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Prisma, ProjectStatus, ServiceType, WorkType } from "@prisma/client";
+import { Prisma, ProjectStatus } from "@prisma/client";
 import { money } from "./shared";
 
 export const fundFlowCreateSchema = z.object({
@@ -20,8 +20,8 @@ export const fundFlowFilterSchema = z.object({
   regionId: z.string().cuid().optional(),
   clientId: z.string().cuid().optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
-  workType: z.nativeEnum(WorkType).optional(),
-  serviceType: z.nativeEnum(ServiceType).optional(),
+  workType: z.string().optional(),
+  serviceType: z.string().optional(),
   workOrderDateFrom: z.coerce.date().optional(),
   workOrderDateTo: z.coerce.date().optional(),
   search: z.string().optional(),

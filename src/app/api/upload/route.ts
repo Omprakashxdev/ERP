@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const module = (formData.get("module") as string) ?? "general";
+    const moduleName = (formData.get("module") as string) ?? "general";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Ensure upload directory exists
-    const moduleDir = path.join(UPLOAD_DIR, module);
+    const moduleDir = path.join(UPLOAD_DIR, moduleName);
     if (!existsSync(moduleDir)) {
       await mkdir(moduleDir, { recursive: true });
     }

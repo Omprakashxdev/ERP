@@ -86,22 +86,6 @@ enum ProjectStatus {
   CANCELLED
 }
 
-enum WorkType {
-  BUILDING
-  WATER_SUPPLY
-  UGD
-  ROAD
-  OTHER
-}
-
-enum ServiceType {
-  DPR
-  SUPERVISION
-  PMC
-  TPI
-  OTHER
-}
-
 enum TenderStatus {
   UNDER_PREPARATION
   SUBMITTED
@@ -252,6 +236,7 @@ model Staff {
   employeeDetail         EmployeeDetail?
   attendance             Attendance[]
   registrationRequests   RegistrationRequest[] @relation("RegistrationReportingManager")
+  tendersAsConcernAuthority Tender[]           @relation("TenderConcernAuthority")
 
   @@index([regionId])
   @@index([reportingManagerId])
@@ -272,8 +257,8 @@ model Contractor {
   tenderId                    String?
   detailedOrder               String?
   workName                    String?
-  workType                    WorkType?
-  serviceType                 ServiceType?
+  workType                    String?
+  serviceType                 String?
   dprReference                String?
   tsAaReference               String?
 
@@ -281,10 +266,16 @@ model Contractor {
   scheduleBPath               String?
 
   raBillDetails               String?
+  raBillsPath                 String?
 
   finalProgressAmount         Decimal?      @db.Decimal(19, 2)
   finalProgressProjectExpense Decimal?      @db.Decimal(19, 2)
+  finalProgressPath           String?
 
+  dprDocumentPath             String?
+  tsAaDocumentPath            String?
+  tenderCopyPath              String?
+  contactProofPath            String?
   workOrderCopyPath           String?
   drawingsPath                String?
   completionCertificatePath   String?
@@ -309,12 +300,16 @@ model Tender {
   city                  String?
   platform              String?
 
+  concernAuthorityId    String?
+  concernAuthority      Staff?        @relation("TenderConcernAuthority", fields: [concernAuthorityId], references: [id])
+
   workName              String?
-  workType              WorkType?
-  serviceType           ServiceType?
+  workType              String?
+  serviceType           String?
 
   preBidMeetingDate     DateTime?
   preBidMeetingAttended Boolean       @default(false)
+  preBidMeetingDetails  String?
   biddingLastDate       DateTime?
   dateOfOpening         DateTime?
 
@@ -338,8 +333,13 @@ model Tender {
   l3ContractorName      String?
   l3City                String?
   l3Amount              Decimal?      @db.Decimal(19, 2)
+  ratesCopyPath         String?
 
-  negotiationMeeting    String?
+  priceComparison       String?
+
+  negotiationMeetingDate      DateTime?
+  negotiationMeeting          String?
+  negotiationMeetingAttended  Boolean  @default(false)
 
   advertisementCopyPath String?
   remarks               String?
@@ -393,6 +393,7 @@ model Vehicle {
   insuranceExpiryDate       DateTime?
   insuranceCopyPath         String?
 
+  pucNumber                 String?
   pucExpiryDate             DateTime?
   pucCopyPath               String?
 
@@ -412,6 +413,8 @@ model JourneyLog {
   id                 String                @id @default(cuid())
   vehicleId          String
   journeyDate        DateTime
+  timeIn             String?
+  timeOut            String?
   fromLocation       String
   toLocation         String
   startKm            Decimal               @db.Decimal(10, 2)
@@ -422,21 +425,29 @@ model JourneyLog {
   endKmPhotoPath     String?
 
   fuelExpense        Decimal?              @db.Decimal(19, 2)
+  fuelLitre          Decimal?              @db.Decimal(10, 2)
+  fuelRate           Decimal?              @db.Decimal(10, 2)
   fuelBillPath       String?
+  fuelOdometerPhotoPath String?
 
   serviceParticulars String?
   serviceExpense     Decimal?              @db.Decimal(19, 2)
   serviceBillPath    String?
+  serviceOdometerPhotoPath String?
 
   maintenanceParticulars String?
   maintenanceExpense Decimal?              @db.Decimal(19, 2)
   maintenanceBillPath String?
+  maintenanceOdometerPhotoPath String?
 
+  taxParticulars     String?
   taxExpense         Decimal?              @db.Decimal(19, 2)
   taxReceiptPath     String?
+  fastagBalance      Decimal?              @db.Decimal(19, 2)
 
   personsTravelling  String?
   driverName         String?
+  driverAllowanceDetails String?
   purpose            String?
   remarks            String?
 
@@ -601,8 +612,8 @@ model Project {
   estimatedCost            Decimal       @db.Decimal(19, 2) @default("0.00")
   totalFee                 Decimal       @db.Decimal(19, 2) @default("0.00")
   status                   ProjectStatus @default(ACTIVE)
-  workType                 WorkType
-  serviceType              ServiceType
+  workType                 String
+  serviceType              String
   contractorId             String?
   createdAt                DateTime      @default(now())
   updatedAt                DateTime      @updatedAt
@@ -734,8 +745,11 @@ model WorkInProgress {
   status                   WipStatus     @default(NOT_STARTED)
 
   loiReceiptDate           DateTime?
+  loiCopyPath              String?
   agreementDate            DateTime?
+  agreementCopyPath        String?
   workOrderDate            DateTime?
+  workOrderCopyPath        String?
   timeLimitMonths          Decimal?      @db.Decimal(8, 4)
   stipulatedCompletionDate DateTime?
   targetCompletionDate     DateTime?
@@ -746,29 +760,35 @@ model WorkInProgress {
   securityDepositAmount    Decimal?      @db.Decimal(19, 2)
   securityDepositStatus    String?
   securityDepositReturnDate DateTime?
+  securityDepositCopyPath  String?
 
   amountOfWorkDone         Decimal?      @db.Decimal(19, 2)
   finalProgressAmount      Decimal?      @db.Decimal(19, 2)
+  finalProgressPath        String?
 
   raBill1Amount            Decimal?      @db.Decimal(19, 2)
   raBill1Date              DateTime?
   raBill1SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill1ProjectExpense    Decimal?      @db.Decimal(19, 2)
+  raBill1Path              String?
 
   raBill2Amount            Decimal?      @db.Decimal(19, 2)
   raBill2Date              DateTime?
   raBill2SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill2ProjectExpense    Decimal?      @db.Decimal(19, 2)
+  raBill2Path              String?
 
   raBill3Amount            Decimal?      @db.Decimal(19, 2)
   raBill3Date              DateTime?
   raBill3SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill3ProjectExpense    Decimal?      @db.Decimal(19, 2)
+  raBill3Path              String?
 
   raBill4Amount            Decimal?      @db.Decimal(19, 2)
   raBill4Date              DateTime?
   raBill4SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill4ProjectExpense    Decimal?      @db.Decimal(19, 2)
+  raBill4Path              String?
 
   annexure3aPath           String?
   completionCertificatePath String?
@@ -1130,6 +1150,13 @@ model WorkMaster {
   updatedAt DateTime @updatedAt
 }
 
+model TypeMaster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model DprMaster {
   id              String   @id @default(cuid())
   referenceNumber String   @unique
@@ -1142,6 +1169,32 @@ model TsAaMaster {
   referenceNumber String   @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model DrawingMaster {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  referenceNumber String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model WorkOrderMaster {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  referenceNumber String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ContactMaster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── Fund Flow Monthly Projection ─────────────────────────────

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TenderStatus, WorkType, ServiceType } from "@prisma/client";
+import { TenderStatus } from "@prisma/client";
 import { cleanedString, money } from "./shared";
 
 export const tenderCreateSchema = z.object({
@@ -12,12 +12,15 @@ export const tenderCreateSchema = z.object({
   city: cleanedString(120).optional().nullable(),
   platform: cleanedString(120).optional().nullable(),
 
+  concernAuthorityId: cleanedString(120).optional().nullable(),
+
   workName: cleanedString(255).optional().nullable(),
-  workType: z.nativeEnum(WorkType).optional().nullable(),
-  serviceType: z.nativeEnum(ServiceType).optional().nullable(),
+  workType: cleanedString(120).optional().nullable(),
+  serviceType: cleanedString(120).optional().nullable(),
 
   preBidMeetingDate: z.coerce.date().optional().nullable(),
   preBidMeetingAttended: z.boolean().default(false),
+  preBidMeetingDetails: cleanedString(1000).optional().nullable(),
   biddingLastDate: z.coerce.date().optional().nullable(),
   dateOfOpening: z.coerce.date().optional().nullable(),
 
@@ -41,8 +44,13 @@ export const tenderCreateSchema = z.object({
   l3ContractorName: cleanedString(200).optional().nullable(),
   l3City: cleanedString(120).optional().nullable(),
   l3Amount: money.optional().nullable(),
+  ratesCopyPath: cleanedString(500).optional().nullable(),
 
+  priceComparison: cleanedString(1000).optional().nullable(),
+
+  negotiationMeetingDate: z.coerce.date().optional().nullable(),
   negotiationMeeting: cleanedString(1000).optional().nullable(),
+  negotiationMeetingAttended: z.boolean().default(false),
 
   advertisementCopyPath: cleanedString(500).optional().nullable(),
   remarks: cleanedString(1000).optional().nullable(),
@@ -55,8 +63,8 @@ export const tenderUpdateSchema = tenderCreateSchema
 export const tenderFilterSchema = z.object({
   search: z.string().optional(),
   status: z.nativeEnum(TenderStatus).optional(),
-  workType: z.nativeEnum(WorkType).optional(),
-  serviceType: z.nativeEnum(ServiceType).optional(),
+  workType: z.string().optional(),
+  serviceType: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   platform: z.string().optional(),

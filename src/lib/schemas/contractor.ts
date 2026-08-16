@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { WorkType, ServiceType } from "@prisma/client";
 import { cleanedString, money } from "./shared";
 
 export const contractorCreateSchema = z.object({
@@ -15,8 +14,8 @@ export const contractorCreateSchema = z.object({
   tenderId: cleanedString(120).optional().nullable(),
   detailedOrder: cleanedString(255).optional().nullable(),
   workName: cleanedString(255).optional().nullable(),
-  workType: z.nativeEnum(WorkType).optional().nullable(),
-  serviceType: z.nativeEnum(ServiceType).optional().nullable(),
+  workType: z.string().optional().nullable(),
+  serviceType: z.string().optional().nullable(),
   dprReference: cleanedString(120).optional().nullable(),
   tsAaReference: cleanedString(120).optional().nullable(),
 
@@ -24,10 +23,16 @@ export const contractorCreateSchema = z.object({
   scheduleBPath: cleanedString(500).optional().nullable(),
 
   raBillDetails: cleanedString(1000).optional().nullable(),
+  raBillsPath: cleanedString(500).optional().nullable(),
 
   finalProgressAmount: money.optional().nullable(),
   finalProgressProjectExpense: money.optional().nullable(),
+  finalProgressPath: cleanedString(500).optional().nullable(),
 
+  dprDocumentPath: cleanedString(500).optional().nullable(),
+  tsAaDocumentPath: cleanedString(500).optional().nullable(),
+  tenderCopyPath: cleanedString(500).optional().nullable(),
+  contactProofPath: cleanedString(500).optional().nullable(),
   workOrderCopyPath: cleanedString(500).optional().nullable(),
   drawingsPath: cleanedString(500).optional().nullable(),
   completionCertificatePath: cleanedString(500).optional().nullable(),

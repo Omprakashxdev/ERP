@@ -1,4 +1,4 @@
-import { ProjectStatus, ServiceType, WorkType } from "@prisma/client";
+import { ProjectStatus } from "@prisma/client";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 
 export function buildFundFlowWhere(filter?: FundFlowFilterInput) {
@@ -16,10 +16,10 @@ export function buildFundFlowWhere(filter?: FundFlowFilterInput) {
     where.status = filter.status as ProjectStatus;
   }
   if (filter.workType) {
-    where.workType = filter.workType as WorkType;
+    where.workType = filter.workType;
   }
   if (filter.serviceType) {
-    where.serviceType = filter.serviceType as ServiceType;
+    where.serviceType = filter.serviceType;
   }
   if (filter.workOrderDateFrom || filter.workOrderDateTo) {
     where.workOrderDate = {};

@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TenderStatus,
-  WorkType,
-  ServiceType,
   Tender,
 } from "@prisma/client";
 import {
@@ -73,8 +71,8 @@ function getInitialForm(tender?: Tender) {
       city: "",
       platform: "",
       workName: "",
-      workType: "" as WorkType | "",
-      serviceType: "" as ServiceType | "",
+      workType: "",
+      serviceType: "",
       preBidMeetingDate: "",
       preBidMeetingAttended: false,
       biddingLastDate: "",
@@ -110,8 +108,8 @@ function getInitialForm(tender?: Tender) {
     city: tender.city ?? "",
     platform: tender.platform ?? "",
     workName: tender.workName ?? "",
-    workType: (tender.workType ?? "") as WorkType | "",
-    serviceType: (tender.serviceType ?? "") as ServiceType | "",
+    workType: tender.workType ?? "",
+    serviceType: tender.serviceType ?? "",
     preBidMeetingDate: toInputDate(tender.preBidMeetingDate),
     preBidMeetingAttended: tender.preBidMeetingAttended,
     biddingLastDate: toInputDate(tender.biddingLastDate),
@@ -438,56 +436,91 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="workName">Name of work</Label>
-                  <Input
-                    id="workName"
-                    value={form.workName}
-                    onChange={(e) => updateField("workName", e.target.value)}
-                  />
+                  <Label htmlFor="workName">Name of work (Work Master)</Label>
+                  {masters?.workMasters && masters.workMasters.length > 0 ? (
+                    <Select
+                      value={form.workName}
+                      onValueChange={(v) => updateField("workName", v || "")}
+                    >
+                      <SelectTrigger id="workName">
+                        <SelectValue placeholder="Select work category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {masters.workMasters.map((w) => (
+                          <SelectItem key={w.id} value={w.name}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="workName"
+                      value={form.workName}
+                      onChange={(e) => updateField("workName", e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="workType">Type of work</Label>
+                  <Label htmlFor="workType">Type of work (Type Master)</Label>
                   <Select
-                    value={form.workType}
+                    value={form.workType || "none"}
                     onValueChange={(v) =>
-                      updateField("workType", (v ?? "") as WorkType)
+                      updateField("workType", v === "none" ? "" : (v || ""))
                     }
                   >
                     <SelectTrigger id="workType">
-                      <SelectValue placeholder="Select type" />
+                      <SelectValue placeholder="Select type from Type Master" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {Object.values(WorkType).map((wt) => (
-                        <SelectItem key={wt} value={wt}>
-                          {wt.toLowerCase().replace(/_/g, " ")}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="none">None</SelectItem>
+                      {masters?.typeMasters && masters.typeMasters.length > 0 ? (
+                        masters.typeMasters.map((tm) => (
+                          <SelectItem key={tm.id} value={tm.name}>
+                            {tm.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        masters?.workMasters?.map((wt) => (
+                          <SelectItem key={wt.id} value={wt.name}>
+                            {wt.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="serviceType">Service type</Label>
-                  <Select
-                    value={form.serviceType}
-                    onValueChange={(v) =>
-                      updateField("serviceType", (v ?? "") as ServiceType)
-                    }
-                  >
-                    <SelectTrigger id="serviceType">
-                      <SelectValue placeholder="Select service" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {Object.values(ServiceType).map((st) => (
-                        <SelectItem key={st} value={st}>
-                          {st.toLowerCase().replace(/_/g, " ")}
-                        </SelectItem>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="serviceType">Service type (PMC / TPI)</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {["PMC", "TPI", "EPC", "Consultancy"].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => {
+                            updateField("serviceType", t);
+                            if (!form.workType) updateField("workType", t);
+                          }}
+                          className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                            form.serviceType === t
+                              ? "bg-zinc-900 text-white border-zinc-900"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200"
+                          }`}
+                        >
+                          {t}
+                        </button>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  </div>
+                  <Input
+                    id="serviceType"
+                    value={form.serviceType}
+                    placeholder="e.g. PMC / TPI"
+                    onChange={(e) => updateField("serviceType", e.target.value)}
+                  />
                 </div>
               </div>
             </TabsContent>

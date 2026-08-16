@@ -61,6 +61,7 @@ function getInitialForm(vehicle?: Vehicle) {
       insurancePolicyNumber: "",
       insuranceExpiryDate: "",
       insuranceCopyPath: "",
+      pucNumber: "",
       pucExpiryDate: "",
       pucCopyPath: "",
       tyreWarrantyExpiryDate: "",
@@ -79,6 +80,7 @@ function getInitialForm(vehicle?: Vehicle) {
     insurancePolicyNumber: vehicle.insurancePolicyNumber ?? "",
     insuranceExpiryDate: toInputDate(vehicle.insuranceExpiryDate),
     insuranceCopyPath: vehicle.insuranceCopyPath ?? "",
+    pucNumber: (vehicle as any).pucNumber ?? "",
     pucExpiryDate: toInputDate(vehicle.pucExpiryDate),
     pucCopyPath: vehicle.pucCopyPath ?? "",
     tyreWarrantyExpiryDate: toInputDate(vehicle.tyreWarrantyExpiryDate),
@@ -115,6 +117,7 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
       insurancePolicyNumber: emptyToNull(form.insurancePolicyNumber),
       insuranceExpiryDate: form.insuranceExpiryDate || null,
       insuranceCopyPath: emptyToNull(form.insuranceCopyPath),
+      pucNumber: emptyToNull(form.pucNumber),
       pucExpiryDate: form.pucExpiryDate || null,
       pucCopyPath: emptyToNull(form.pucCopyPath),
       tyreWarrantyExpiryDate: form.tyreWarrantyExpiryDate || null,
@@ -314,6 +317,15 @@ export function VehicleForm({ vehicle, mode, onClose }: VehicleFormProps) {
                     value={form.insuranceCopyPath}
                     onChange={(v) => updateField("insuranceCopyPath", v)}
                     placeholder="Upload insurance copy or enter path"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="pucNumber">P.U.C number</Label>
+                  <Input
+                    id="pucNumber"
+                    value={form.pucNumber}
+                    onChange={(e) => updateField("pucNumber", e.target.value)}
                   />
                 </div>
 

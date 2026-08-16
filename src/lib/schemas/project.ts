@@ -3,8 +3,6 @@ import {
   Prisma,
   ProjectRole,
   ProjectStatus,
-  ServiceType,
-  WorkType,
 } from "@prisma/client";
 import { cleanedString, money, months, optionalCuid } from "./shared";
 
@@ -48,8 +46,8 @@ export const projectCreateSchema = z.object({
   estimatedCost: money.default(new Prisma.Decimal("0.00")),
   totalFee: money.default(new Prisma.Decimal("0.00")),
   status: z.nativeEnum(ProjectStatus).default(ProjectStatus.ACTIVE),
-  workType: z.nativeEnum(WorkType),
-  serviceType: z.nativeEnum(ServiceType),
+  workType: z.string(),
+  serviceType: z.string(),
   contractorId: optionalCuid,
   assignments: z.array(projectAssignmentSchema).optional(),
   feeStages: z.array(projectFeeStageSchema).optional(),
@@ -64,8 +62,8 @@ export const projectFilterSchema = z.object({
   regionId: z.string().cuid().optional(),
   clientId: z.string().cuid().optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
-  workType: z.nativeEnum(WorkType).optional(),
-  serviceType: z.nativeEnum(ServiceType).optional(),
+  workType: z.string().optional(),
+  serviceType: z.string().optional(),
   workOrderDateFrom: z.coerce.date().optional(),
   workOrderDateTo: z.coerce.date().optional(),
   search: z.string().optional(),

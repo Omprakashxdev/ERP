@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TenderStatus, WorkType, ServiceType } from "@prisma/client";
+import { TenderStatus } from "@prisma/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,12 +14,14 @@ import {
 } from "@/components/ui/select";
 import { TenderFilterInput } from "@/lib/schemas/tender";
 import { Search, X } from "lucide-react";
+import type { MasterData } from "@/lib/master-data";
 
 interface TendersFiltersProps {
   initialFilter: TenderFilterInput;
+  masters?: MasterData;
 }
 
-export function TendersFilters({ initialFilter }: TendersFiltersProps) {
+export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) {
   const router = useRouter();
   const [search, setSearch] = useState(initialFilter.search ?? "");
   const [status, setStatus] = useState(initialFilter.status ?? "");
@@ -115,16 +117,16 @@ export function TendersFilters({ initialFilter }: TendersFiltersProps) {
         <label className="text-xs font-medium text-zinc-600">Work type</label>
         <Select
           value={workType}
-          onValueChange={(v) => setWorkType(v ?? "")}
+          onValueChange={(v) => setWorkType(v === "none" || !v ? "" : v)}
         >
           <SelectTrigger className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All work types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All work types</SelectItem>
-            {Object.values(WorkType).map((wt) => (
-              <SelectItem key={wt} value={wt}>
-                {wt.toLowerCase().replace(/_/g, " ")}
+            <SelectItem value="none">All work types</SelectItem>
+            {masters?.workMasters.map((wt) => (
+              <SelectItem key={wt.id} value={wt.name}>
+                {wt.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -133,22 +135,12 @@ export function TendersFilters({ initialFilter }: TendersFiltersProps) {
 
       <div className="flex min-w-40 flex-col gap-1.5">
         <label className="text-xs font-medium text-zinc-600">Service</label>
-        <Select
+        <Input
           value={serviceType}
-          onValueChange={(v) => setServiceType(v ?? "")}
-        >
-          <SelectTrigger className="w-full min-w-40" size="sm">
-            <SelectValue placeholder="All services" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All services</SelectItem>
-            {Object.values(ServiceType).map((st) => (
-              <SelectItem key={st} value={st}>
-                {st.toLowerCase().replace(/_/g, " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onChange={(e) => setServiceType(e.target.value)}
+          className="h-8"
+          placeholder="Filter by service (e.g. PMC)"
+        />
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">

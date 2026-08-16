@@ -49,6 +49,9 @@ interface MasterItem {
   name?: string;
   referenceNumber?: string;
   url?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
   stateId?: string;
   makeId?: string;
   state?: { id: string; name: string };
@@ -64,6 +67,7 @@ interface MasterConfig {
   hasUrl?: boolean;
   hasState?: boolean;
   hasMake?: boolean;
+  hasContact?: boolean;
 }
 
 const MASTER_CONFIGS: MasterConfig[] = [
@@ -79,8 +83,12 @@ const MASTER_CONFIGS: MasterConfig[] = [
   { type: "assetModel", label: "Asset Models", singularLabel: "Asset Model", field: "name", hasMake: true },
   { type: "orderMaster", label: "Order Master", singularLabel: "Order", field: "name" },
   { type: "workMaster", label: "Work Master", singularLabel: "Work", field: "name" },
+  { type: "typeMaster", label: "Type Master", singularLabel: "Type (e.g. PMC, TPI)", field: "name" },
   { type: "dprMaster", label: "DPR Master", singularLabel: "DPR Reference", field: "referenceNumber" },
   { type: "tsAaMaster", label: "TS/AA Master", singularLabel: "TS/AA Reference", field: "referenceNumber" },
+  { type: "workOrderMaster", label: "Work Order Master", singularLabel: "Work Order", field: "name" },
+  { type: "drawingMaster", label: "Drawing Master", singularLabel: "Drawing", field: "name" },
+  { type: "contactMaster", label: "Contact Master", singularLabel: "Contact", field: "name", hasContact: true },
 ];
 
 export function MastersManager() {
@@ -92,6 +100,9 @@ export function MastersManager() {
   const [editing, setEditing] = useState<MasterItem | null>(null);
   const [formValue, setFormValue] = useState("");
   const [formUrl, setFormUrl] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formAddress, setFormAddress] = useState("");
   const [formStateId, setFormStateId] = useState("");
   const [formMakeId, setFormMakeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -133,6 +144,9 @@ export function MastersManager() {
     setEditing(null);
     setFormValue("");
     setFormUrl("");
+    setFormPhone("");
+    setFormEmail("");
+    setFormAddress("");
     setFormStateId("");
     setFormMakeId("");
     setError(null);
@@ -147,6 +161,9 @@ export function MastersManager() {
         : item.name ?? ""
     );
     setFormUrl(item.url ?? "");
+    setFormPhone(item.phone ?? "");
+    setFormEmail(item.email ?? "");
+    setFormAddress(item.address ?? "");
     setFormStateId(item.stateId ?? "");
     setFormMakeId(item.makeId ?? "");
     setError(null);
@@ -166,6 +183,11 @@ export function MastersManager() {
         input.name = formValue;
       }
       if (activeConfig.hasUrl) input.url = formUrl || undefined;
+      if (activeConfig.hasContact) {
+        input.phone = formPhone || undefined;
+        input.email = formEmail || undefined;
+        input.address = formAddress || undefined;
+      }
       if (activeConfig.hasState) input.stateId = formStateId || undefined;
       if (activeConfig.hasMake) input.makeId = formMakeId || undefined;
 
@@ -218,35 +240,33 @@ export function MastersManager() {
     return item.name ?? "";
   }
 
-  function getSecondaryValue(item: MasterItem): string | null {
-    if (activeConfig.hasState && item.state) return item.state.name;
-    if (activeConfig.hasMake && item.make) return item.make.name;
-    if (activeConfig.hasUrl && item.url) return item.url;
-    return null;
-  }
-
   return (
     <div className="space-y-4">
       {/* Master type tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5 rounded-lg border bg-zinc-50/50 p-1.5">
         {MASTER_CONFIGS.map((config) => (
-          <Button
+          <button
             key={config.type}
-            variant={activeType === config.type ? "default" : "outline"}
-            size="sm"
             onClick={() => {
               setActiveType(config.type);
               setSearch("");
             }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeType === config.type
+                ? "bg-white text-zinc-900 shadow-sm"
+                : "text-zinc-600 hover:bg-white/50 hover:text-zinc-900"
+            }`}
           >
             {config.label}
-          </Button>
+          </button>
         ))}
       </div>
 
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-base">{activeConfig.label}</CardTitle>
+          <CardTitle className="text-base font-medium">
+            {activeConfig.label} ({items.length})
+          </CardTitle>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
@@ -284,6 +304,9 @@ export function MastersManager() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-12">Sr.</TableHead>
                     <TableHead>{activeConfig.field === "referenceNumber" ? "Reference Number" : "Name"}</TableHead>
+                    {activeConfig.hasContact && <TableHead>Phone</TableHead>}
+                    {activeConfig.hasContact && <TableHead>Email</TableHead>}
+                    {activeConfig.hasContact && <TableHead>Address</TableHead>}
                     {activeConfig.hasState && <TableHead>State</TableHead>}
                     {activeConfig.hasMake && <TableHead>Make</TableHead>}
                     {activeConfig.hasUrl && <TableHead>URL</TableHead>}
@@ -295,6 +318,9 @@ export function MastersManager() {
                     <TableRow key={item.id}>
                       <TableCell className="font-medium text-zinc-500">{idx + 1}</TableCell>
                       <TableCell className="font-medium">{getDisplayValue(item)}</TableCell>
+                      {activeConfig.hasContact && <TableCell>{item.phone || "—"}</TableCell>}
+                      {activeConfig.hasContact && <TableCell>{item.email || "—"}</TableCell>}
+                      {activeConfig.hasContact && <TableCell className="max-w-xs truncate">{item.address || "—"}</TableCell>}
                       {activeConfig.hasState && (
                         <TableCell>{item.state?.name ?? "—"}</TableCell>
                       )}
@@ -365,6 +391,39 @@ export function MastersManager() {
                 }
               />
             </div>
+
+            {activeConfig.hasContact && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="master-phone">Phone / Mobile (optional)</Label>
+                  <Input
+                    id="master-phone"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    placeholder="e.g. +91 98250 12345"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="master-email">Email (optional)</Label>
+                  <Input
+                    id="master-email"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="e.g. contact@contractor.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="master-address">Address (optional)</Label>
+                  <Input
+                    id="master-address"
+                    value={formAddress}
+                    onChange={(e) => setFormAddress(e.target.value)}
+                    placeholder="Office / registered address"
+                  />
+                </div>
+              </>
+            )}
 
             {activeConfig.hasUrl && (
               <div className="space-y-1.5">

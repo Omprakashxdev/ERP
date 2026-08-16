@@ -25,6 +25,9 @@ export const employeeDetailCreateSchema = z.object({
   addressProofPath: cleanedString(500).optional().nullable(),
   degreeCertificatePath: cleanedString(500).optional().nullable(),
   letterOfGuaranteePath: cleanedString(500).optional().nullable(),
+  officeTimeFramePath: cleanedString(500).optional().nullable(),
+  dailyReportingPath: cleanedString(500).optional().nullable(),
+  leavePolicyPath: cleanedString(500).optional().nullable(),
 });
 
 export const employeeDetailUpdateSchema = employeeDetailCreateSchema

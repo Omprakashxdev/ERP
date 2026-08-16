@@ -43,18 +43,61 @@ export async function createStaff(
     
     const code = parsed.employeeCode || (await generateEmployeeCode());
 
-    const staff = await prisma.staff.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        phone: parsed.phone,
-        employeeCode: code,
-        designation: parsed.designation,
-        regionId: parsed.regionId,
-        reportingManagerId: parsed.reportingManagerId,
-        isActive: parsed.isActive,
-      },
-      select: { id: true },
+    const {
+      name,
+      email,
+      phone,
+      designation,
+      regionId,
+      reportingManagerId,
+      isActive,
+      ...detailFields
+    } = parsed;
+
+    const staff = await prisma.$transaction(async (tx) => {
+      const created = await tx.staff.create({
+        data: {
+          name,
+          email,
+          phone,
+          employeeCode: code,
+          designation,
+          regionId,
+          reportingManagerId,
+          isActive,
+          employeeDetail: {
+            create: {
+              department: detailFields.department,
+              alternatePhone: detailFields.alternatePhone,
+              presentCity: detailFields.presentCity,
+              dateOfJoining: detailFields.dateOfJoining,
+              dateOfExit: detailFields.dateOfExit,
+              fatherName: detailFields.fatherName,
+              motherName: detailFields.motherName,
+              permanentAddress: detailFields.permanentAddress,
+              communicationAddress: detailFields.communicationAddress,
+              dateOfBirth: detailFields.dateOfBirth,
+              nationality: detailFields.nationality,
+              religionCaste: detailFields.religionCaste,
+              maritalStatus: detailFields.maritalStatus,
+              passOutYear: detailFields.passOutYear,
+              otherQualification: detailFields.otherQualification,
+              otherPassOutYear: detailFields.otherPassOutYear,
+              interviewFormPath: detailFields.interviewFormPath,
+              resumePath: detailFields.resumePath,
+              photoIdProofPath: detailFields.photoIdProofPath,
+              addressProofPath: detailFields.addressProofPath,
+              degreeCertificatePath: detailFields.degreeCertificatePath,
+              letterOfGuaranteePath: detailFields.letterOfGuaranteePath,
+              officeTimeFramePath: detailFields.officeTimeFramePath,
+              dailyReportingPath: detailFields.dailyReportingPath,
+              leavePolicyPath: detailFields.leavePolicyPath,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return created;
     });
 
     await audit(user.id, "create", "Staff", staff.id, {
@@ -73,13 +116,73 @@ export async function updateStaff(
 ): Promise<ActionResult<{ id: string }>> {
   return withAuth(async (user) => {
     const parsed = staffUpdateSchema.parse(input);
-    const { id, ...data } = parsed;
+    const {
+      id,
+      name,
+      email,
+      phone,
+      employeeCode,
+      designation,
+      regionId,
+      reportingManagerId,
+      isActive,
+      ...detailFields
+    } = parsed;
     await checkRateLimit(user.id);
 
-    const staff = await prisma.staff.update({
-      where: { id },
-      data,
-      select: { id: true },
+    const staffData: Record<string, unknown> = {};
+    if (name !== undefined) staffData.name = name;
+    if (email !== undefined) staffData.email = email;
+    if (phone !== undefined) staffData.phone = phone;
+    if (employeeCode !== undefined) staffData.employeeCode = employeeCode;
+    if (designation !== undefined) staffData.designation = designation;
+    if (regionId !== undefined) staffData.regionId = regionId;
+    if (reportingManagerId !== undefined) staffData.reportingManagerId = reportingManagerId;
+    if (isActive !== undefined) staffData.isActive = isActive;
+
+    const detailData = {
+      department: detailFields.department,
+      alternatePhone: detailFields.alternatePhone,
+      presentCity: detailFields.presentCity,
+      dateOfJoining: detailFields.dateOfJoining,
+      dateOfExit: detailFields.dateOfExit,
+      fatherName: detailFields.fatherName,
+      motherName: detailFields.motherName,
+      permanentAddress: detailFields.permanentAddress,
+      communicationAddress: detailFields.communicationAddress,
+      dateOfBirth: detailFields.dateOfBirth,
+      nationality: detailFields.nationality,
+      religionCaste: detailFields.religionCaste,
+      maritalStatus: detailFields.maritalStatus,
+      passOutYear: detailFields.passOutYear,
+      otherQualification: detailFields.otherQualification,
+      otherPassOutYear: detailFields.otherPassOutYear,
+      interviewFormPath: detailFields.interviewFormPath,
+      resumePath: detailFields.resumePath,
+      photoIdProofPath: detailFields.photoIdProofPath,
+      addressProofPath: detailFields.addressProofPath,
+      degreeCertificatePath: detailFields.degreeCertificatePath,
+      letterOfGuaranteePath: detailFields.letterOfGuaranteePath,
+      officeTimeFramePath: detailFields.officeTimeFramePath,
+      dailyReportingPath: detailFields.dailyReportingPath,
+      leavePolicyPath: detailFields.leavePolicyPath,
+    };
+
+    const staff = await prisma.$transaction(async (tx) => {
+      const updated = await tx.staff.update({
+        where: { id },
+        data: {
+          ...staffData,
+          employeeDetail: {
+            upsert: {
+              create: detailData,
+              update: detailData,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return updated;
     });
 
     await audit(user.id, "update", "Staff", staff.id, {
@@ -114,7 +217,11 @@ export async function getStaff(
 
     const staff = await prisma.staff.findMany({
       where,
-      include: { region: true, reportingManager: { select: { id: true, name: true, designation: true } } },
+      include: {
+        region: true,
+        reportingManager: { select: { id: true, name: true, designation: true } },
+        employeeDetail: true,
+      },
       orderBy: { name: "asc" },
     });
 
@@ -128,7 +235,12 @@ export async function getStaffById(
   return withAuth(async () => {
     const staff = await prisma.staff.findUnique({
       where: { id },
-      include: { region: true, reportingManager: { select: { id: true, name: true, designation: true } }, subordinates: { select: { id: true, name: true, designation: true } } },
+      include: {
+        region: true,
+        reportingManager: { select: { id: true, name: true, designation: true } },
+        subordinates: { select: { id: true, name: true, designation: true } },
+        employeeDetail: true,
+      },
     });
     return staff;
   });

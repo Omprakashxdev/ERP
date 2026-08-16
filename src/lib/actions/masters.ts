@@ -22,13 +22,20 @@ export type MasterType =
   | "assetModel"
   | "orderMaster"
   | "workMaster"
+  | "typeMaster"
   | "dprMaster"
-  | "tsAaMaster";
+  | "tsAaMaster"
+  | "drawingMaster"
+  | "workOrderMaster"
+  | "contactMaster";
 
 interface MasterInput {
   id?: string;
   name?: string;
   referenceNumber?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
   url?: string;
   stateId?: string;
   makeId?: string;
@@ -55,6 +62,9 @@ export async function getMasterList(
         : undefined;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(prisma as any)[type]) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = await (prisma as any)[type].findMany({
       where,
       include,
@@ -78,6 +88,14 @@ export async function createMaster(
       data.referenceNumber = input.referenceNumber;
     } else {
       data.name = input.name;
+    }
+    if ((type === "drawingMaster" || type === "workOrderMaster") && input.referenceNumber) {
+      data.referenceNumber = input.referenceNumber;
+    }
+    if (type === "contactMaster") {
+      if (input.phone) data.phone = input.phone;
+      if (input.email) data.email = input.email;
+      if (input.address) data.address = input.address;
     }
     if (type === "platform" && input.url) data.url = input.url;
     if (type === "city" && input.stateId) data.stateId = input.stateId;
@@ -114,6 +132,14 @@ export async function updateMaster(
       if (rest.referenceNumber !== undefined) data.referenceNumber = rest.referenceNumber;
     } else {
       if (rest.name !== undefined) data.name = rest.name;
+    }
+    if ((type === "drawingMaster" || type === "workOrderMaster") && rest.referenceNumber !== undefined) {
+      data.referenceNumber = rest.referenceNumber;
+    }
+    if (type === "contactMaster") {
+      if (rest.phone !== undefined) data.phone = rest.phone;
+      if (rest.email !== undefined) data.email = rest.email;
+      if (rest.address !== undefined) data.address = rest.address;
     }
     if (type === "platform" && rest.url !== undefined) data.url = rest.url;
     if (type === "city" && rest.stateId !== undefined) data.stateId = rest.stateId;
