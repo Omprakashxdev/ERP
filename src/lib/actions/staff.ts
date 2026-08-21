@@ -105,7 +105,7 @@ export async function createStaff(
     });
 
     revalidatePath("/dashboard/fund-flow");
-    revalidatePath("/dashboard/staff");
+    revalidatePath("/dashboard/employee");
     revalidatePath("/dashboard/settings");
     return staff;
   }, mutationRoles);
@@ -190,7 +190,7 @@ export async function updateStaff(
     });
 
     revalidatePath("/dashboard/fund-flow");
-    revalidatePath("/dashboard/staff");
+    revalidatePath("/dashboard/employee");
     revalidatePath("/dashboard/settings");
     return staff;
   }, mutationRoles);
@@ -344,7 +344,7 @@ export async function updateReportingManager(
       value: reportingManagerId,
     });
 
-    revalidatePath("/dashboard/staff");
+    revalidatePath("/dashboard/employee");
     revalidatePath("/dashboard/settings");
     return updated;
   }, mutationRoles);

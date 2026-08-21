@@ -71,10 +71,10 @@ export const navGroups: NavGroup[] = [
         description: "Client master",
       },
       {
-        label: "Staff",
-        href: "/dashboard/staff",
+        label: "Employee",
+        href: "/dashboard/employee",
         icon: UserCog,
-        description: "Staff master",
+        description: "Employee master",
       },
     ],
   },

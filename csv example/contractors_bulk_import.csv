@@ -1,0 +1,6 @@
+name,contactPerson,phone,email,address,contractAmount,agreementDate,workOrderDate,tenderId,detailedOrder,workName,workType,serviceType,dprReference,tsAaReference,scheduleBAmount,raBillDetails,finalProgressAmount,finalProgressProjectExpense
+ABC Builders,Ramesh Sharma,9876543210,ramesh@abc.com,Mumbai,50000000,2025-01-10,2025-01-15,TND-001,Order-001,Building Renovation,BUILDING,CONSULTANCY,DPR-001,TSAA-001,45000000,RA1: 10M,40000000,500000
+XYZ Const,Suresh Verma,9876543211,suresh@xyz.com,Delhi,20000000,2024-11-01,2024-11-10,TND-002,Order-002,Road Repair,ROAD,EPC,DPR-002,TSAA-002,18000000,RA1: 5M,15000000,200000
+Delta Infra,Anil Kumar,9876543212,anil@deltainfra.com,Pune,150000000,2025-02-01,2025-02-15,TND-003,Order-003,Bridge Construction,INFRASTRUCTURE,PMC,DPR-003,TSAA-003,140000000,,0,0
+Omega Projects,Sunil Singh,9876543213,sunil@omega.com,Bangalore,80000000,2024-06-15,2024-07-01,TND-004,Order-004,Solar Panel Install,ENERGY,CONSULTANCY,DPR-004,TSAA-004,75000000,RA1: 20M,60000000,800000
+Sigma Engineering,Vijay Patel,9876543214,vijay@sigma.com,Ahmedabad,30000000,2025-03-10,2025-03-20,TND-005,Order-005,Water Pipeline,INFRASTRUCTURE,EPC,DPR-005,TSAA-005,28000000,,0,0

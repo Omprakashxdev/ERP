@@ -1,0 +1,6 @@
+date,dueDate,paymentType,category,detail,amount,status,remarks
+2025-01-15,2025-01-20,GST,GST,Monthly GST Filing,50000,PENDING,Clearance pending
+2025-01-31,2025-02-05,Salary,EXCISE,January Staff Salaries,250000,PAID,Processed via bank transfer
+2025-02-10,2025-02-15,TDS,TDS,Q4 TDS Return,15000,PENDING,Awaiting final calculation
+2025-02-01,2025-02-05,Rent,VEHICLE_LOAN,Mumbai HQ Rent,75000,PAID,Auto-debited
+2025-03-01,2025-03-10,Vendor Payment,GST,Advance for XYZ Const,1000000,PENDING,Awaiting site report

@@ -1,0 +1,6 @@
+project,project_region,project_client,project_workOrderDate,project_timeLimitMonths,project_workType,project_serviceType,miscExp,staffExp,totalProjectCost,completedWorkAmt,proposedDueBillAmount,feeReceived
+Metro Line 3 Phase 1,West Region,MMRDA,2025-02-01,36,INFRASTRUCTURE,CONSULTANCY,15000,50000,100000000,25000000,5000000,2000000
+Airport Terminal 2 Expansion,South Region,AAI,2025-03-15,48,BUILDING,PMC,20000,80000,250000000,10000000,8000000,3000000
+NH-48 Highway Upgrade,North Region,NHAI,2025-01-10,24,ROAD,EPC,10000,45000,75000000,50000000,15000000,10000000
+Pune IT Park Block C,West Region,MIDC,2025-04-01,18,BUILDING,CONSULTANCY,5000,20000,30000000,5000000,2000000,500000
+Solar Power Plant 50MW,East Region,SECI,2025-05-10,12,ENERGY,EPC,8000,35000,40000000,1000000,500000,100000

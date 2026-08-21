@@ -459,7 +459,11 @@ export async function importModule(
             for (const key of allowedFields) {
               if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
             }
-            await prisma.fundFlow.create({ data: cleanData as never });
+            await prisma.fundFlow.upsert({
+              where: { projectId: cleanData.projectId as string },
+              create: cleanData as any,
+              update: cleanData as any,
+            });
             break;
           }
           case "dueBills": {
@@ -492,7 +496,11 @@ export async function importModule(
             for (const key of allowedFields) {
               if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
             }
-            await prisma.workInProgress.create({ data: cleanData as never });
+            await prisma.workInProgress.upsert({
+              where: { projectId: cleanData.projectId as string },
+              create: cleanData as any,
+              update: cleanData as any,
+            });
             break;
           }
           case "vehicleLogBook": {
@@ -693,7 +701,7 @@ interface RelationResolver {
   lookup: (value: string) => Promise<string | null>;
   fuzzyLookup: (value: string) => Promise<string | null>;
   masterLabel: string;
-  autoCreate?: (value: string) => Promise<string | null>;
+  autoCreate?: (value: string, row: Record<string, string>) => Promise<string | null>;
 }
 
 async function resolveRelations(
@@ -717,6 +725,32 @@ async function resolveRelations(
           });
           return p?.id ?? null;
         },
+        autoCreate: async (name: string, row: Record<string, string>) => {
+          let regionName = row["project_region"];
+          let clientName = row["project_client"];
+          let region = regionName ? await prisma.region.findFirst({ where: { name: { equals: regionName, mode: "insensitive" } } }) : await prisma.region.findFirst();
+          if (!region) region = await prisma.region.create({ data: { name: regionName || "Default Region" } });
+          let client = clientName ? await prisma.client.findFirst({ where: { name: { equals: clientName, mode: "insensitive" } } }) : await prisma.client.findFirst();
+          if (!client) client = await prisma.client.create({ data: { name: clientName || "Default Client" } });
+          
+          const p = await prisma.project.create({ 
+            data: { 
+              name,
+              regionId: region.id,
+              clientId: client.id,
+              workOrderDate: row["project_workOrderDate"] ? new Date(row["project_workOrderDate"]) : new Date(),
+              timeLimitMonths: row["project_timeLimitMonths"] ? parseFloat(row["project_timeLimitMonths"]) : 12,
+              workType: row["project_workType"] || "AUTO",
+              serviceType: row["project_serviceType"] || "AUTO"
+            } 
+          });
+          await prisma.fundFlow.upsert({
+            where: { projectId: p.id },
+            create: { projectId: p.id, totalProjectCost: 0 },
+            update: {}
+          });
+          return p.id;
+        },
       },
     },
     dueBills: {
@@ -731,6 +765,32 @@ async function resolveRelations(
             where: { name: { equals: name, mode: "insensitive" } },
           });
           return p?.id ?? null;
+        },
+        autoCreate: async (name: string, row: Record<string, string>) => {
+          let regionName = row["project_region"];
+          let clientName = row["project_client"];
+          let region = regionName ? await prisma.region.findFirst({ where: { name: { equals: regionName, mode: "insensitive" } } }) : await prisma.region.findFirst();
+          if (!region) region = await prisma.region.create({ data: { name: regionName || "Default Region" } });
+          let client = clientName ? await prisma.client.findFirst({ where: { name: { equals: clientName, mode: "insensitive" } } }) : await prisma.client.findFirst();
+          if (!client) client = await prisma.client.create({ data: { name: clientName || "Default Client" } });
+          
+          const p = await prisma.project.create({ 
+            data: { 
+              name,
+              regionId: region.id,
+              clientId: client.id,
+              workOrderDate: row["project_workOrderDate"] ? new Date(row["project_workOrderDate"]) : new Date(),
+              timeLimitMonths: row["project_timeLimitMonths"] ? parseFloat(row["project_timeLimitMonths"]) : 12,
+              workType: row["project_workType"] || "AUTO",
+              serviceType: row["project_serviceType"] || "AUTO"
+            } 
+          });
+          await prisma.fundFlow.upsert({
+            where: { projectId: p.id },
+            create: { projectId: p.id, totalProjectCost: 0 },
+            update: {}
+          });
+          return p.id;
         },
       },
     },
@@ -747,6 +807,32 @@ async function resolveRelations(
           });
           return p?.id ?? null;
         },
+        autoCreate: async (name: string, row: Record<string, string>) => {
+          let regionName = row["project_region"];
+          let clientName = row["project_client"];
+          let region = regionName ? await prisma.region.findFirst({ where: { name: { equals: regionName, mode: "insensitive" } } }) : await prisma.region.findFirst();
+          if (!region) region = await prisma.region.create({ data: { name: regionName || "Default Region" } });
+          let client = clientName ? await prisma.client.findFirst({ where: { name: { equals: clientName, mode: "insensitive" } } }) : await prisma.client.findFirst();
+          if (!client) client = await prisma.client.create({ data: { name: clientName || "Default Client" } });
+          
+          const p = await prisma.project.create({ 
+            data: { 
+              name,
+              regionId: region.id,
+              clientId: client.id,
+              workOrderDate: row["project_workOrderDate"] ? new Date(row["project_workOrderDate"]) : new Date(),
+              timeLimitMonths: row["project_timeLimitMonths"] ? parseFloat(row["project_timeLimitMonths"]) : 12,
+              workType: row["project_workType"] || "AUTO",
+              serviceType: row["project_serviceType"] || "AUTO"
+            } 
+          });
+          await prisma.fundFlow.upsert({
+            where: { projectId: p.id },
+            create: { projectId: p.id, totalProjectCost: 0 },
+            update: {}
+          });
+          return p.id;
+        },
       },
       hoCoordinator: {
         masterLabel: "Staff master",
@@ -762,6 +848,37 @@ async function resolveRelations(
         },
       },
       roCoordinator: {
+        masterLabel: "Staff master",
+        lookup: async (name: string) => {
+          const s = await prisma.staff.findFirst({ where: { name, isActive: true } });
+          return s?.id ?? null;
+        },
+        fuzzyLookup: async (name: string) => {
+          const s = await prisma.staff.findFirst({
+            where: { name: { equals: name, mode: "insensitive" }, isActive: true },
+          });
+          return s?.id ?? null;
+        },
+      },
+    },
+    tenders: {
+      concernAuthority: {
+        masterLabel: "Staff master",
+        lookup: async (name: string) => {
+          const s = await prisma.staff.findFirst({ where: { name, isActive: true } });
+          return s?.id ?? null;
+        },
+        fuzzyLookup: async (name: string) => {
+          const s = await prisma.staff.findFirst({
+            where: { name: { equals: name, mode: "insensitive" }, isActive: true },
+          });
+          return s?.id ?? null;
+        },
+      },
+    },
+
+    assets: {
+      currentHolder: {
         masterLabel: "Staff master",
         lookup: async (name: string) => {
           const s = await prisma.staff.findFirst({ where: { name, isActive: true } });
@@ -960,7 +1077,7 @@ async function resolveRelations(
 
     if (!resolvedId) {
       if (resolver.autoCreate) {
-        resolvedId = await resolver.autoCreate(trimmedName);
+        resolvedId = await resolver.autoCreate(trimmedName, row);
         corrections.push(
           `Row ${rowIndex + 1}: Auto-created ${resolver.masterLabel} "${trimmedName}"`
         );
@@ -1056,17 +1173,17 @@ export async function getModuleTemplate(
 
 function getTemplateFields(module: string): string[] {
   const fieldMap: Record<string, string[]> = {
-    contractors: ["name", "contactPerson", "phone", "email", "address", "contractAmount", "agreementDate", "workOrderDate", "workName", "workType", "serviceType", "scheduleBAmount", "finalProgressAmount"],
-    tenders: ["name", "tenderId", "department", "state", "city", "platform", "workName", "workType", "serviceType", "tenderDate", "preBidMeetingDate", "biddingLastDate", "dateOfOpening", "tenderFeeAmount", "tenderFeeDate", "emdAmount", "emdDate", "l1ContractorName", "l1Amount", "status", "remarks"],
+    contractors: ["name", "contactPerson", "phone", "email", "address", "contractAmount", "agreementDate", "workOrderDate", "tenderId", "detailedOrder", "workName", "workType", "serviceType", "dprReference", "tsAaReference", "scheduleBAmount", "raBillDetails", "finalProgressAmount", "finalProgressProjectExpense"],
+    tenders: ["name", "tenderId", "department", "state", "city", "platform", "concernAuthority", "workName", "workType", "serviceType", "tenderDate", "preBidMeetingDate", "preBidMeetingAttended", "preBidMeetingDetails", "biddingLastDate", "dateOfOpening", "tenderFeeAmount", "tenderFeeDate", "tenderFeeMode", "emdAmount", "emdDate", "emdMode", "emdReturnCollectionDate", "l1ContractorName", "l1City", "l1Amount", "l2ContractorName", "l2City", "l2Amount", "l3ContractorName", "l3City", "l3Amount", "priceComparison", "negotiationMeetingDate", "negotiationMeeting", "negotiationMeetingAttended", "status", "remarks"],
     paymentSchedules: ["date", "dueDate", "paymentType", "category", "detail", "amount", "status", "remarks"],
-    assets: ["itemCode", "name", "category", "make", "model", "yearOfPurchase", "quantity", "securityCode", "assigneeType", "assignee", "assignedQuantity", "responsiblePerson", "status", "remarks"],
-    fundFlow: ["project", "miscExp", "staffExp", "totalProjectCost", "completedWorkAmt", "proposedDueBillAmount", "feeReceived"],
-    dueBills: ["project", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
-    wip: ["project", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "amountOfWorkDone", "finalProgressAmount", "completionDate", "remarks"],
-    vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucExpiryDate"],
+    assets: ["itemCode", "name", "category", "make", "model", "yearOfPurchase", "quantity", "securityCode", "assigneeType", "assignee", "assignedQuantity", "responsiblePerson", "currentHolder", "status", "remarks"],
+    fundFlow: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "miscExp", "staffExp", "totalProjectCost", "completedWorkAmt", "proposedDueBillAmount", "feeReceived"],
+    dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
+    wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
+    vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
     inOutRegister: ["documentDate", "receivedDate", "documentRefNo", "details", "client", "actionSuggestedStaff", "replyDate", "replyRefNo"],
-    tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "status"],
-    tasks: ["title", "description", "status", "priority", "assignedTo", "project", "dueDate"],
+    tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
+    tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],
     staff: ["name", "email", "phone", "employeeCode", "designation", "region", "isActive", "reportingManager"],
     masters_region: ["name", "abbreviation"],
@@ -1089,17 +1206,17 @@ function getTemplateFields(module: string): string[] {
 
 function getTemplateSampleRow(module: string): string[] {
   const sampleMap: Record<string, string[]> = {
-    contractors: ["ABC Contractors", "Jane Doe", "9876543210", "jane@abc.com", "123 Main St", "500000", "2025-01-15", "2025-02-01", "Building Construction", "BUILDING", "CONSULTancy", "", ""],
-    tenders: ["Tender Name", "TND-2025-001", "PWD", "Maharashtra", "Mumbai", "e-Tender", "Road Work", "BUILDING", "CONSULTANCY", "2025-01-10", "", "2025-01-25", "2025-01-30", "5000", "2025-01-09", "25000", "2025-01-09", "XYZ Corp", "450000", "SUBMITTED", ""],
+    contractors: ["ABC Contractors", "Jane Doe", "9876543210", "jane@abc.com", "123 Main St", "500000", "2025-01-15", "2025-02-01", "TND-123", "Order details", "Building Construction", "BUILDING", "CONSULTancy", "DPR-123", "TSAA-123", "0", "RA details", "0", "0"],
+    tenders: ["Tender Name", "TND-2025-001", "PWD", "Maharashtra", "Mumbai", "e-Tender", "John Doe", "Road Work", "BUILDING", "CONSULTANCY", "2025-01-10", "2025-01-15", "yes", "Meeting details", "2025-01-25", "2025-01-30", "5000", "2025-01-09", "DD", "25000", "2025-01-09", "DD", "2025-02-15", "XYZ Corp", "Mumbai", "450000", "ABC Corp", "Pune", "460000", "DEF Corp", "Nashik", "470000", "L1 is lowest", "2025-02-05", "Negotiation done", "yes", "SUBMITTED", "Looks good"],
     paymentSchedules: ["2025-01-15", "2025-02-15", "GST Payment", "GST", "Monthly GST", "50000", "PENDING", ""],
-    assets: ["AST-001", "Dell Laptop", "Electronics", "Dell", "Latitude 5520", "2025-01-10", "1", "SC-001", "STAFF", "", "1", "", "ASSIGNED", ""],
-    fundFlow: ["Project Alpha", "0", "0", "1000000", "500000", "200000", "50000"],
-    dueBills: ["Project Alpha", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
-    wip: ["Project Alpha", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "0", "0", "", ""],
-    vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "2026-06-01"],
+    assets: ["AST-001", "Dell Laptop", "Electronics", "Dell", "Latitude 5520", "2025-01-10", "1", "SC-001", "STAFF", "", "1", "", "John Doe", "ASSIGNED", ""],
+    fundFlow: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "0", "0", "1000000", "500000", "200000", "50000"],
+    dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
+    wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
+    vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
     inOutRegister: ["2025-01-15", "2025-01-16", "DOC-001", "Project document", "Client Name", "John Staff", "", ""],
-    tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "DRAFT"],
-    tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Project Alpha", "2025-01-31"],
+    tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
+    tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],
     staff: ["John Doe", "john@company.com", "9876543210", "EMP001", "Engineer", "Mumbai", "Active", "Jane Manager"],
     masters_region: ["Mumbai Region", "MUM"],

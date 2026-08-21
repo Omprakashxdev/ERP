@@ -117,13 +117,15 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
       "tenderFeeDate",
       "emdDate",
       "emdReturnCollectionDate",
+      "negotiationMeetingDate",
     ],
     decimalFields: ["tenderFeeAmount", "emdAmount", "l1Amount", "l2Amount", "l3Amount"],
     intFields: [],
+    booleanFields: ["preBidMeetingAttended", "negotiationMeetingAttended"],
     enumFields: {
       status: ["UNDER_PREPARATION", "SUBMITTED", "UNDER_EVALUATION", "WON", "LOST", "WITHDRAWN", "CANCELLED"],
     },
-    relationFields: [],
+    relationFields: ["concernAuthority"],
   },
   paymentSchedules: {
     label: "Payment Schedules",
@@ -166,7 +168,7 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     enumFields: {
       status: ["AVAILABLE", "ASSIGNED", "UNDER_MAINTENANCE", "DISPOSED"],
     },
-    relationFields: [],
+    relationFields: ["currentHolder"],
   },
   inOutRegister: {
     label: "In-Out Register",

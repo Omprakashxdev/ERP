@@ -10,7 +10,7 @@ import { UserCog } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
 
 export const metadata = {
-  title: "Staff — SAEC ERP",
+  title: "Employee — SAEC ERP",
 };
 
 export default async function StaffPage() {
@@ -39,13 +39,13 @@ export default async function StaffPage() {
             <UserCog className="h-4 w-4" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Employee</h1>
             <p className="text-sm text-zinc-500">
-              Manage staff master, designations, and regions
+              Manage employee master, designations, and regions
             </p>
           </div>
         </div>
-        {canManage && <BulkImportDialog module="staff" moduleLabel="Staff" />}
+        {canManage && <BulkImportDialog module="staff" moduleLabel="Employee" />}
       </div>
 
       <Card className="shadow-sm">

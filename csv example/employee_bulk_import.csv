@@ -1,0 +1,6 @@
+name,email,phone,employeeCode,designation,region,isActive,reportingManager
+Alice Smith,alice.smith@example.com,9876543210,EMP-002,Senior Engineer,West Region,Active,Amit Verma
+Bob Jones,bob.jones@example.com,9876543211,EMP-003,Site Supervisor,North Region,Active,Amit Verma
+Charlie Davis,charlie.davis@example.com,9876543212,EMP-004,Project Coordinator,South Region,Active,Amit Verma
+Diana Prince,diana.prince@example.com,9876543213,EMP-005,Consultant,East Region,Active,Amit Verma
+Evan Wright,evan.wright@example.com,9876543214,EMP-006,Safety Officer,West Region,Active,Amit Verma
