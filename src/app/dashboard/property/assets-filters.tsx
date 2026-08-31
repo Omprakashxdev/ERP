@@ -39,7 +39,7 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    router.push(`/dashboard/assets${buildQueryString()}`);
+    router.push(`/dashboard/property${buildQueryString()}`);
   }
 
   function handleClear() {
@@ -47,7 +47,7 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
     setCategory("");
     setStatus("");
     setYearOfPurchase("");
-    router.push("/dashboard/assets");
+    router.push("/dashboard/property");
   }
 
   return (

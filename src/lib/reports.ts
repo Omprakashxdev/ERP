@@ -452,7 +452,7 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
 export const REPORT_CATEGORIES: { id: ReportCategory; label: string; icon: string }[] = [
   { id: "in-out-register", label: "In-Out Register", icon: "ArrowLeftRight" },
   { id: "vehicle-log-book", label: "Vehicle Log Book", icon: "Car" },
-  { id: "assets", label: "Assets", icon: "Box" },
+  { id: "assets", label: "Property", icon: "Box" },
   { id: "due-bills", label: "Due Bills", icon: "FileText" },
   { id: "fund-flow", label: "Fund Flow", icon: "Landmark" },
   { id: "tenders", label: "Tenders", icon: "ClipboardList" },

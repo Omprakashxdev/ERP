@@ -87,7 +87,7 @@ export async function createAsset(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     return { id: asset.id };
   });
 }
@@ -106,7 +106,7 @@ export async function updateAsset(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     return { id: asset.id };
   });
 }
@@ -121,7 +121,7 @@ export async function deleteAsset(
 
     await audit(user.id, "delete", "Asset", asset.id, {});
 
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     return { id: asset.id };
   });
 }
@@ -263,7 +263,7 @@ export async function createAssetMovement(
       toStaffId: parsed.toStaffId,
     });
 
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     return { id: movement.id };
   });
 }

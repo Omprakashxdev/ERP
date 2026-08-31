@@ -22,7 +22,7 @@ const modules = [
   { key: "tenders", label: "Tenders" },
   { key: "paymentSchedules", label: "Payment Schedules" },
   { key: "vehicleLogBook", label: "Vehicle Log Book" },
-  { key: "assets", label: "Assets" },
+  { key: "assets", label: "Property" },
   { key: "inOutRegister", label: "In-Out Register" },
   { key: "tadaBills", label: "TADA Bills" },
   { key: "taskManagement", label: "Tasks" },

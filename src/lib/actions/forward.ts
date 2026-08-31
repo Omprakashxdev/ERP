@@ -39,7 +39,7 @@ export async function createForward(
     });
 
     revalidatePath("/dashboard/tasks");
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     revalidatePath("/dashboard/tada-bills");
     revalidatePath("/dashboard/due-bills");
     revalidatePath("/dashboard/in-out-register");
@@ -69,7 +69,7 @@ export async function acknowledgeForward(
     });
 
     revalidatePath("/dashboard/tasks");
-    revalidatePath("/dashboard/assets");
+    revalidatePath("/dashboard/property");
     revalidatePath("/dashboard/tada-bills");
     revalidatePath("/dashboard/due-bills");
     revalidatePath("/dashboard/in-out-register");

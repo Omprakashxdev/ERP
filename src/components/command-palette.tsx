@@ -43,7 +43,7 @@ const navigationItems = [
   { label: "Tenders", href: "/dashboard/tenders", icon: ClipboardList },
   { label: "Payment Schedules", href: "/dashboard/payment-schedules", icon: CalendarDays },
   { label: "Vehicle Log Book", href: "/dashboard/vehicle-log-book", icon: Car },
-  { label: "Assets", href: "/dashboard/assets", icon: Box },
+  { label: "Property", href: "/dashboard/property", icon: Box },
   { label: "In-Out Register", href: "/dashboard/in-out-register", icon: ArrowLeftRight },
   { label: "TADA Bills", href: "/dashboard/tada-bills", icon: ReceiptText },
   { label: "Tasks", href: "/dashboard/tasks", icon: CheckSquare },
@@ -155,7 +155,7 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem
             onSelect={() => {
-              router.push("/dashboard/assets");
+              router.push("/dashboard/property");
               setOpen(false);
             }}
           >

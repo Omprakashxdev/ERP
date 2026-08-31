@@ -122,8 +122,8 @@ export const navGroups: NavGroup[] = [
         description: "Vehicle tracking",
       },
       {
-        label: "Assets",
-        href: "/dashboard/assets",
+        label: "Property",
+        href: "/dashboard/property",
         icon: Box,
         description: "Equipment & property",
       },

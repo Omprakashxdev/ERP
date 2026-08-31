@@ -123,7 +123,7 @@ export default async function DashboardPage() {
     { label: "Tenders", value: `${activeTenders}`, sub: "active", icon: ClipboardList, href: "/dashboard/tenders", color: "text-teal-700 bg-teal-50" },
     { label: "Payment Schedules", value: "", sub: "View schedule", icon: Wallet, href: "/dashboard/payment-schedules", color: "text-teal-700 bg-teal-50" },
     { label: "Vehicle Log Book", value: `${activeVehicles}`, sub: "active", icon: Car, href: "/dashboard/vehicle-log-book", color: "text-teal-700 bg-teal-50" },
-    { label: "Assets", value: `${totalAssets}`, sub: "items", icon: Box, href: "/dashboard/assets", color: "text-teal-700 bg-teal-50" },
+    { label: "Property", value: `${totalAssets}`, sub: "items", icon: Box, href: "/dashboard/property", color: "text-teal-700 bg-teal-50" },
     { label: "TADA Bills", value: `${pendingTadaClaims}`, sub: "pending", icon: ReceiptText, href: "/dashboard/tada-bills", color: "text-teal-700 bg-teal-50" },
     { label: "Tasks", value: `${openTasks}`, sub: "open", icon: CheckSquare, href: "/dashboard/tasks", color: "text-teal-700 bg-teal-50" },
   ];

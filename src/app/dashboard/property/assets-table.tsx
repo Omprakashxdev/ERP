@@ -264,7 +264,7 @@ export function AssetsTable({
               size="sm"
               disabled={page <= 1}
               onClick={() =>
-                router.push(`/dashboard/assets${buildQueryString(page - 1)}`)
+                router.push(`/dashboard/property${buildQueryString(page - 1)}`)
               }
             >
               <ChevronLeft className="mr-1 h-4 w-4" />
@@ -275,7 +275,7 @@ export function AssetsTable({
               size="sm"
               disabled={page >= totalPages}
               onClick={() =>
-                router.push(`/dashboard/assets${buildQueryString(page + 1)}`)
+                router.push(`/dashboard/property${buildQueryString(page + 1)}`)
               }
             >
               Next

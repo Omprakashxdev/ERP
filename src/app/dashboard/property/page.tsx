@@ -69,14 +69,14 @@ export default async function AssetsPage({
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Property &amp; Asset List
+              Property
             </h1>
             <p className="text-sm text-zinc-500">
               Track organizational assets, assignments, and warranty documents
             </p>
           </div>
         </div>
-        <BulkImportDialog module="assets" moduleLabel="Assets" />
+        <BulkImportDialog module="assets" moduleLabel="Property" />
       </div>
 
 

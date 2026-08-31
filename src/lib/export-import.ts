@@ -159,7 +159,7 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     relationFields: ["journeyLogs"],
   },
   assets: {
-    label: "Assets",
+    label: "Property",
     model: "asset",
     excludedFields: [],
     dateFields: [],

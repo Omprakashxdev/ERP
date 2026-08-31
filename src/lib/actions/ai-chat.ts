@@ -90,7 +90,7 @@ Vehicle fields: registrationNumber, make, model, year, status, rcNumber, rcExpir
 Journey log fields: vehicle, journeyDate, fromLocation, toLocation, startKm, endKm, totalKm, fuelExpense, otherExpense, approvalStatus.
 Approval statuses: PENDING, APPROVED, REJECTED.
 
-### Assets (/dashboard/assets)
+### Assets (/dashboard/property)
 Equipment tracking. Fields: itemCode, name, category, make, model, yearOfPurchase, quantity, securityCode, assigneeType, assignee, assignedQuantity, responsiblePerson, status.
 Statuses: AVAILABLE, ASSIGNED, UNDER_MAINTENANCE, DISPOSED.
 
