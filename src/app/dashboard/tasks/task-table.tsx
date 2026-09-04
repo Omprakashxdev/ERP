@@ -123,13 +123,17 @@ export function TaskTable({
                   task.status !== "CANCELLED";
 
                 return (
-                  <TableRow key={task.id}>
+                  <TableRow
+                    key={task.id}
+                    onClick={() => setEditTask(task)}
+                    className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                  >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-1.5">
                         {isOverdue && (
                           <AlertCircle className="h-3.5 w-3.5 text-red-500" />
                         )}
-                        {task.title}
+                        <span className="font-semibold text-zinc-900">{task.title}</span>
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -181,14 +185,21 @@ export function TaskTable({
                         <span className="text-zinc-400">Manual</span>
                       )}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell
+                      className="whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="flex gap-1">
                         {canEdit(task.status) && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0"
-                            onClick={() => setEditTask(task)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditTask(task);
+                            }}
+                            title="Edit task"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -198,7 +209,11 @@ export function TaskTable({
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0"
-                            onClick={() => setStatusTask(task)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusTask(task);
+                            }}
+                            title="Change status"
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>

@@ -148,41 +148,52 @@ export function AssetsTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedAsset(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
                     {row.itemCode}
                   </TableCell>
                   <TableCell className="whitespace-nowrap font-mono text-zinc-600">
                     {row.securityCode || "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">{row.name}</TableCell>
+                  <TableCell className="whitespace-nowrap font-medium text-zinc-900">{row.name}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     {row.category ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {[row.make, row.model].filter(Boolean).join(" ") || "—"}
+                    {[row.make, row.model].filter(Boolean).join(" / ") || "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="whitespace-nowrap font-mono">
                     {row.yearOfPurchase ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono">
                     {formatQuantity(row.quantity)}
                   </TableCell>
-                  <TableCell
-                    className={`whitespace-nowrap text-right font-mono ${
-                      row.remainingQuantity < 0 ? "text-red-600" : ""
-                    }`}
-                  >
-                    {formatQuantity(row.remainingQuantity)}
+                  <TableCell className="whitespace-nowrap text-right font-mono">
+                    <span
+                      className={
+                        Number(row.remainingQuantity) === 0
+                          ? "text-red-600 font-semibold"
+                          : "text-zinc-700"
+                      }
+                    >
+                      {formatQuantity(row.remainingQuantity)}
+                    </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {row.assignee ? (
-                      <span className="text-xs">
-                        {formatEnum(row.assigneeType)}: {row.assignee}
+                    <div className="flex flex-col">
+                      <span className="font-medium text-zinc-800">
+                        {row.assignee || "—"}
                       </span>
-                    ) : (
-                      "—"
-                    )}
+                      {row.assigneeType && (
+                        <span className="text-[10px] text-zinc-400">
+                          {formatEnum(row.assigneeType)}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {row.responsiblePerson ?? "—"}
@@ -190,7 +201,10 @@ export function AssetsTable({
                   <TableCell className="whitespace-nowrap">
                     {row.currentHolder?.name ?? "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell
+                    className="whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {row.billWarrantyPath ? (
                       <a
                         href={row.billWarrantyPath}
@@ -214,13 +228,19 @@ export function AssetsTable({
                       {formatEnum(row.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSelectedAsset(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAsset(row);
+                        }}
                         title="Edit asset"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -229,7 +249,10 @@ export function AssetsTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setTransferAsset(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTransferAsset(row);
+                        }}
                         title="Transfer / Movement"
                       >
                         <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -238,7 +261,10 @@ export function AssetsTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setHistoryAsset(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHistoryAsset(row);
+                        }}
                         title="Movement history"
                       >
                         <History className="h-3.5 w-3.5" />

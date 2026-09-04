@@ -149,7 +149,11 @@ export function StaffTable({
               </TableRow>
             ) : (
               filtered.map((s, index) => (
-                <TableRow key={s.id}>
+                <TableRow
+                  key={s.id}
+                  onClick={() => setViewStaff(s)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="text-center font-mono text-xs text-zinc-500">
                     {index + 1}
                   </TableCell>
@@ -157,13 +161,9 @@ export function StaffTable({
                     {s.employeeCode ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setViewStaff(s)}
-                      className="font-medium text-left text-zinc-900 hover:text-teal-700 hover:underline"
-                    >
+                    <span className="font-semibold text-zinc-900">
                       {s.name}
-                    </button>
+                    </span>
                   </TableCell>
                   <TableCell>{s.designation ?? "—"}</TableCell>
                   <TableCell>{s.employeeDetail?.department ?? "—"}</TableCell>
@@ -178,23 +178,20 @@ export function StaffTable({
                       {s.isActive ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell
+                    className="text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
-                        onClick={() => setViewStaff(s)}
-                        title="View employee profile & documents"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
                       {canManage && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
-                          onClick={() => setSelectedStaff(s)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStaff(s);
+                          }}
                           title="Edit staff details"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -866,7 +863,11 @@ function StaffFormDialog({
                       onValueChange={(v) => updateField("regionId", v ?? "")}
                     >
                       <SelectTrigger id="staff-region">
-                        <SelectValue placeholder="Select region" />
+                        <SelectValue placeholder="Select region">
+                          {(value: string) =>
+                            regions.find((r) => r.id === value)?.name ?? "Select region"
+                          }
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">— None —</SelectItem>
@@ -886,7 +887,14 @@ function StaffFormDialog({
                       onValueChange={(v) => updateField("reportingManagerId", v ?? "")}
                     >
                       <SelectTrigger id="staff-manager">
-                        <SelectValue placeholder="Select manager" />
+                        <SelectValue placeholder="Select manager">
+                          {(value: string) => {
+                            const mgr = allStaff.find((s) => s.id === value);
+                            return mgr
+                              ? `${mgr.name}${mgr.designation ? ` (${mgr.designation})` : ""}`
+                              : "Select manager";
+                          }}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">— None —</SelectItem>
@@ -928,7 +936,9 @@ function StaffFormDialog({
                       onValueChange={(v) => updateField("isActive", v === "true")}
                     >
                       <SelectTrigger id="staff-status">
-                        <SelectValue />
+                        <SelectValue>
+                          {(value: string) => (value === "true" ? "Active" : "Inactive")}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="true">Active</SelectItem>

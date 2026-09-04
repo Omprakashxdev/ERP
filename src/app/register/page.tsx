@@ -209,7 +209,14 @@ export default function RegisterPage() {
                 ) : (
                   <Select value={reportingManagerId} onValueChange={(v) => setReportingManagerId(v ?? "")}>
                     <SelectTrigger className="w-full h-11">
-                      <SelectValue placeholder="Select manager" />
+                      <SelectValue placeholder="Select manager">
+                        {(value: string) => {
+                          const mgr = staff.find((s) => s.id === value);
+                          return mgr
+                            ? `${mgr.name}${mgr.designation ? ` (${mgr.designation})` : ""}`
+                            : "Select manager";
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {staff.map((s) => (

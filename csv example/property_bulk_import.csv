@@ -1,0 +1,3 @@
+itemCode,name,category,make,model,yearOfPurchase,quantity,securityCode,billWarrantyPath,assigneeType,assignee,assignedQuantity,responsiblePerson,currentHolder,status,remarks
+AST-001,Laptop Dell XPS,Electronics,Dell,XPS 13,2023,5,SEC001,,PERSON,John Doe,1,Jane Smith,,AVAILABLE,New purchase
+AST-002,Office Chair,Furniture,IKEA,Markus,2022,10,SEC002,,OFFICE,HQ,10,Admin,,ASSIGNED,

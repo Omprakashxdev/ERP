@@ -9,6 +9,9 @@ export type InOutRegisterListRow = InOutRegister & {
 
 export type InOutRegisterWithComputed = InOutRegisterListRow & {
   isPendingReply: boolean;
+  isOverdue?: boolean;
+  daysUntilDue?: number | null;
+  daysOverdue?: number | null;
   ageInDays: number;
   ccStaffNames: string;
 };

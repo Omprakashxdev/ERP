@@ -156,8 +156,12 @@ export function PaymentSchedulesTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="whitespace-nowrap">
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedSchedule(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
+                  <TableCell className="whitespace-nowrap font-medium text-zinc-900">
                     {formatDate(row.date)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -177,7 +181,7 @@ export function PaymentSchedulesTable({
                   <TableCell className="max-w-xs truncate">
                     {row.detail ?? "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="whitespace-nowrap text-right font-mono font-medium">
                     {formatMoney(row.amount)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -191,12 +195,18 @@ export function PaymentSchedulesTable({
                         : ""}
                     </Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => setSelectedSchedule(row)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSchedule(row);
+                      }}
                       title="Edit schedule"
                     >
                       <Pencil className="h-3.5 w-3.5" />

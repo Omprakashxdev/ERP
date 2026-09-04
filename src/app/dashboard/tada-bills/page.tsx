@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ReceiptText, Plus } from "lucide-react";
 import { TadaClaimFormDialog } from "./tada-bills-form";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 interface TadaBillsPageProps {
   searchParams: Promise<{
@@ -52,23 +53,17 @@ export default async function TadaBillsPage({ searchParams }: TadaBillsPageProps
 
   return (
     <div className="mx-auto max-w-7xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <ReceiptText className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">TADA Bills</h1>
-            <p className="text-sm text-zinc-500">
-              Travel and daily allowance claims
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <BulkImportDialog module="tadaBills" moduleLabel="TADA Bills" />
-          <TadaClaimFormDialog staff={serialize(staff) as never} regions={serialize(regions) as never} cities={serialize(cities) as never} />
-        </div>
-      </div>
+      <ModuleHeader
+        icon={ReceiptText}
+        title="TADA Bills"
+        description="Travel and daily allowance claims"
+        reportCategory="tada-bills"
+        totalCount={total}
+        countLabel="Claims"
+      >
+        <BulkImportDialog module="tadaBills" moduleLabel="TADA Bills" />
+        <TadaClaimFormDialog staff={serialize(staff) as never} regions={serialize(regions) as never} cities={serialize(cities) as never} />
+      </ModuleHeader>
 
       <TadaBillsFilters staff={serialize(staff) as never} />
 

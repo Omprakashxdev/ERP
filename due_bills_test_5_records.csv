@@ -1,0 +1,6 @@
+project,project_region,project_client,project_workOrderDate,project_timeLimitMonths,project_workType,project_serviceType,scheme,grossAmount,sgst,cgst,billAmount,chequeAmount,sd,itTds,receivedAmount,billDate,receiveDate,status,remarks
+Ring Road Widening & Flyover Ph-2,Rajkot,GUDM,2026-05-10,24,ROAD,PMC,RA Bill 01 - Earthwork & Sub-base,500000,45000,45000,590000,550000,30000,10000,590000,2026-06-15,2026-07-10,PAID,First milestone cleared by GUDM
+Underground Drainage Network Zone 3,Surat,Morbi Nagarpalika,2026-07-01,18,DRAINAGE,TPI,Stage 1 - Survey & Inception Report,200000,18000,18000,236000,0,0,0,0,2026-07-20,,PENDING,Submitted to Chief Officer Morbi
+Smart City Solar Rooftop Installation,Ahmedabad,SECI,2026-04-15,12,ELECTRICAL,CONSULTANCY,Stage 2 - Feasibility & Design,150000,13500,13500,177000,100000,0,0,100000,2026-05-25,2026-06-15,PARTIAL,Partial payment received from SECI
+Multi-Level Car Parking Facility,West Region,MIDC,2026-06-20,15,BUILDING,PMC,Stage 1 - Architectural & Structural Drawings,300000,27000,27000,354000,0,0,0,0,2026-07-15,,PENDING,Under review with MIDC executive engineer
+Industrial Effluent Treatment Plant CETP,East Region,ABC Corp,2026-08-01,20,ENVIRONMENTAL,PMC,Stage 2 - EIA Approval & DPR,400000,36000,36000,472000,440000,20000,12000,472000,2026-08-15,2026-08-28,PAID,Cleared by ABC Corp accounts

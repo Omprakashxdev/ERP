@@ -1,0 +1,6 @@
+name,email,phone,employeeCode,designation,region,isActive,reportingManager
+Krunal Parmar,krunal.parmar@saec.in,9825100001,SAEC007,Senior Bridge Design Engineer,Ahmedabad,true,Jitendra Patel
+Deepak Solanki,deepak.solanki@saec.in,9825100002,SAEC008,Lead Geotechnical Engineer,Rajkot,true,Amit Verma
+Hiral Panchal,hiral.panchal@saec.in,9825100003,SAEC009,CAD & BIM Modeling Specialist,Surat,true,Foram Shah
+Bhavin Vora,bhavin.vora@saec.in,9825100004,SAEC010,Environmental & Safety Officer,Gandhinagar,true,Bob Jones
+Sneha Joshi,sneha.joshi@saec.in,9825100005,SAEC011,Billing & Quantity Surveyor,Ahmedabad,true,Neha Patel

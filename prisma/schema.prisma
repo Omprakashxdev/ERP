@@ -554,6 +554,9 @@ model InOutRegister {
   replyRefNo             String?                 @unique
   inwardType             String?
   receivedByPersonName   String?
+  department             String?
+  replyRequired          Boolean                 @default(false)
+  replyDueDate           DateTime?
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -569,6 +572,9 @@ model InOutRegister {
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
   @@index([replyDate])
+  @@index([department])
+  @@index([replyRequired])
+  @@index([replyDueDate])
 }
 
 model InOutRegisterDocument {

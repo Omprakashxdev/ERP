@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import {
+  computeAgeInDaysIST,
+  formatDateIST,
+  toInputDateIST,
+  getTodayISTDateString,
+} from "@/lib/date-utils";
 
 export type ReportCategory =
   | "in-out-register"
@@ -617,44 +623,75 @@ async function runInOutGeneral(params?: { dateFrom?: Date; dateTo?: Date }) {
   });
 
   return {
-    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Details", "Action Staff", "Reply Date", "Reply Ref No", "Age (days)"],
+    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Department", "Details", "Reply Required", "Reply Due Date", "Action Staff", "Reply Date", "Reply Ref No", "Age (days)"],
     rows: rows.map((r) => ({
       Direction: r.direction === "OUTWARD" ? "Outward" : "Inward",
       "Doc Date": r.documentDate,
       "Received/Sent Date": r.receivedDate,
       "Doc Ref No": r.documentRefNo,
       Client: r.client.name,
+      Department: r.department ?? "—",
       Details: r.details ?? "",
+      "Reply Required": r.replyRequired ? "Yes" : "No",
+      "Reply Due Date": r.replyDueDate ? formatDateIST(r.replyDueDate) : "—",
       "Action Staff": r.actionSuggestedStaff?.name ?? "—",
       "Reply Date": r.replyDate ?? "—",
       "Reply Ref No": r.replyRefNo ?? "—",
-      "Age (days)": Math.floor((Date.now() - new Date(r.receivedDate).getTime()) / 86400000),
+      "Age (days)": computeAgeInDaysIST(r.receivedDate),
     })),
   };
 }
 
 async function runInOutPendingReply(params?: { dateFrom?: Date; dateTo?: Date }) {
-  const where = { ...dateFilter(params), replyDate: null, direction: "INWARD" as const };
+  const where = {
+    ...dateFilter(params),
+    replyRequired: true,
+    replyDate: null,
+    direction: "INWARD" as const,
+  };
   const rows = await prisma.inOutRegister.findMany({
     where,
     include: {
       client: { select: { name: true } },
       actionSuggestedStaff: { select: { name: true } },
     },
-    orderBy: { receivedDate: "asc" },
+    orderBy: [{ replyDueDate: "asc" }, { receivedDate: "asc" }],
     take: 500,
   });
 
+  const nowStr = getTodayISTDateString();
+  const [ny, nm, nd] = nowStr.split("-").map(Number);
+  const nowUtc = Date.UTC(ny, nm - 1, nd);
+
   return {
-    columns: ["Received Date", "Doc Ref No", "Client", "Details", "Action Staff", "Age (days)"],
-    rows: rows.map((r) => ({
-      "Received Date": r.receivedDate,
-      "Doc Ref No": r.documentRefNo,
-      Client: r.client.name,
-      Details: r.details ?? "",
-      "Action Staff": r.actionSuggestedStaff?.name ?? "—",
-      "Age (days)": Math.floor((Date.now() - new Date(r.receivedDate).getTime()) / 86400000),
-    })),
+    columns: ["Received Date", "Doc Ref No", "Client", "Department", "Details", "Reply Due Date", "Due Status", "Action Staff", "Age (days)"],
+    rows: rows.map((r) => {
+      let dueStatus = "Pending";
+      if (r.replyDueDate) {
+        const dueStr = toInputDateIST(r.replyDueDate);
+        const [dy, dm, dd] = dueStr.split("-").map(Number);
+        const dueUtc = Date.UTC(dy, dm - 1, dd);
+        const diff = Math.round((dueUtc - nowUtc) / 86400000);
+        if (diff < 0) {
+          dueStatus = `Overdue (${Math.abs(diff)}d)`;
+        } else if (diff === 0) {
+          dueStatus = "Due Today";
+        } else {
+          dueStatus = `Due in ${diff}d`;
+        }
+      }
+      return {
+        "Received Date": r.receivedDate,
+        "Doc Ref No": r.documentRefNo,
+        Client: r.client.name,
+        Department: r.department ?? "—",
+        Details: r.details ?? "",
+        "Reply Due Date": r.replyDueDate ? formatDateIST(r.replyDueDate) : "—",
+        "Due Status": dueStatus,
+        "Action Staff": r.actionSuggestedStaff?.name ?? "—",
+        "Age (days)": computeAgeInDaysIST(r.receivedDate),
+      };
+    }),
     summary: { "Total pending": rows.length },
   };
 }
@@ -1290,18 +1327,19 @@ async function runFundFlowRegion(_params?: { dateFrom?: Date; dateTo?: Date }) {
 
 async function runFundFlowProject(_params?: { dateFrom?: Date; dateTo?: Date }) {
   const flows = await prisma.fundFlow.findMany({
-    include: { project: { select: { name: true } } },
+    include: { project: { select: { name: true, totalFee: true } } },
     take: 500,
   });
   return {
-    columns: ["Project", "Total Cost", "Completed Amt", "Remaining", "Fee Received", "Fee Remaining"],
+    columns: ["Project", "Total Cost", "Completed Amt", "Remaining Work", "Total Fee", "Fee Received", "Remaining Fee"],
     rows: flows.map((f) => ({
       Project: f.project.name,
       "Total Cost": Number(f.totalProjectCost),
       "Completed Amt": Number(f.completedWorkAmt),
-      Remaining: Number(f.totalProjectCost) - Number(f.completedWorkAmt),
+      "Remaining Work": Number(f.totalProjectCost) - Number(f.completedWorkAmt),
+      "Total Fee": Number(f.project.totalFee),
       "Fee Received": Number(f.feeReceived),
-      "Fee Remaining": Number(f.proposedDueBillAmount) - Number(f.feeReceived),
+      "Remaining Fee": Number(f.project.totalFee) - Number(f.feeReceived),
     })),
   };
 }

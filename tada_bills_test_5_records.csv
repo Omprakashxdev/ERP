@@ -1,0 +1,6 @@
+staff,tourPurpose,fromDate,toDate,location,travelExpense,accommodationExp,foodExpense,localConveyance,otherExpense,totalClaimAmount,advanceAmount,adjustedAmount,balanceAmount,status,rejectReason
+Amit Desai,Site inspection and quality audit for Water Supply Network Phase-1,2026-08-10,2026-08-12,Morbi,3500,4500,1800,1200,500,11500,10000,10000,1500,MANAGER_APPROVED,
+Bob Jones,Flyover foundation soil testing supervision and pre-cast yard review,2026-08-14,2026-08-16,Rajkot,4200,5000,2000,1500,300,13000,15000,13000,-2000,ACCOUNTS_VERIFIED,
+Foram Shah,Client technical coordination meeting with GUDM Executive Engineer,2026-08-18,2026-08-19,Gandhinagar,1800,2500,1000,800,200,6300,5000,5000,1300,SUBMITTED,
+Amit Desai,Solar park rooftop structural survey and inverter room inspection,2026-08-22,2026-08-24,Surat,2800,4000,1500,1000,400,9700,10000,9700,-300,FINANCE_APPROVED,
+Bob Jones,Emergency pipeline leakage inspection and joint measurement verification,2026-08-28,2026-08-29,Vadodara,2200,3000,1200,900,200,7500,0,0,7500,PAID,

@@ -18,12 +18,16 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
         { documentRefNo: { contains: term, mode: "insensitive" } },
         { details: { contains: term, mode: "insensitive" } },
         { client: { name: { contains: term, mode: "insensitive" } } },
+        { department: { contains: term, mode: "insensitive" } },
       ],
     });
   }
 
   if (filter?.direction) and.push({ direction: filter.direction });
   if (filter?.clientId) and.push({ clientId: filter.clientId });
+  if (filter?.department) {
+    and.push({ department: { contains: filter.department, mode: "insensitive" } });
+  }
   if (filter?.actionSuggestedStaffId)
     and.push({ actionSuggestedStaffId: filter.actionSuggestedStaffId });
 
@@ -35,10 +39,16 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     });
   }
 
+  if (filter?.replyRequired === "true") {
+    and.push({ replyRequired: true });
+  } else if (filter?.replyRequired === "false") {
+    and.push({ replyRequired: false });
+  }
+
   if (filter?.hasReply === "true") {
     and.push({ replyDate: { not: null } });
   } else if (filter?.hasReply === "false") {
-    and.push({ replyDate: null });
+    and.push({ replyDate: null, replyRequired: true, direction: "INWARD" });
   }
 
   if (filter?.receivedDateFrom) {
@@ -48,6 +58,15 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     const to = new Date(filter.receivedDateTo);
     to.setDate(to.getDate() + 1);
     and.push({ receivedDate: { lt: to } });
+  }
+
+  if (filter?.replyDueDateFrom) {
+    and.push({ replyDueDate: { gte: filter.replyDueDateFrom } });
+  }
+  if (filter?.replyDueDateTo) {
+    const to = new Date(filter.replyDueDateTo);
+    to.setDate(to.getDate() + 1);
+    and.push({ replyDueDate: { lt: to } });
   }
 
   if (filter?.ageDue) {

@@ -44,6 +44,17 @@ import {
   type MasterType,
 } from "@/lib/actions/masters";
 
+import { StaffTable } from "@/app/dashboard/employee/staff-table";
+import { Staff, Region, EmployeeDetail, Department, Designation, City } from "@prisma/client";
+
+type StaffWithDetails = Staff & {
+  region?: Region | null;
+  reportingManager?: { id: string; name: string; designation: string | null } | null;
+  employeeDetail?: EmployeeDetail | null;
+};
+
+export type ExtendedMasterType = MasterType | "employee";
+
 interface MasterItem {
   id: string;
   name?: string;
@@ -60,7 +71,7 @@ interface MasterItem {
 }
 
 interface MasterConfig {
-  type: MasterType;
+  type: ExtendedMasterType;
   label: string;
   singularLabel: string;
   field: "name" | "referenceNumber";
@@ -71,6 +82,7 @@ interface MasterConfig {
 }
 
 const MASTER_CONFIGS: MasterConfig[] = [
+  { type: "employee", label: "Employees", singularLabel: "Employee", field: "name" },
   { type: "region", label: "Regions", singularLabel: "Region", field: "name" },
   { type: "department", label: "Departments", singularLabel: "Department", field: "name" },
   { type: "designation", label: "Designations", singularLabel: "Designation", field: "name" },
@@ -91,10 +103,32 @@ const MASTER_CONFIGS: MasterConfig[] = [
   { type: "contactMaster", label: "Contact Master", singularLabel: "Contact", field: "name", hasContact: true },
 ];
 
-export function MastersManager() {
-  const [activeType, setActiveType] = useState<MasterType>("department");
+interface MastersManagerProps {
+  initialTab?: string;
+  staffData?: StaffWithDetails[];
+  regionsData?: Region[];
+  departmentsData?: Department[];
+  designationsData?: Designation[];
+  citiesData?: City[];
+  canManage?: boolean;
+}
+
+export function MastersManager({
+  initialTab,
+  staffData = [],
+  regionsData = [],
+  departmentsData = [],
+  designationsData = [],
+  citiesData = [],
+  canManage = true,
+}: MastersManagerProps) {
+  const [activeType, setActiveType] = useState<ExtendedMasterType>(
+    (initialTab as ExtendedMasterType) && MASTER_CONFIGS.some((c) => c.type === initialTab)
+      ? (initialTab as ExtendedMasterType)
+      : "employee"
+  );
   const [items, setItems] = useState<MasterItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MasterItem | null>(null);
@@ -114,8 +148,9 @@ export function MastersManager() {
   const activeConfig = MASTER_CONFIGS.find((c) => c.type === activeType)!;
 
   const loadItems = useCallback(async () => {
+    if (activeType === "employee") return;
     setLoading(true);
-    const res = await getMasterList(activeType, search || undefined);
+    const res = await getMasterList(activeType as MasterType, search || undefined);
     if (res.success && res.data) {
       setItems(res.data as MasterItem[]);
     }
@@ -193,37 +228,39 @@ export function MastersManager() {
 
       if (editing) {
         input.id = editing.id;
-        const res = await updateMaster(activeType, input);
+        const res = await updateMaster(activeType as MasterType, input);
         if (!res.success) {
           setError(res.error ?? "Failed to update");
           toast.error(res.error ?? "Failed to update");
           setSubmitting(false);
           return;
         }
+        toast.success("Updated successfully");
       } else {
-        const res = await createMaster(activeType, input);
+        const res = await createMaster(activeType as MasterType, input);
         if (!res.success) {
           setError(res.error ?? "Failed to create");
           toast.error(res.error ?? "Failed to create");
           setSubmitting(false);
           return;
         }
+        toast.success("Created successfully");
       }
-      toast.success(editing ? "Updated successfully" : "Created successfully");
+
       setDialogOpen(false);
       loadItems();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "An error occurred";
-      setError(msg);
-      toast.error(msg);
+    } catch {
+      setError("An unexpected error occurred");
+      toast.error("An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   async function handleDelete(item: MasterItem) {
     setSubmitting(true);
     setError(null);
-    const res = await deleteMaster(activeType, item.id);
+    const res = await deleteMaster(activeType as MasterType, item.id);
     if (!res.success) {
       setError(res.error ?? "Failed to delete");
       toast.error(res.error ?? "Failed to delete");
@@ -262,31 +299,58 @@ export function MastersManager() {
         ))}
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-base font-medium">
-            {activeConfig.label} ({items.length})
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <Input
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-8 w-40 pl-7 text-xs"
+      {activeType === "employee" ? (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle className="text-base font-medium">
+                Employees ({staffData.length})
+              </CardTitle>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Manage employee directory, profiles, designations, and verification documents
+              </p>
+            </div>
+            {canManage && (
+              <BulkImportDialog module="staff" moduleLabel="Employee" />
+            )}
+          </CardHeader>
+          <CardContent>
+            <StaffTable
+              staff={staffData as never}
+              regions={regionsData as never}
+              departments={departmentsData as never}
+              designations={designationsData as never}
+              cities={citiesData as never}
+              canManage={canManage}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <CardTitle className="text-base font-medium">
+              {activeConfig.label} ({items.length})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <Input
+                  placeholder="Search..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 w-40 pl-7 text-xs"
+                />
+              </div>
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add {activeConfig.singularLabel}
+              </Button>
+              <BulkImportDialog
+                module={`masters_${activeType}` as never}
+                moduleLabel={activeConfig.label}
               />
             </div>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Add {activeConfig.singularLabel}
-            </Button>
-            <BulkImportDialog
-              module={`masters_${activeType}` as never}
-              moduleLabel={activeConfig.label}
-            />
-          </div>
-        </CardHeader>
+          </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -362,6 +426,7 @@ export function MastersManager() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && setDialogOpen(false)}>

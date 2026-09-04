@@ -7,6 +7,7 @@ import { ClientsTable } from "./clients-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 export default async function ClientsPage() {
   const session = await auth();
@@ -23,20 +24,17 @@ export default async function ClientsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <Users className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
-            <p className="text-sm text-zinc-500">
-              Manage client master and contact details
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={Users}
+        title="Clients"
+        description="Manage client master and contact details"
+        reportCategory="due-bills"
+        returnHref="/dashboard/clients"
+        totalCount={clients.length}
+        countLabel="Clients"
+      >
         {canManage && <BulkImportDialog module="clients" moduleLabel="Clients" />}
-      </div>
+      </ModuleHeader>
 
       <Card className="shadow-sm">
         <CardContent className="p-4">

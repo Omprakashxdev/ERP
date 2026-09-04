@@ -1,0 +1,6 @@
+project,project_region,project_client,project_workOrderDate,project_timeLimitMonths,project_workType,project_serviceType,miscExp,staffExp,totalProjectCost,completedWorkAmt,proposedDueBillAmount,feeReceived
+Ring Road Widening & Flyover Ph-2,Rajkot,GUDM,2026-05-10,24,ROAD,PMC,35000,120000,45000000,18000000,900000,650000
+Underground Drainage Network Zone 3,Surat,Morbi Nagarpalika,2026-07-01,18,DRAINAGE,TPI,20000,85000,32000000,11000000,600000,450000
+Smart City Solar Rooftop Installation,Ahmedabad,SECI,2026-04-15,12,ELECTRICAL,CONSULTANCY,15000,50000,15000000,9500000,450000,450000
+Multi-Level Car Parking Facility,West Region,MIDC,2026-06-20,15,BUILDING,PMC,28000,95000,28000000,7000000,550000,300000
+Industrial Effluent Treatment Plant CETP,East Region,ABC Corp,2026-08-01,20,ENVIRONMENTAL,PMC,42000,140000,60000000,15000000,1200000,800000

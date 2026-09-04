@@ -12,6 +12,7 @@ import { TaskFormDialog } from "./task-form";
 import { TaskFilterInput } from "@/lib/schemas/task-management";
 import { CheckSquare } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 interface TasksPageProps {
   searchParams: Promise<{
@@ -55,23 +56,17 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <CheckSquare className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-            <p className="text-sm text-zinc-500">
-              To-do task management and tracking
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <BulkImportDialog module="tasks" moduleLabel="Tasks" />
-          <TaskFormDialog staff={serialize(staff) as never} projects={serialize(projects) as never} />
-        </div>
-      </div>
+      <ModuleHeader
+        icon={CheckSquare}
+        title="Tasks"
+        description="To-do task management and tracking"
+        reportCategory="tasks"
+        totalCount={total}
+        countLabel="Tasks"
+      >
+        <BulkImportDialog module="tasks" moduleLabel="Tasks" />
+        <TaskFormDialog staff={serialize(staff) as never} projects={serialize(projects) as never} />
+      </ModuleHeader>
 
       <TaskFilters staff={serialize(staff) as never} />
 

@@ -17,22 +17,26 @@ import { Search, X } from "lucide-react";
 interface InOutRegisterFiltersProps {
   initialFilter: InOutRegisterFilterInput;
   clients: { id: string; name: string; abbreviation: string | null }[];
+  departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
 }
 
 export function InOutRegisterFilters({
   initialFilter,
   clients,
+  departments,
   staff,
 }: InOutRegisterFiltersProps) {
   const router = useRouter();
   const [search, setSearch] = useState(initialFilter.search ?? "");
   const [direction, setDirection] = useState(initialFilter.direction ?? "");
   const [clientId, setClientId] = useState(initialFilter.clientId ?? "");
+  const [department, setDepartment] = useState(initialFilter.department ?? "");
   const [actionSuggestedStaffId, setActionSuggestedStaffId] = useState(
     initialFilter.actionSuggestedStaffId ?? ""
   );
   const [ccStaffId, setCcStaffId] = useState(initialFilter.ccStaffId ?? "");
+  const [replyRequired, setReplyRequired] = useState(initialFilter.replyRequired ?? "");
   const [hasReply, setHasReply] = useState(initialFilter.hasReply ?? "");
   const [receivedDateFrom, setReceivedDateFrom] = useState(
     initialFilter.receivedDateFrom
@@ -51,9 +55,11 @@ export function InOutRegisterFilters({
     if (search.trim()) params.set("search", search.trim());
     if (direction) params.set("direction", direction);
     if (clientId) params.set("clientId", clientId);
+    if (department.trim()) params.set("department", department.trim());
     if (actionSuggestedStaffId)
       params.set("actionSuggestedStaffId", actionSuggestedStaffId);
     if (ccStaffId) params.set("ccStaffId", ccStaffId);
+    if (replyRequired) params.set("replyRequired", replyRequired);
     if (hasReply) params.set("hasReply", hasReply);
     if (receivedDateFrom) params.set("receivedDateFrom", receivedDateFrom);
     if (receivedDateTo) params.set("receivedDateTo", receivedDateTo);
@@ -70,8 +76,10 @@ export function InOutRegisterFilters({
     setSearch("");
     setDirection("");
     setClientId("");
+    setDepartment("");
     setActionSuggestedStaffId("");
     setCcStaffId("");
+    setReplyRequired("");
     setHasReply("");
     setReceivedDateFrom("");
     setReceivedDateTo("");
@@ -92,7 +100,7 @@ export function InOutRegisterFilters({
           <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
           <Input
             id="in-out-search"
-            placeholder="Search ref. no, details, or client…"
+            placeholder="Search ref. no, details, client, or dept…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-8 pl-8"
@@ -129,6 +137,41 @@ export function InOutRegisterFilters({
                 {c.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex min-w-40 flex-col gap-1.5">
+        <label htmlFor="filter-department" className="text-xs font-medium text-zinc-600">
+          Department / Div.
+        </label>
+        <Input
+          id="filter-department"
+          list="filter-department-suggestions"
+          placeholder="Filter dept…"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          className="h-8 text-xs"
+        />
+        {departments && departments.length > 0 && (
+          <datalist id="filter-department-suggestions">
+            {departments.map((d) => (
+              <option key={d.id} value={d.name} />
+            ))}
+          </datalist>
+        )}
+      </div>
+
+      <div className="flex min-w-36 flex-col gap-1.5">
+        <label className="text-xs font-medium text-zinc-600">Reply Required?</label>
+        <Select value={replyRequired} onValueChange={(v) => setReplyRequired(v ?? "")}>
+          <SelectTrigger className="w-full min-w-36" size="sm">
+            <SelectValue placeholder="All entries" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All entries</SelectItem>
+            <SelectItem value="true">Yes, Reply Required</SelectItem>
+            <SelectItem value="false">No, Informational</SelectItem>
           </SelectContent>
         </Select>
       </div>

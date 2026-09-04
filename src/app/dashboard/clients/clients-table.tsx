@@ -101,21 +101,31 @@ export function ClientsTable({ clients, canManage }: ClientsTableProps) {
                 </TableRow>
               ) : (
                 filtered.map((client) => (
-                  <TableRow key={client.id}>
-                    <TableCell className="whitespace-nowrap font-medium">{client.name}</TableCell>
-                    <TableCell className="whitespace-nowrap">{client.abbreviation ?? "—"}</TableCell>
+                  <TableRow
+                    key={client.id}
+                    onClick={() => setSelectedClient(client)}
+                    className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                  >
+                    <TableCell className="whitespace-nowrap font-medium text-zinc-900">{client.name}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono">{client.abbreviation ?? "—"}</TableCell>
                     <TableCell className="max-w-xs truncate">{client.address ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">{client._count.projects}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       {client.contacts.length}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-right">
+                    <TableCell
+                      className="whitespace-nowrap text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {canManage && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          onClick={() => setSelectedClient(client)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedClient(client);
+                          }}
                           title="Edit client"
                         >
                           <Pencil className="h-3.5 w-3.5" />

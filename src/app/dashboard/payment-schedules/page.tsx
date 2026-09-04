@@ -10,6 +10,7 @@ import { PaymentScheduleFilterInput } from "@/lib/schemas/payment-schedule";
 import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface PaymentSchedulesPageProps {
@@ -69,22 +70,16 @@ export default async function PaymentSchedulesPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <CalendarDays className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Payment Schedules
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Track scheduled payments, due dates, and bill copies by category
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={CalendarDays}
+        title="Payment Schedules"
+        description="Track scheduled payments, due dates, and bill copies by category"
+        reportCategory="payment-schedules"
+        totalCount={total}
+        countLabel="Schedules"
+      >
         <BulkImportDialog module="paymentSchedules" moduleLabel="Payment Schedules" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">

@@ -37,6 +37,7 @@ import { withBasePath } from "@/lib/base-path";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
+import { toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
 
 interface InOutRegisterFormProps {
   entry?: InOutRegister & {
@@ -46,18 +47,14 @@ interface InOutRegisterFormProps {
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
   };
   clients: { id: string; name: string }[];
+  departments?: { id: string; name: string }[];
   staff: { id: string; name: string }[];
   mode: "create" | "edit";
   onClose: () => void;
 }
 
 function toInputDate(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return toInputDateIST(value);
 }
 
 function emptyToNull(value: string): string | null {
@@ -74,11 +71,14 @@ function getInitialForm(
       documentDate: toInputDate(new Date()),
       receivedDate: toInputDate(new Date()),
       documentRefNo: "",
+      department: "",
+      replyRequired: false,
       details: "",
       clientId: clients[0]?.id ?? "",
       actionSuggestedStaffId: "",
       ccStaffIds: [] as string[],
       documents: [] as string[],
+      replyDueDate: "",
       replyDate: "",
       inwardType: "",
       receivedByPersonName: "",
@@ -89,11 +89,14 @@ function getInitialForm(
     documentDate: toInputDate(entry.documentDate),
     receivedDate: toInputDate(entry.receivedDate),
     documentRefNo: entry.documentRefNo,
+    department: (entry as Record<string, unknown>)?.department as string ?? "",
+    replyRequired: Boolean((entry as Record<string, unknown>)?.replyRequired),
     details: entry.details ?? "",
     clientId: entry.clientId,
     actionSuggestedStaffId: entry.actionSuggestedStaffId ?? "",
     ccStaffIds: entry.ccStaff?.map((cs) => cs.staffId) ?? [],
     documents: entry.documents?.map((d) => d.path) ?? [],
+    replyDueDate: toInputDate((entry as Record<string, unknown>)?.replyDueDate as Date | null | undefined),
     replyDate: toInputDate(entry.replyDate),
     inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
@@ -103,25 +106,28 @@ function getInitialForm(
 export function InOutRegisterForm({
   entry,
   clients,
+  departments,
   staff,
   mode,
   onClose,
 }: InOutRegisterFormProps) {
   const router = useRouter();
-  const isEdit = mode === "edit";
-
+  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(() => getInitialForm(entry, clients));
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const documentListRef = useRef<HTMLDivElement>(null);
+  const isEdit = mode === "edit" && Boolean(entry);
 
-  function updateField<K extends keyof typeof form>(
-    key: K,
-    value: (typeof form)[K]
+  function updateField<K extends keyof ReturnType<typeof getInitialForm>>(
+    field: K,
+    value: ReturnType<typeof getInitialForm>[K]
   ) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   }
 
   useEffect(() => {
@@ -164,6 +170,12 @@ export function InOutRegisterForm({
       documentDate: form.documentDate || undefined,
       receivedDate: form.receivedDate || undefined,
       documentRefNo: form.documentRefNo,
+      department: emptyToNull(form.department),
+      replyRequired: form.direction === "INWARD" ? Boolean(form.replyRequired) : false,
+      replyDueDate:
+        form.direction === "INWARD" && form.replyRequired && form.replyDueDate
+          ? new Date(form.replyDueDate)
+          : null,
       details: emptyToNull(form.details),
       clientId: form.clientId,
       actionSuggestedStaffId:
@@ -197,8 +209,18 @@ export function InOutRegisterForm({
       return;
     }
 
-    // Frontend validation: dates cannot be in the future
-    const today = new Date().toISOString().split("T")[0];
+    if (
+      form.replyDueDate &&
+      form.documentDate &&
+      form.replyDueDate < form.documentDate
+    ) {
+      setError("Reply due date cannot be before the document date.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Frontend validation: dates cannot be in the future (compared using local date)
+    const today = toInputDate(new Date());
     if (form.documentDate && form.documentDate > today) {
       setError("Document date cannot be in the future.");
       setSubmitting(false);
@@ -283,7 +305,7 @@ export function InOutRegisterForm({
                   id="documentDate"
                   type="date"
                   value={form.documentDate}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={getTodayISTDateString()}
                   onChange={(e) =>
                     updateField("documentDate", e.target.value)
                   }
@@ -296,7 +318,7 @@ export function InOutRegisterForm({
                   id="receivedDate"
                   type="date"
                   value={form.receivedDate}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={getTodayISTDateString()}
                   onChange={(e) =>
                     updateField("receivedDate", e.target.value)
                   }
@@ -338,6 +360,26 @@ export function InOutRegisterForm({
                 </Select>
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="department">
+                  {isOutward ? "To Department / Division" : "From Department / Division"}
+                </Label>
+                <Input
+                  id="department"
+                  list="department-suggestions"
+                  value={form.department}
+                  onChange={(e) => updateField("department", e.target.value)}
+                  placeholder="e.g. Regional Office Rajkot / Town Planning"
+                />
+                {departments && departments.length > 0 && (
+                  <datalist id="department-suggestions">
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="details">Details</Label>
                 <Textarea
@@ -351,6 +393,69 @@ export function InOutRegisterForm({
 
               {!isOutward && (
                 <>
+                  <div className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50/80 p-3.5 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Label className="font-semibold text-zinc-900 text-sm">
+                            Is an official reply required?
+                          </Label>
+                          {form.replyRequired ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                              Action Tracked
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700">
+                              Informational
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {form.replyRequired
+                            ? "This document will be actively tracked in 'Pending for Reply' reports until replied."
+                            : "Mark as Informative if this letter is a general circular or does not need a reply."}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={form.replyRequired ? "default" : "outline"}
+                          className={
+                            form.replyRequired
+                              ? "bg-amber-600 hover:bg-amber-700 text-white shadow-sm h-8 px-3 text-xs font-medium"
+                              : "text-zinc-600 hover:bg-zinc-100 h-8 px-3 text-xs"
+                          }
+                          onClick={() => {
+                            updateField("replyRequired", true);
+                            if (!form.inwardType || form.inwardType === "INFORMATIVE") {
+                              updateField("inwardType", "ACTION_REQUIRED");
+                            }
+                          }}
+                        >
+                          Yes, Reply Required
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={!form.replyRequired ? "secondary" : "outline"}
+                          className={
+                            !form.replyRequired
+                              ? "bg-zinc-200 text-zinc-900 hover:bg-zinc-300 h-8 px-3 text-xs font-medium"
+                              : "text-zinc-600 hover:bg-zinc-100 h-8 px-3 text-xs"
+                          }
+                          onClick={() => {
+                            updateField("replyRequired", false);
+                            if (form.inwardType === "ACTION_REQUIRED") {
+                              updateField("inwardType", "INFORMATIVE");
+                            }
+                          }}
+                        >
+                          No, Informational
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="inwardType">Inward type</Label>
                     <Select
@@ -410,7 +515,33 @@ export function InOutRegisterForm({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="replyDate">Reply date</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
+                        Reply Due Date (Deadline)
+                      </Label>
+                      <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
+                    </div>
+                    <Input
+                      id="replyDueDate"
+                      type="date"
+                      value={form.replyDueDate}
+                      onChange={(e) => updateField("replyDueDate", e.target.value)}
+                      min={form.documentDate || undefined}
+                      className="border-amber-300 focus-visible:ring-amber-500"
+                    />
+                    <p className="text-[11px] text-zinc-500">
+                      When must the reply be submitted by? (Stays Pending until answered)
+                    </p>
+                    {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
+                      <p className="text-xs text-red-600">Due date cannot be before document date</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="replyDate">Actual Reply Date</Label>
+                      <span className="text-[10px] text-zinc-400">Optional until sent</span>
+                    </div>
                     <Input
                       id="replyDate"
                       type="date"
@@ -418,6 +549,9 @@ export function InOutRegisterForm({
                       onChange={(e) => updateField("replyDate", e.target.value)}
                       min={form.receivedDate || undefined}
                     />
+                    <p className="text-[11px] text-zinc-500">
+                      Leave blank while waiting. Fill this only when the reply letter is dispatched (marks Replied).
+                    </p>
                     {form.replyDate && form.receivedDate && form.replyDate < form.receivedDate && (
                       <p className="text-xs text-red-600">Reply date cannot be before received/sent date</p>
                     )}

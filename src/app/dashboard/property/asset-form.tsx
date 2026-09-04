@@ -104,7 +104,18 @@ export function AssetForm({
     key: K,
     value: (typeof form)[K]
   ) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (
+        (key === "assignee" || key === "assignedQuantity") &&
+        prev.status === AssetStatus.AVAILABLE
+      ) {
+        if (next.assignee || Number(next.assignedQuantity) > 0) {
+          next.status = AssetStatus.ASSIGNED;
+        }
+      }
+      return next;
+    });
   }
 
   function buildPayload() {

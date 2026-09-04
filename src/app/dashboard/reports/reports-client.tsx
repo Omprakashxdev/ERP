@@ -17,6 +17,7 @@ import { Loader2, FileBarChart, Calendar, Download } from "lucide-react";
 import { runReportAction } from "@/lib/actions/reports";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
+import { formatDateIST, toInputDateIST } from "@/lib/date-utils";
 
 interface ReportCategoryInfo {
   id: string;
@@ -37,11 +38,15 @@ export function ReportsClient({
   reports,
   selectedCategory,
   selectedReportId,
+  isModuleFiltered = false,
+  moduleLabel,
 }: {
   categories: ReportCategoryInfo[];
   reports: ReportInfo[];
   selectedCategory: string;
   selectedReportId?: string;
+  isModuleFiltered?: boolean;
+  moduleLabel?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,7 +73,7 @@ export function ReportsClient({
     (reportId: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("report", reportId);
-      router.push(`/dashboard/reports?${params.toString()}`);
+      router.replace(`/dashboard/reports?${params.toString()}`);
       setResult(null);
       setError(null);
     },
@@ -105,7 +110,7 @@ export function ReportsClient({
         .map((col) => {
           const val = row[col];
           if (val === null || val === undefined) return "";
-          if (val instanceof Date) return val.toISOString().split("T")[0];
+          if (val instanceof Date) return toInputDateIST(val);
           const str = String(val).replace(/"/g, '""');
           return str.includes(",") || str.includes("\n") ? `"${str}"` : str;
         })
@@ -124,48 +129,89 @@ export function ReportsClient({
   const selectedReport = reports.find((r) => r.id === selectedReportId);
 
   return (
-    <div className="grid grid-cols-[200px_1fr] gap-4">
-      {/* Sidebar: Categories */}
-      <div className="space-y-1">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => selectCategory(cat.id)}
-            className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-              selectedCategory === cat.id
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:bg-zinc-100"
-            }`}
-          >
-            <FileBarChart className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{cat.label}</span>
-          </button>
-        ))}
-      </div>
+    <div className={isModuleFiltered ? "space-y-6" : "grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6"}>
+      {/* Sidebar: Categories (Only shown in Global Reports view, hidden when filtered by specific module) */}
+      {!isModuleFiltered && (
+        <div className="space-y-1">
+          <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+            Report Modules
+          </p>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => selectCategory(cat.id)}
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+                selectedCategory === cat.id
+                  ? "bg-zinc-900 text-white shadow-sm"
+                  : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+              }`}
+            >
+              <FileBarChart className="h-4 w-4 shrink-0" />
+              <span className="truncate">{cat.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Main area: Report list + results */}
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Report selection cards */}
-        <div className="grid grid-cols-2 gap-3">
-          {reports.map((report) => (
-            <Card
-              key={report.id}
-              className={`cursor-pointer transition-shadow hover:shadow-md ${
-                selectedReportId === report.id ? "ring-2 ring-zinc-900" : ""
-              }`}
-              onClick={() => selectReport(report.id)}
-            >
-              <CardHeader className="p-3">
-                <CardTitle className="text-sm">{report.title}</CardTitle>
-                <p className="text-xs text-zinc-500">{report.description}</p>
-              </CardHeader>
-            </Card>
-          ))}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-800">
+              {isModuleFiltered
+                ? `Available Reports (${reports.length})`
+                : `${moduleLabel || "Module"} Reports (${reports.length})`}
+            </h2>
+            <span className="text-xs text-zinc-500">
+              {isModuleFiltered
+                ? "Click any report below to filter and generate data"
+                : "Select a report to generate and export"}
+            </span>
+          </div>
+
+          <div
+            className={`grid gap-3.5 ${
+              isModuleFiltered
+                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                : "grid-cols-1 sm:grid-cols-2"
+            }`}
+          >
+            {reports.map((report) => (
+              <Card
+                key={report.id}
+                className={`cursor-pointer transition-all hover:shadow-md hover:border-emerald-300 ${
+                  selectedReportId === report.id
+                    ? "ring-2 ring-emerald-600 border-emerald-600 bg-emerald-50/20"
+                    : "border-zinc-200"
+                }`}
+                onClick={() => selectReport(report.id)}
+              >
+                <CardHeader className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-sm font-semibold text-zinc-900 leading-snug">
+                      {report.title}
+                    </CardTitle>
+                    <FileBarChart
+                      className={`h-4 w-4 shrink-0 ${
+                        selectedReportId === report.id
+                          ? "text-emerald-600"
+                          : "text-zinc-400"
+                      }`}
+                    />
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+                    {report.description}
+                  </p>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
         </div>
 
         {reports.length === 0 && (
-          <div className="rounded-lg border border-dashed py-8 text-center text-sm text-zinc-400">
-            No reports in this category.
+          <div className="rounded-lg border border-dashed py-12 text-center text-sm text-zinc-400">
+            No reports available for this module.
           </div>
         )}
 
@@ -267,7 +313,7 @@ export function ReportsClient({
                               {val === null || val === undefined
                                 ? "—"
                                 : val instanceof Date
-                                  ? val.toLocaleDateString("en-IN")
+                                  ? formatDateIST(val)
                                   : typeof val === "number"
                                     ? val.toLocaleString("en-IN", {
                                         minimumFractionDigits: Number.isInteger(val) ? 0 : 2,

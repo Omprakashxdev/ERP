@@ -15,6 +15,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Car, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 interface VehicleLogBookPageProps {
   searchParams: Promise<{
@@ -114,22 +115,16 @@ export default async function VehicleLogBookPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <Car className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Vehicle Log Book
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Manage vehicle records, journey logs, expenses, and approvals
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={Car}
+        title="Vehicle Log Book"
+        description="Manage vehicle records, journey logs, expenses, and approvals"
+        reportCategory="vehicle-log-book"
+        totalCount={total}
+        countLabel={activeTab === "journeys" ? "Journeys" : "Vehicles"}
+      >
         <BulkImportDialog module="vehicleLogBook" moduleLabel="Vehicle Log Book" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">

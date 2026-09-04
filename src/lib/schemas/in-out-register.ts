@@ -1,26 +1,32 @@
 import { z } from "zod";
 import { cleanedString, cuid } from "./shared";
 
+function isNotFutureCalendarDate(d: Date): boolean {
+  // 24-hour buffer allows for timezone differences (e.g. IST UTC+5:30 vs UTC midnight)
+  const maxAllowed = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return d <= maxAllowed;
+}
+
 const inOutRegisterBaseFields = z.object({
   direction: z.enum(["INWARD", "OUTWARD"]).default("INWARD"),
   documentDate: z.coerce.date({
     error: "Document date is required and must be a valid date",
-  }).refine((d) => d <= new Date(), "Document date cannot be in the future"),
+  }).refine((d) => isNotFutureCalendarDate(d), "Document date cannot be in the future"),
   receivedDate: z.coerce.date({
     error: "Received/Sent date is required and must be a valid date",
-  }).refine((d) => d <= new Date(), "Received/Sent date cannot be in the future"),
+  }).refine((d) => isNotFutureCalendarDate(d), "Received/Sent date cannot be in the future"),
   documentRefNo: cleanedString(100),
   details: cleanedString(500).optional().nullable(),
   clientId: cuid,
   actionSuggestedStaffId: z.string().cuid().optional().nullable(),
   ccStaffIds: z.array(cuid).optional(),
   documents: z.array(cleanedString(500)).optional(),
-  replyDate: z.coerce.date().optional().nullable().refine(
-    (d) => !d || d <= new Date(),
-    "Reply date cannot be in the future"
-  ),
+  replyDate: z.coerce.date().optional().nullable(),
   inwardType: z.enum(["INFORMATIVE", "ACTION_REQUIRED", "COMPLAINT", "QUERY", "NOTICE"]).optional().nullable(),
   receivedByPersonName: cleanedString(200).optional().nullable(),
+  department: cleanedString(200).optional().nullable(),
+  replyRequired: z.boolean().default(false),
+  replyDueDate: z.coerce.date().optional().nullable(),
 });
 
 export const inOutRegisterCreateSchema = inOutRegisterBaseFields.refine(
@@ -34,6 +40,12 @@ export const inOutRegisterCreateSchema = inOutRegisterBaseFields.refine(
   {
     message: "Reply date cannot be before received/sent date",
     path: ["replyDate"],
+  }
+).refine(
+  (data) => !data.replyDueDate || data.replyDueDate >= data.documentDate,
+  {
+    message: "Reply due date cannot be before document date",
+    path: ["replyDueDate"],
   }
 );
 
@@ -60,6 +72,16 @@ export const inOutRegisterUpdateSchema = inOutRegisterBaseFields
       message: "Reply date cannot be before received/sent date",
       path: ["replyDate"],
     }
+  )
+  .refine(
+    (data) => {
+      if (!data.replyDueDate || !data.documentDate) return true;
+      return data.replyDueDate >= data.documentDate;
+    },
+    {
+      message: "Reply due date cannot be before document date",
+      path: ["replyDueDate"],
+    }
   );
 
 export const inOutRegisterFilterSchema = z.object({
@@ -72,6 +94,10 @@ export const inOutRegisterFilterSchema = z.object({
   receivedDateFrom: z.coerce.date().optional(),
   receivedDateTo: z.coerce.date().optional(),
   ageDue: z.enum(["15", "20", "25"]).optional(),
+  department: z.string().optional(),
+  replyRequired: z.enum(["true", "false"]).optional(),
+  replyDueDateFrom: z.coerce.date().optional(),
+  replyDueDateTo: z.coerce.date().optional(),
 });
 
 export type InOutRegisterCreateInput = z.infer<typeof inOutRegisterCreateSchema>;

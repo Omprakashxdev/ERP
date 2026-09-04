@@ -798,16 +798,16 @@ export function VehicleLogBookTable({
             </TableHeader>
             <TableBody>
               {typedVehicles.map((row) => (
-                <TableRow key={row.id} className="hover:bg-zinc-50/70 transition-colors">
+                <TableRow
+                  key={row.id}
+                  onClick={() => setViewVehicle(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
-                    <button
-                      type="button"
-                      onClick={() => setViewVehicle(row)}
-                      className="text-left font-semibold text-zinc-900 hover:text-teal-700 hover:underline flex items-center gap-1.5"
-                    >
+                    <span className="font-semibold text-zinc-900 flex items-center gap-1.5">
                       <Car className="h-3.5 w-3.5 text-zinc-400" />
                       {row.registrationNumber}
-                    </button>
+                    </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {[row.make, row.model].filter(Boolean).join(" ") || "—"}
@@ -845,22 +845,19 @@ export function VehicleLogBookTable({
                   <TableCell className="whitespace-nowrap font-medium text-teal-700">
                     {row.journeyLogCount}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-teal-700"
-                        onClick={() => setViewVehicle(row)}
-                        title="View Vehicle Profile & Documents"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
                         className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
-                        onClick={() => setSelectedVehicle(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedVehicle(row);
+                        }}
                         title="Edit vehicle"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -898,16 +895,16 @@ export function VehicleLogBookTable({
             </TableHeader>
             <TableBody>
               {typedJourneys.map((row) => (
-                <TableRow key={row.id} className="hover:bg-zinc-50/70 transition-colors">
+                <TableRow
+                  key={row.id}
+                  onClick={() => setViewJourney(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => setViewJourney(row)}
-                      className="text-left font-medium text-zinc-900 hover:text-teal-700 hover:underline flex items-center gap-1.5"
-                    >
+                    <span className="font-medium text-zinc-900 flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-zinc-400" />
                       {formatDate(row.journeyDate)}
-                    </button>
+                    </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap font-medium text-zinc-800">
                     {row.vehicle.registrationNumber}
@@ -937,22 +934,19 @@ export function VehicleLogBookTable({
                       {formatEnum(row.approvalStatus)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-teal-700"
-                        onClick={() => setViewJourney(row)}
-                        title="View Journey Details & Documents (Eye)"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
                         className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
-                        onClick={() => setSelectedJourney(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedJourney(row);
+                        }}
                         title="Edit journey log"
                       >
                         <Pencil className="h-3.5 w-3.5" />

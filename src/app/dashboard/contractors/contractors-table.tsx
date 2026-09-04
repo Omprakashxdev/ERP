@@ -670,15 +670,15 @@ export function ContractorsTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-zinc-50/70 transition-colors">
+                <TableRow
+                  key={row.id}
+                  onClick={() => setViewContractor(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
-                    <button
-                      onClick={() => setViewContractor(row)}
-                      className="text-left font-semibold text-zinc-900 hover:text-blue-600 hover:underline transition-colors"
-                      title="Click to view dossier"
-                    >
+                    <span className="font-semibold text-zinc-900">
                       {row.name}
-                    </button>
+                    </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {row.contactPerson ?? "—"}
@@ -716,23 +716,19 @@ export function ContractorsTable({
                       {row.projectCount ?? row._count.projects}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex gap-1 justify-end">
-                      {/* View Dossier Eye Button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-blue-600 hover:bg-blue-50"
-                        onClick={() => setViewContractor(row)}
-                        title="View contractor dossier & documents"
-                      >
-                        <Eye className="h-3.5 w-3.5 text-blue-600" />
-                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSelectedContractor(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContractor(row);
+                        }}
                         title="Edit contractor"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -741,7 +737,10 @@ export function ContractorsTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setCertContractor(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCertContractor(row);
+                        }}
                         title="Bill certification"
                       >
                         <FileCheck className="h-3.5 w-3.5 text-emerald-600" />
@@ -750,7 +749,10 @@ export function ContractorsTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setProjectsContractor(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectsContractor(row);
+                        }}
                         title="Manage projects"
                       >
                         <FolderOpen className="h-3.5 w-3.5 text-purple-600" />

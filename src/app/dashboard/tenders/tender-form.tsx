@@ -201,6 +201,29 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
     setSubmitting(true);
     setError(null);
 
+    // Enforce chronological date logic rules
+    if (form.biddingLastDate && form.dateOfOpening && form.dateOfOpening < form.biddingLastDate) {
+      const msg = `Date of opening (${form.dateOfOpening}) cannot be earlier than the bidding last date (${form.biddingLastDate}).`;
+      setError(msg);
+      toast.error(msg);
+      setSubmitting(false);
+      return;
+    }
+    if (form.preBidMeetingDate && form.biddingLastDate && form.preBidMeetingDate > form.biddingLastDate) {
+      const msg = `Pre-bid meeting date (${form.preBidMeetingDate}) cannot be after the bidding last date (${form.biddingLastDate}).`;
+      setError(msg);
+      toast.error(msg);
+      setSubmitting(false);
+      return;
+    }
+    if (form.emdDate && form.emdReturnCollectionDate && form.emdReturnCollectionDate < form.emdDate) {
+      const msg = `EMD return/collection date (${form.emdReturnCollectionDate}) cannot be earlier than the EMD deposit date (${form.emdDate}).`;
+      setError(msg);
+      toast.error(msg);
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const payload = buildPayload();
       const result = isEdit
@@ -535,11 +558,17 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                   <Input
                     id="preBidMeetingDate"
                     type="date"
+                    max={form.biddingLastDate || undefined}
                     value={form.preBidMeetingDate}
                     onChange={(e) =>
                       updateField("preBidMeetingDate", e.target.value)
                     }
                   />
+                  {form.preBidMeetingDate && form.biddingLastDate && form.preBidMeetingDate > form.biddingLastDate && (
+                    <p className="text-[11px] text-red-600 font-medium">
+                      ⚠️ Pre-bid meeting must be on or before bidding deadline ({form.biddingLastDate})
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center space-x-2 pt-6">
@@ -577,10 +606,16 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                   <Input
                     id="dateOfOpening"
                     type="date"
+                    min={form.biddingLastDate || undefined}
                     value={form.dateOfOpening}
                     onChange={(e) => updateField("dateOfOpening", e.target.value)
                     }
                   />
+                  {form.dateOfOpening && form.biddingLastDate && form.dateOfOpening < form.biddingLastDate && (
+                    <p className="text-[11px] text-red-600 font-medium">
+                      ⚠️ Opening date must be on or after bidding deadline ({form.biddingLastDate})
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -657,11 +692,17 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                   <Input
                     id="emdReturnCollectionDate"
                     type="date"
+                    min={form.emdDate || undefined}
                     value={form.emdReturnCollectionDate}
                     onChange={(e) =>
                       updateField("emdReturnCollectionDate", e.target.value)
                     }
                   />
+                  {form.emdReturnCollectionDate && form.emdDate && form.emdReturnCollectionDate < form.emdDate && (
+                    <p className="text-[11px] text-red-600 font-medium">
+                      ⚠️ Return date cannot be earlier than EMD deposit date ({form.emdDate})
+                    </p>
+                  )}
                 </div>
               </div>
             </TabsContent>

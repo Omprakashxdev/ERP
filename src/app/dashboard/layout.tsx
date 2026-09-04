@@ -22,11 +22,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-full bg-background">
-      {/* Desktop sidebar — kiosk style with grouped navigation */}
-      <aside className="hidden w-64 flex-col border-r border-border bg-sidebar lg:flex">
+    <div className="flex h-screen w-full overflow-hidden bg-background">
+      {/* Desktop sidebar — fixed height, independent scrolling */}
+      <aside className="hidden w-64 h-full shrink-0 flex-col border-r border-border bg-sidebar lg:flex overflow-hidden">
         {/* Logo / Brand */}
-        <div className="flex items-center gap-3 px-5 py-5">
+        <div className="flex items-center gap-3 px-5 py-5 shrink-0">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-0.5 shadow-sm overflow-hidden">
             <img src={withBasePath("/saes-logo.jpg")} alt="SAEC Logo" className="h-full w-full rounded-lg object-cover" />
           </div>
@@ -40,15 +40,15 @@ export default async function DashboardLayout({
           </div>
         </div>
 
-        <Separator />
+        <Separator className="shrink-0" />
 
-        {/* Navigation — client component with grouped sections */}
+        {/* Navigation — client component with grouped sections, scrolls independently */}
         <SidebarNav />
 
-        <Separator />
+        <Separator className="shrink-0" />
 
-        {/* User & Sign out */}
-        <div className="px-3 py-3">
+        {/* User & Sign out — fixed at bottom */}
+        <div className="px-3 py-3 shrink-0">
           <div className="mb-2 flex items-center gap-2 rounded-lg px-3 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-semibold text-white">
               {session.user?.name?.charAt(0)?.toUpperCase() ?? "U"}
@@ -82,10 +82,10 @@ export default async function DashboardLayout({
 
       <CommandPalette />
 
-      {/* Main content area */}
-      <main className="flex-1 overflow-auto">
-        {/* Top bar — clean, minimal */}
-        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3 lg:px-6">
+      {/* Main content area — scrolls independently */}
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
+        {/* Top bar — clean, minimal, pinned at top */}
+        <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 lg:px-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
             <MobileSidebar />
             <Breadcrumbs />
@@ -93,11 +93,11 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-2">
             <NotificationBell />
           </div>
-        </div>
+        </header>
 
-        {/* Page content with generous padding */}
-        <div className="p-4 lg:p-6">{children}</div>
-      </main>
+        {/* Page content with its own independent scrollbar */}
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+      </div>
 
       {/* AI Assistant — floating button + slide-in panel */}
       <AiAssistant />

@@ -174,10 +174,13 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     label: "In-Out Register",
     model: "inOutRegister",
     excludedFields: [],
-    dateFields: ["documentDate", "receivedDate", "replyDate"],
+    dateFields: ["documentDate", "receivedDate", "replyDate", "replyDueDate"],
     decimalFields: [],
     intFields: [],
-    enumFields: {},
+    enumFields: {
+      direction: ["INWARD", "OUTWARD"],
+    },
+    booleanFields: ["replyRequired"],
     relationFields: ["client", "actionSuggestedStaff", "documents", "ccStaff"],
   },
   auditLogs: {

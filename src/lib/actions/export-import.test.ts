@@ -31,7 +31,7 @@ describe('Bulk Import Templates', () => {
     "tasks",
     "clients",
     "staff",
-  ];
+  ] as const;
 
   for (const mod of modules) {
     it(`should successfully parse the sample row for ${mod}`, async () => {

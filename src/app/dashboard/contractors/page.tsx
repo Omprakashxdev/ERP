@@ -10,6 +10,7 @@ import { ContractorFilterInput } from "@/lib/schemas/contractor";
 import { Card, CardContent } from "@/components/ui/card";
 import { HardHat, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface ContractorsPageProps {
@@ -51,22 +52,17 @@ export default async function ContractorsPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <HardHat className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Contractors
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Contractor profiles, work specs, documents, and billing details
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={HardHat}
+        title="Contractors"
+        description="Contractor profiles, work specs, documents, and billing details"
+        reportCategory="wip"
+        returnHref="/dashboard/contractors"
+        totalCount={total}
+        countLabel="Contractors"
+      >
         <BulkImportDialog module="contractors" moduleLabel="Contractors" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">

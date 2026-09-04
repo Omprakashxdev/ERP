@@ -1,3 +1,8 @@
+import { auth } from "@/lib/auth";
+import { hasPermission } from "@/lib/authz";
+import { getStaff } from "@/lib/actions/staff";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/utils";
 import { Database } from "lucide-react";
 import { MastersManager } from "@/components/masters/masters-manager";
 
@@ -5,22 +10,53 @@ export const metadata = {
   title: "Masters — SAEC ERP",
 };
 
-export default function MastersPage() {
+export default async function MastersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const params = searchParams ? await searchParams : undefined;
+  const session = await auth();
+  const canManage = session?.user
+    ? hasPermission(session.user.role, "staffManagement", "create")
+    : false;
+
+  const [staffResult, regions, departments, designations, cities] =
+    await Promise.all([
+      getStaff(undefined, false),
+      prisma.region.findMany({ orderBy: { name: "asc" } }),
+      prisma.department.findMany({ orderBy: { name: "asc" } }),
+      prisma.designation.findMany({ orderBy: { name: "asc" } }),
+      prisma.city.findMany({ orderBy: { name: "asc" } }),
+    ]);
+
+  const staff = staffResult.success ? (staffResult.data ?? []) : [];
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-          <Database className="h-4 w-4" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-sm">
+          <Database className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Masters</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Masters & Lookup Data
+          </h1>
           <p className="text-sm text-zinc-500">
-            Manage lookup data used across all modules
+            Manage system lookups, categories, regions, and employee master
           </p>
         </div>
       </div>
 
-      <MastersManager />
+      <MastersManager
+        initialTab={params?.tab}
+        staffData={serialize(staff) as never}
+        regionsData={serialize(regions) as never}
+        departmentsData={serialize(departments) as never}
+        designationsData={serialize(designations) as never}
+        citiesData={serialize(cities) as never}
+        canManage={canManage}
+      />
     </div>
   );
 }

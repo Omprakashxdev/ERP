@@ -115,8 +115,12 @@ export function TadaClaimTable({
             </TableHeader>
             <TableBody>
               {claims.map((claim) => (
-                <TableRow key={claim.id}>
-                  <TableCell className="whitespace-nowrap font-medium">
+                <TableRow
+                  key={claim.id}
+                  onClick={() => setEditClaim(claim)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
+                  <TableCell className="whitespace-nowrap font-medium text-zinc-900">
                     {claim.staff.name}
                   </TableCell>
                   <TableCell className="max-w-48 truncate">
@@ -142,14 +146,21 @@ export function TadaClaimTable({
                       {statusLabels[claim.status] ?? claim.status}
                     </span>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell
+                    className="whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex gap-1">
                       {canEdit(claim.status) && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          onClick={() => setEditClaim(claim)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditClaim(claim);
+                          }}
+                          title="Edit claim"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -159,7 +170,11 @@ export function TadaClaimTable({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          onClick={() => setApprovalClaim(claim)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setApprovalClaim(claim);
+                          }}
+                          title="Approve claim"
                         >
                           <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
                         </Button>

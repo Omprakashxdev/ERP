@@ -1,0 +1,6 @@
+itemCode,name,category,make,model,yearOfPurchase,quantity,securityCode,assigneeType,assignee,assignedQuantity,responsiblePerson,currentHolder,status,remarks
+AST-IT-2024-001,Dell Latitude 5540 Core i7 Laptop,IT Equipment,Dell,Latitude 5540,2024,1,SAEC/IT/LAP/042,PERSON,Amit Desai,1,Amit Desai,Amit Desai,ASSIGNED,Issued with charger wireless mouse and bag.
+AST-SUR-2023-018,Leica FlexLine TS07 Total Station 5-Sec,Survey Equipment,Leica Geosystems,TS07 5-Sec R500,2023,1,SAEC/SUR/TS/009,PERSON,Bob Jones,1,Bob Jones,Bob Jones,ASSIGNED,Calibrated with heavy-duty wooden tripod and prism.
+AST-SUR-2024-031,Garmin GPSMAP 66sr Handheld Navigator,Survey Equipment,Garmin,GPSMAP 66sr Multi-Band,2024,2,SAEC/SUR/GPS/014,OFFICE,Ahmedabad Head Office,0,Stores Incharge,,AVAILABLE,Kept in IT & Survey Central Stores.
+AST-OFF-2023-005,HP DesignJet T650 36-in Engineering Plotter,Office Machinery,HP,DesignJet T650,2023,1,SAEC/ENG/PLT/001,OFFICE,Morbi Site Office,1,Foram Shah,,ASSIGNED,Installed in CAD drafting studio for blueprints.
+AST-LAB-2022-011,Digital Concrete Compression Testing Machine 2000kN,Testing Lab Apparatus,Heico India,HL-CTM-2000D,2022,1,SAEC/LAB/CTM/003,OFFICE,Rajkot Quality Lab,1,Quality Control Manager,,UNDER_MAINTENANCE,Sent for NABL annual load-cell calibration.

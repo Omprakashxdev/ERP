@@ -155,7 +155,11 @@ export function DueBillsTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row, index) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedBill(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
                     {(page - 1) * pageSize + index + 1}
                   </TableCell>
@@ -165,7 +169,7 @@ export function DueBillsTable({
                   <TableCell className="whitespace-nowrap">
                     {row.project.client.name}
                   </TableCell>
-                  <TableCell className="max-w-xs truncate">
+                  <TableCell className="max-w-xs truncate font-medium text-zinc-900">
                     {row.project.name}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{row.scheme}</TableCell>
@@ -196,7 +200,7 @@ export function DueBillsTable({
                   <TableCell className="whitespace-nowrap text-right font-mono">
                     {formatMoney(row.itTds)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
+                  <TableCell className="whitespace-nowrap text-right font-mono font-medium text-amber-700">
                     {formatMoney(row.pendingAmount)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -213,13 +217,19 @@ export function DueBillsTable({
                   <TableCell className="max-w-xs truncate">
                     {row.remarks ?? "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex gap-1 justify-end">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSelectedBill(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedBill(row);
+                        }}
                         title="Edit bill"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -228,7 +238,10 @@ export function DueBillsTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setInvoiceBill(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInvoiceBill(row);
+                        }}
                         title="Generate invoice"
                       >
                         <FileText className="h-3.5 w-3.5 text-blue-600" />
@@ -238,7 +251,10 @@ export function DueBillsTable({
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0"
-                          onClick={() => setReminderBill(row)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReminderBill(row);
+                          }}
                           title="Generate reminder letter"
                         >
                           <MailWarning className="h-3.5 w-3.5 text-amber-600" />

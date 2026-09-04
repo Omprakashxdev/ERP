@@ -11,14 +11,17 @@ import { InOutRegisterFilterInput } from "@/lib/schemas/in-out-register";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeftRight } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 interface InOutRegisterPageProps {
   searchParams: Promise<{
     search?: string;
     direction?: "INWARD" | "OUTWARD";
     clientId?: string;
+    department?: string;
     actionSuggestedStaffId?: string;
     ccStaffId?: string;
+    replyRequired?: string;
     hasReply?: string;
     receivedDateFrom?: string;
     receivedDateTo?: string;
@@ -49,18 +52,24 @@ export default async function InOutRegisterPage({
     search: params.search,
     direction: params.direction,
     clientId: params.clientId,
+    department: params.department,
     actionSuggestedStaffId: params.actionSuggestedStaffId,
     ccStaffId: params.ccStaffId,
+    replyRequired: params.replyRequired as "true" | "false" | undefined,
     hasReply: params.hasReply as "true" | "false" | undefined,
     receivedDateFrom: parseDate(params.receivedDateFrom),
     receivedDateTo: parseDate(params.receivedDateTo),
     ageDue: params.ageDue as "15" | "20" | "25" | undefined,
   };
 
-  const [entriesResult, clients, staff] = await Promise.all([
+  const [entriesResult, clients, departments, staff] = await Promise.all([
     getInOutRegisters(filter, page, pageSize),
     prisma.client.findMany({
       select: { id: true, name: true, abbreviation: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.department.findMany({
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.staff.findMany({
@@ -80,22 +89,16 @@ export default async function InOutRegisterPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <ArrowLeftRight className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              In-Out Register
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Track inward documents, staff CC/action assignments, and replies
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={ArrowLeftRight}
+        title="In-Out Register"
+        description="Track inward documents, staff CC/action assignments, and replies"
+        reportCategory="in-out-register"
+        totalCount={total}
+        countLabel="Entries"
+      >
         <BulkImportDialog module="inOutRegister" moduleLabel="In-Out Register" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">
@@ -103,6 +106,7 @@ export default async function InOutRegisterPage({
           <InOutRegisterFilters
             initialFilter={filter}
             clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
+            departments={serialize(departments) as { id: string; name: string }[]}
             staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
           />
         </CardContent>
@@ -117,6 +121,7 @@ export default async function InOutRegisterPage({
           totalPages={totalPages}
           filter={filter}
           clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
+          departments={serialize(departments) as { id: string; name: string }[]}
           staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
         />
       ) : (

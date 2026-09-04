@@ -229,7 +229,25 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
 
   function updateFeeStage(index: number, patch: Partial<FeeStageRow>) {
     setFeeStages((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...patch } : row))
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        const next = { ...row, ...patch };
+        const totalFeeNum = parseFloat(form.totalFee);
+        if (!isNaN(totalFeeNum) && totalFeeNum > 0) {
+          if ("percentage" in patch && patch.percentage !== undefined && patch.percentage !== "") {
+            const pct = parseFloat(patch.percentage);
+            if (!isNaN(pct)) {
+              next.amount = ((totalFeeNum * pct) / 100).toFixed(2);
+            }
+          } else if ("amount" in patch && patch.amount !== undefined && patch.amount !== "") {
+            const amt = parseFloat(patch.amount);
+            if (!isNaN(amt)) {
+              next.percentage = ((amt / totalFeeNum) * 100).toFixed(2);
+            }
+          }
+        }
+        return next;
+      })
     );
   }
 
@@ -808,6 +826,48 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                       </Button>
                     </div>
                   ))}
+
+                  {feeStages.length > 0 && (() => {
+                    const totalStagePercentage = feeStages.reduce(
+                      (s, r) => s + (parseFloat(r.percentage) || 0),
+                      0
+                    );
+                    const totalStageAmount = feeStages.reduce(
+                      (s, r) => s + (parseFloat(r.amount) || 0),
+                      0
+                    );
+                    const is100 = Math.abs(totalStagePercentage - 100) < 0.1;
+                    return (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-zinc-50 p-2.5 text-xs">
+                        <div className="flex items-center gap-4">
+                          <span>
+                            Total Stages:{" "}
+                            <strong
+                              className={
+                                is100
+                                  ? "font-semibold text-emerald-600"
+                                  : "font-semibold text-amber-600"
+                              }
+                            >
+                              {totalStagePercentage.toFixed(1)}%
+                            </strong>
+                          </span>
+                          <span>
+                            Stages Amount:{" "}
+                            <strong className="font-mono font-semibold text-zinc-900">
+                              ₹{totalStageAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </strong>
+                          </span>
+                        </div>
+                        <div className="text-zinc-500">
+                          Project Total Fee:{" "}
+                          <span className="font-mono font-medium text-zinc-800">
+                            ₹{parseFloat(form.totalFee || "0").toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </TabsContent>
             </Tabs>

@@ -1,0 +1,6 @@
+date,dueDate,paymentType,category,detail,amount,status,remarks
+2026-08-01,2026-08-20,GSTR-3B Monthly Tax Return,GST,GSTR-3B liability for July 2026 turnover,185000,PAID,Paid via HDFC Corporate Net Banking challan #GST9912.
+2026-08-01,2026-08-07,Section 194C / 194J TDS Challan,TDS,TDS deducted from subcontractor & consultant bills July 2026,42500,PAID,Challan ITNS-281 generated and paid.
+2026-08-15,2026-09-05,Vehicle Loan EMI - ICICI Bank,VEHICLE_LOAN,Monthly EMI for Toyota Innova Crysta (GJ-01-AB-1234),28450,PENDING,Auto-debit mandate registered.
+2026-08-15,2026-09-10,Vehicle Loan EMI - HDFC Bank,VEHICLE_LOAN,Monthly EMI for Mahindra Scorpio-N (GJ-03-XY-5678),24500,PENDING,Cheque clearance scheduled.
+2026-08-20,2026-09-15,Municipal Professional Tax,EXCISE,Quarterly professional tax for technical engineering staff,15000,PENDING,AMC PT challan prepared.

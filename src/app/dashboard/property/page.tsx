@@ -11,6 +11,7 @@ import { AssetFilterInput } from "@/lib/schemas/asset";
 import { Card, CardContent } from "@/components/ui/card";
 import { Box } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 import { fetchAllMasters, type MasterData } from "@/lib/master-data";
 
 interface AssetsPageProps {
@@ -62,22 +63,16 @@ export default async function AssetsPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <Box className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Property
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Track organizational assets, assignments, and warranty documents
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={Box}
+        title="Property"
+        description="Track organizational assets, assignments, and warranty documents"
+        reportCategory="assets"
+        totalCount={total}
+        countLabel="Items"
+      >
         <BulkImportDialog module="assets" moduleLabel="Property" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">

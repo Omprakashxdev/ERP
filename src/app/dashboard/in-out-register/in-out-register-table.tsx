@@ -33,6 +33,7 @@ interface InOutRegisterTableProps {
   totalPages: number;
   filter: InOutRegisterFilterInput;
   clients: { id: string; name: string; abbreviation: string | null }[];
+  departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
 }
 
@@ -58,6 +59,7 @@ export function InOutRegisterTable({
   totalPages,
   filter,
   clients,
+  departments,
   staff,
 }: InOutRegisterTableProps) {
   const router = useRouter();
@@ -125,6 +127,7 @@ export function InOutRegisterTable({
                 <TableHead className="whitespace-nowrap">Doc Ref. No</TableHead>
                 <TableHead className="whitespace-nowrap">Direction</TableHead>
                 <TableHead className="whitespace-nowrap">From / To</TableHead>
+                <TableHead className="whitespace-nowrap">Dept / Division</TableHead>
                 <TableHead className="whitespace-nowrap">Details</TableHead>
                 <TableHead className="whitespace-nowrap">CC marking</TableHead>
                 <TableHead className="whitespace-nowrap">Action</TableHead>
@@ -135,14 +138,18 @@ export function InOutRegisterTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedEntry(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.documentDate)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.receivedDate)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap font-medium">
+                  <TableCell className="whitespace-nowrap font-semibold text-zinc-900">
                     {row.documentRefNo}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -150,8 +157,11 @@ export function InOutRegisterTable({
                       {row.direction === "OUTWARD" ? "Outward" : "Inward"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="whitespace-nowrap font-medium text-zinc-800">
                     {row.client.name}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-zinc-600">
+                    {row.department || "—"}
                   </TableCell>
                   <TableCell className="max-w-xs truncate">
                     {truncate(row.details)}
@@ -167,29 +177,55 @@ export function InOutRegisterTable({
                       <span className="text-xs">
                         {formatDate(row.replyDate)}
                         <br />
-                        {row.replyRefNo}
+                        <span className="text-zinc-500 font-mono text-[11px]">{row.replyRefNo}</span>
+                      </span>
+                    ) : row.replyDueDate ? (
+                      <span className="text-xs text-amber-800 font-medium">
+                        Due: {formatDate(row.replyDueDate)}
                       </span>
                     ) : (
                       "—"
                     )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Badge variant="outline">
-                      {row.isPendingReply ? (
-                        <span className="text-amber-700">
-                          Pending ({row.ageInDays}d)
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700">Replied</span>
-                      )}
-                    </Badge>
+                    {row.direction === "OUTWARD" ? (
+                      <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 font-medium">
+                        Dispatched
+                      </Badge>
+                    ) : !row.replyRequired ? (
+                      <Badge variant="outline" className="border-zinc-200 text-zinc-500 bg-zinc-50">
+                        Informational
+                      </Badge>
+                    ) : row.replyDate ? (
+                      <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 font-medium">
+                        Replied
+                      </Badge>
+                    ) : row.isOverdue ? (
+                      <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 font-semibold">
+                        Overdue ({row.daysOverdue}d)
+                      </Badge>
+                    ) : row.replyDueDate ? (
+                      <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 font-medium">
+                        Pending (Due {formatDate(row.replyDueDate)})
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 font-medium">
+                        Pending ({row.ageInDays}d)
+                      </Badge>
+                    )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => setSelectedEntry(row)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedEntry(row);
+                      }}
                       title="Edit entry"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -213,27 +249,22 @@ export function InOutRegisterTable({
               variant="outline"
               size="sm"
               disabled={page <= 1}
-              onClick={() =>
-                router.push(
-                  `/dashboard/in-out-register${buildQueryString(page - 1)}`
-                )
-              }
+              onClick={() => router.push(`/dashboard/in-out-register${buildQueryString(page - 1)}`)}
             >
-              <ChevronLeft className="mr-1 h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" />
               Previous
             </Button>
+            <span className="text-sm">
+              Page {page} of {totalPages}
+            </span>
             <Button
               variant="outline"
               size="sm"
               disabled={page >= totalPages}
-              onClick={() =>
-                router.push(
-                  `/dashboard/in-out-register${buildQueryString(page + 1)}`
-                )
-              }
+              onClick={() => router.push(`/dashboard/in-out-register${buildQueryString(page + 1)}`)}
             >
               Next
-              <ChevronRight className="ml-1 h-4 w-4" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -243,6 +274,7 @@ export function InOutRegisterTable({
         <InOutRegisterForm
           entry={selectedEntry}
           clients={clients}
+          departments={departments}
           staff={staff}
           mode="edit"
           onClose={() => setSelectedEntry(null)}
@@ -252,6 +284,7 @@ export function InOutRegisterTable({
       {createEntryOpen && (
         <InOutRegisterForm
           clients={clients}
+          departments={departments}
           staff={staff}
           mode="create"
           onClose={() => setCreateEntryOpen(false)}

@@ -1,0 +1,3 @@
+direction,documentDate,receivedDate,documentRefNo,details,client,actionSuggestedStaff,replyDate,replyRefNo,inwardType,receivedByPersonName,documents,ccStaff
+INWARD,2024-05-01,2024-05-02,DOC-001,Invoice for May,Client A,,,,,Receptionist,,
+OUTWARD,2024-05-10,2024-05-10,DOC-002,Project Proposal,Client B,,,,,Courier,,

@@ -190,6 +190,13 @@ export async function updateProject(
         });
       }
 
+      if (data.estimatedCost !== undefined) {
+        await tx.fundFlow.updateMany({
+          where: { projectId: id },
+          data: { totalProjectCost: data.estimatedCost },
+        });
+      }
+
       return updated;
     });
 

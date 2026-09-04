@@ -19,6 +19,7 @@ import {
   ActionResult,
 } from "./wrapper";
 import { createInOutRegisterLinkedTasks, deleteLinkedTasks } from "./task-linking";
+import { computeAgeInDaysIST, toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
 
 function generateReplyRefNo(): string {
   const random = Math.floor(Math.random() * 1000)
@@ -27,19 +28,42 @@ function generateReplyRefNo(): string {
   return `REP-${Date.now()}-${random}`;
 }
 
-function computeAgeInDays(receivedDate: Date): number {
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const diff = new Date().getTime() - new Date(receivedDate).getTime();
-  return Math.max(0, Math.floor(diff / msPerDay));
-}
-
 function computeInOutRegisterFlags(entry: {
   replyDate: Date | null;
   receivedDate: Date;
+  replyRequired?: boolean;
+  replyDueDate?: Date | null;
+  direction?: string;
 }) {
+  const isPending = Boolean(entry.direction !== "OUTWARD" && entry.replyRequired && !entry.replyDate);
+  const nowStr = getTodayISTDateString();
+  const dueDateStr = entry.replyDueDate ? toInputDateIST(entry.replyDueDate) : null;
+
+  let isOverdue = false;
+  let daysUntilDue: number | null = null;
+  let daysOverdue: number | null = null;
+
+  if (isPending && dueDateStr) {
+    const [ny, nm, nd] = nowStr.split("-").map(Number);
+    const [dy, dm, dd] = dueDateStr.split("-").map(Number);
+    const nowUtc = Date.UTC(ny, nm - 1, nd);
+    const dueUtc = Date.UTC(dy, dm - 1, dd);
+    const diff = Math.round((dueUtc - nowUtc) / 86400000);
+
+    if (diff < 0) {
+      isOverdue = true;
+      daysOverdue = Math.abs(diff);
+    } else {
+      daysUntilDue = diff;
+    }
+  }
+
   return {
-    isPendingReply: !entry.replyDate,
-    ageInDays: computeAgeInDays(entry.receivedDate),
+    isPendingReply: isPending,
+    isOverdue,
+    daysUntilDue,
+    daysOverdue,
+    ageInDays: computeAgeInDaysIST(entry.receivedDate),
   };
 }
 

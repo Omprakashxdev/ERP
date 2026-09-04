@@ -1,0 +1,3 @@
+registrationNumber,make,model,year,status,rcNumber,rcExpiryDate,rcCopyPath,insurancePolicyNumber,insuranceExpiryDate,insuranceCopyPath,pucNumber,pucExpiryDate,pucCopyPath,tyreWarrantyExpiryDate,batteryWarrantyExpiryDate,journeyLogs
+GJ01AB1234,Toyota,Innova,2022,ACTIVE,RC123456,2025-01-01,,IN123456,2024-12-31,,PUC123,2024-06-30,,,,
+GJ03CD5678,Honda,City,2021,ACTIVE,RC654321,2024-05-15,,IN654321,2024-11-20,,PUC456,2024-08-10,,,,

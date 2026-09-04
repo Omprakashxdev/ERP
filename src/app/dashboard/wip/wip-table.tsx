@@ -168,14 +168,18 @@ export function WipTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedWip(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
                     {row.project.region.name}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {row.project.client.name}
                   </TableCell>
-                  <TableCell className="max-w-xs truncate">
+                  <TableCell className="max-w-xs truncate font-medium text-zinc-900">
                     {row.project.name}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
@@ -199,10 +203,10 @@ export function WipTable({
                     {formatDate(row.targetCompletionDate)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {getStaffName(row.hoCoordinator)}
+                    {row.hoCoordinator?.name || "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {getStaffName(row.roCoordinator)}
+                    {row.roCoordinator?.name || "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {getStaffByLevel(row, WipCoordinatorLevel.L1)}
@@ -240,12 +244,18 @@ export function WipTable({
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.completionDate)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => setSelectedWip(row)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedWip(row);
+                      }}
                       title="Edit WIP record"
                     >
                       <Pencil className="h-3.5 w-3.5" />

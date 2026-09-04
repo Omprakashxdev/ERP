@@ -174,7 +174,11 @@ export function TendersTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow 
+                  key={row.id}
+                  onClick={() => setSelectedTender(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.tenderDate)}
                   </TableCell>
@@ -183,7 +187,7 @@ export function TendersTable({
                       variant="outline"
                       className={statusVariantMap[row.status]}
                     >
-                      {row.status.toLowerCase().replace(/_/g, " ")}
+                      {formatEnum(row.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-xs truncate font-medium">
@@ -231,12 +235,18 @@ export function TendersTable({
                   <TableCell className="whitespace-nowrap text-right font-mono">
                     {formatMoney(row.l3Amount)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell 
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => setSelectedTender(row)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTender(row);
+                      }}
                       title="Edit tender"
                     >
                       <Pencil className="h-3.5 w-3.5" />

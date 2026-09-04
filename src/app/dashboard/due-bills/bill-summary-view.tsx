@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import {
   Table,
   TableBody,
@@ -121,9 +121,8 @@ export function BillSummaryView({ groups }: { groups: ClientGroup[] }) {
                 {groups.map((group) => {
                   const isOpen = expanded.has(group.clientId);
                   return (
-                    <>
+                    <Fragment key={group.clientId}>
                       <TableRow
-                        key={group.clientId}
                         className="cursor-pointer hover:bg-zinc-50 font-medium"
                         onClick={() => toggle(group.clientId)}
                       >
@@ -178,7 +177,7 @@ export function BillSummaryView({ groups }: { groups: ClientGroup[] }) {
                           <TableCell></TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
                 <TableRow className="border-t-2 font-bold bg-zinc-50">

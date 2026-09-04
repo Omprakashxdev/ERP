@@ -70,12 +70,6 @@ export const navGroups: NavGroup[] = [
         icon: Users,
         description: "Client master",
       },
-      {
-        label: "Employee",
-        href: "/dashboard/employee",
-        icon: UserCog,
-        description: "Employee master",
-      },
     ],
   },
   {
@@ -142,6 +136,17 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Masters",
+    items: [
+      {
+        label: "Masters",
+        href: "/dashboard/masters",
+        icon: Database,
+        description: "Lookup data & employee master",
+      },
+    ],
+  },
+  {
     label: "System",
     items: [
       {
@@ -155,12 +160,6 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/settings",
         icon: Settings,
         description: "Configuration",
-      },
-      {
-        label: "Masters",
-        href: "/dashboard/masters",
-        icon: Database,
-        description: "Manage lookup data",
       },
     ],
   },

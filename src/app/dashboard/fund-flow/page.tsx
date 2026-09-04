@@ -13,6 +13,7 @@ import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import { Card, CardContent } from "@/components/ui/card";
 import { Landmark, FileSpreadsheet } from "lucide-react";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
+import { ModuleHeader } from "@/components/module-header";
 
 interface FundFlowPageProps {
   searchParams: Promise<{
@@ -59,20 +60,16 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900 text-white">
-            <Landmark className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Fund Flow</h1>
-            <p className="text-sm text-zinc-500">
-              Project financial tracking and fee realization
-            </p>
-          </div>
-        </div>
+      <ModuleHeader
+        icon={Landmark}
+        title="Fund Flow"
+        description="Project financial tracking and fee realization"
+        reportCategory="fund-flow"
+        totalCount={total}
+        countLabel="Projects"
+      >
         <BulkImportDialog module="fundFlow" moduleLabel="Fund Flow" />
-      </div>
+      </ModuleHeader>
 
 
       <Card className="shadow-sm">

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { Decimal } from "@prisma/client/runtime/library";
+import { AssetStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   assetCreateSchema,
@@ -75,9 +76,29 @@ export async function createAsset(
       parsed.securityCode?.trim() ||
       (await generateSecurityCode(parsed.category, parsed.name, parsed.make));
 
+    let currentHolderId: string | null = null;
+    if (parsed.assigneeType === "PERSON" && parsed.assignee) {
+      const staffMember = await prisma.staff.findFirst({
+        where: { name: { equals: parsed.assignee, mode: "insensitive" } },
+      });
+      if (staffMember) {
+        currentHolderId = staffMember.id;
+      }
+    }
+
+    let status = parsed.status;
+    if (
+      status === AssetStatus.AVAILABLE &&
+      (Number(parsed.assignedQuantity ?? 0) > 0 || parsed.assignee)
+    ) {
+      status = AssetStatus.ASSIGNED;
+    }
+
     const asset = await prisma.asset.create({
       data: {
         ...parsed,
+        status,
+        currentHolderId,
         itemCode: generateItemCode(),
         securityCode,
       },
@@ -100,7 +121,38 @@ export async function updateAsset(
     const { id, ...data } = parsed;
     await checkRateLimit(user.id);
 
-    const asset = await prisma.asset.update({ where: { id }, data });
+    let currentHolderId: string | null | undefined = undefined;
+    if (data.assigneeType === "PERSON" && data.assignee) {
+      const staffMember = await prisma.staff.findFirst({
+        where: { name: { equals: data.assignee, mode: "insensitive" } },
+      });
+      currentHolderId = staffMember ? staffMember.id : null;
+    } else if (
+      data.assigneeType === "OFFICE" ||
+      data.assignee === null ||
+      data.assignee === ""
+    ) {
+      currentHolderId = null;
+    }
+
+    let status = data.status;
+    if (
+      status === AssetStatus.AVAILABLE &&
+      (Number(data.assignedQuantity ?? 0) > 0 || data.assignee)
+    ) {
+      status = AssetStatus.ASSIGNED;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      ...data,
+      ...(status !== undefined ? { status } : {}),
+      ...(currentHolderId !== undefined ? { currentHolderId } : {}),
+    };
+
+    const asset = await prisma.asset.update({
+      where: { id },
+      data: updatePayload as never,
+    });
 
     await audit(user.id, "update", "Asset", asset.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),

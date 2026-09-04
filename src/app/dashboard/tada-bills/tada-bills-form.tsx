@@ -187,18 +187,27 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Location (City)</Label>
-              <Select value={location} onValueChange={(v) => setLocation(v ?? "")}>
-                <SelectTrigger className="w-full" size="sm">
-                  <SelectValue placeholder="Select city" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cities.map((c) => (
-                    <SelectItem key={c.id} value={c.name}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {cities && cities.length > 0 ? (
+                <Select value={location} onValueChange={(v) => setLocation(v ?? "")}>
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue placeholder="Select city" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cities.map((c) => (
+                      <SelectItem key={c.id} value={c.name}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. Morbi / Rajkot / Surat"
+                  required
+                />
+              )}
             </div>
             <div className="col-span-2 space-y-1">
               <Label className="text-xs">Tour Purpose</Label>
@@ -214,6 +223,7 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               <Input
                 type="date"
                 min="2026-01-01"
+                max={toInputDate(new Date())}
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
                 required
@@ -223,7 +233,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               <Label className="text-xs">To Date</Label>
               <Input
                 type="date"
-                min="2026-01-01"
+                min={fromDate || "2026-01-01"}
+                max={toInputDate(new Date())}
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
                 required
@@ -287,6 +298,48 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
           </div>
+
+          {(() => {
+            const total =
+              (Number(travelExpense) || 0) +
+              (Number(accommodationExp) || 0) +
+              (Number(foodExpense) || 0) +
+              (Number(localConveyance) || 0) +
+              (Number(otherExpense) || 0);
+            const adv = Number(advanceAmount) || 0;
+            const net = total - adv;
+            return (
+              <div className="rounded-md bg-zinc-50 p-2.5 text-sm space-y-1.5 border border-zinc-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-zinc-500 font-medium">Total Claim Amount</span>
+                  <span className="font-mono font-semibold text-zinc-900">
+                    ₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-zinc-200/60">
+                  <span className="text-xs font-medium text-zinc-600">
+                    {net > 0
+                      ? "Net Payable to Employee"
+                      : net < 0
+                      ? "Refundable to Company"
+                      : "Balance (Settled)"}
+                  </span>
+                  <span
+                    className={`font-mono font-semibold ${
+                      net > 0
+                        ? "text-emerald-700"
+                        : net < 0
+                        ? "text-amber-700"
+                        : "text-zinc-600"
+                    }`}
+                  >
+                    ₹{Math.abs(net).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {net > 0 ? " (Company to Pay)" : net < 0 ? " (Employee to Refund)" : ""}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           <FileUploadField
             id="tada-bills"
@@ -459,21 +512,30 @@ export function TadaClaimEditForm({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Location (City)</Label>
-                <Select
-                  value={form.location}
-                  onValueChange={(v) => updateField("location", v ?? "")}
-                >
-                  <SelectTrigger className="w-full" size="sm">
-                    <SelectValue placeholder="Select city" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cities.map((c) => (
-                      <SelectItem key={c.id} value={c.name}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {cities && cities.length > 0 ? (
+                  <Select
+                    value={form.location}
+                    onValueChange={(v) => updateField("location", v ?? "")}
+                  >
+                    <SelectTrigger className="w-full" size="sm">
+                      <SelectValue placeholder="Select city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cities.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={form.location}
+                    onChange={(e) => updateField("location", e.target.value)}
+                    placeholder="e.g. Morbi / Rajkot / Surat"
+                    required
+                  />
+                )}
               </div>
             </div>
 
@@ -493,6 +555,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="date"
                   min="2026-01-01"
+                  max={toInputDate(new Date())}
                   value={form.fromDate}
                   onChange={(e) => updateField("fromDate", e.target.value)}
                   required
@@ -503,6 +566,7 @@ export function TadaClaimEditForm({
                 <Input
                   type="date"
                   min={form.fromDate || "2026-01-01"}
+                  max={toInputDate(new Date())}
                   value={form.toDate}
                   onChange={(e) => updateField("toDate", e.target.value)}
                   required
@@ -573,21 +637,40 @@ export function TadaClaimEditForm({
               </div>
             </div>
 
-            <div className="rounded-md bg-zinc-50 p-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-xs text-zinc-500">Total Claim Amount</span>
-                <span className="font-mono font-medium">
+            <div className="rounded-md bg-zinc-50 p-2.5 text-sm space-y-1.5 border border-zinc-200">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-500 font-medium">Total Claim Amount</span>
+                <span className="font-mono font-semibold text-zinc-900">
                   ₹{totalClaim.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {form.advanceAmount && (
-                <div className="flex justify-between mt-1">
-                  <span className="text-xs text-zinc-500">Balance</span>
-                  <span className="font-mono font-medium">
-                    ₹{(Number(form.advanceAmount) - totalClaim).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const adv = Number(form.advanceAmount) || 0;
+                const net = totalClaim - adv;
+                return (
+                  <div className="flex justify-between items-center pt-1 border-t border-zinc-200/60">
+                    <span className="text-xs font-medium text-zinc-600">
+                      {net > 0
+                        ? "Net Payable to Employee"
+                        : net < 0
+                        ? "Refundable to Company"
+                        : "Balance (Settled)"}
+                    </span>
+                    <span
+                      className={`font-mono font-semibold ${
+                        net > 0
+                          ? "text-emerald-700"
+                          : net < 0
+                          ? "text-amber-700"
+                          : "text-zinc-600"
+                      }`}
+                    >
+                      ₹{Math.abs(net).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      {net > 0 ? " (Company to Pay)" : net < 0 ? " (Employee to Refund)" : ""}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

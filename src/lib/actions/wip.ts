@@ -79,6 +79,12 @@ export async function createWip(
     await checkRateLimit(user.id);
 
     const wip = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({ where: { id: parsed.projectId } });
+      const stipulatedCompletionDate = parsed.stipulatedCompletionDate ?? project?.stipulatedCompletionDate;
+      const targetCompletionDate = parsed.targetCompletionDate ?? project?.targetCompletionDate;
+      const workOrderDate = parsed.workOrderDate ?? project?.workOrderDate;
+      const timeLimitMonths = parsed.timeLimitMonths ?? project?.timeLimitMonths;
+
       const created = await tx.workInProgress.create({
         data: {
           projectId: parsed.projectId,
@@ -87,11 +93,11 @@ export async function createWip(
           loiCopyPath: parsed.loiCopyPath,
           agreementDate: parsed.agreementDate,
           agreementCopyPath: parsed.agreementCopyPath,
-          workOrderDate: parsed.workOrderDate,
+          workOrderDate,
           workOrderCopyPath: parsed.workOrderCopyPath,
-          timeLimitMonths: parsed.timeLimitMonths,
-          stipulatedCompletionDate: parsed.stipulatedCompletionDate,
-          targetCompletionDate: parsed.targetCompletionDate,
+          timeLimitMonths,
+          stipulatedCompletionDate,
+          targetCompletionDate,
           hoCoordinatorId: parsed.hoCoordinatorId,
           roCoordinatorId: parsed.roCoordinatorId,
           securityDepositAmount: parsed.securityDepositAmount,

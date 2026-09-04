@@ -168,12 +168,16 @@ export function FundFlowTable({
             </TableHeader>
             <TableBody>
               {typedRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={() => setSelectedProject(row)}
+                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
+                >
                   <TableCell className="whitespace-nowrap font-medium">
                     {row.region.name}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{row.client.name}</TableCell>
-                  <TableCell className="max-w-xs truncate">{row.name}</TableCell>
+                  <TableCell className="max-w-xs truncate font-medium text-zinc-900">{row.name}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.workOrderDate)}
                   </TableCell>
@@ -236,13 +240,19 @@ export function FundFlowTable({
                       {row.status.toLowerCase()}
                     </Badge>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
+                  <TableCell
+                    className="whitespace-nowrap text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSelectedProject(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedProject(row);
+                        }}
                         title="Edit project"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -251,7 +261,10 @@ export function FundFlowTable({
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSelectedFundFlow(row)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFundFlow(row);
+                        }}
                         title="Edit fund flow"
                       >
                         ₹
