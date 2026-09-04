@@ -1,0 +1,6 @@
+direction,documentDate,receivedDate,documentRefNo,client,department,details,actionSuggestedStaff,inwardType,receivedByPersonName,replyRequired,replyDueDate,replyDate
+INWARD,2026-09-01,2026-09-02,GPHC/ENG/2026/412,Gujarat Police Housing Corp,Regional Office Rajkot,Submission of soil test and structural design for Police Staff Quarters,Amit Verma,ACTION_REQUIRED,Ramesh Patel,true,2026-09-20,
+OUTWARD,2026-09-03,2026-09-03,SAEC/OUT/2026/108,Morbi Nagarpalika,Roads & Buildings,Submission of Structural Stability Certificate and vetting report,Pooja Sharma,,,false,,
+INWARD,2026-08-20,2026-08-22,RMC/TWN/2026/89,Rajkot Municipal Corporation,Town Planning,Compliance query on TP Scheme 14 draft road width alignment,Rajesh Trivedi,QUERY,Sanjay Mehta,true,2026-09-05,2026-08-28
+INWARD,2026-08-25,2026-08-26,GWSSB/CIR/2026/04,GWSSB Gandhinagar,Water Works,Standard technical specifications update circular for HDPE pipelines,Neha Patel,INFORMATIVE,Receptionist,false,,
+INWARD,2026-08-01,2026-08-03,GUDM/SWM/2026/55,GUDM,Solid Waste Management,Immediate submission of Environmental Impact Assessment report for composting plant,Amit Verma,NOTICE,Ketan Dave,true,2026-08-20,

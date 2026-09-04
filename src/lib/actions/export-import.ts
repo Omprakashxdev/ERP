@@ -27,6 +27,22 @@ function parseImportDate(value: string): Date | null {
   if (!value || value.trim() === "") return null;
   const trimmed = value.trim();
 
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === "false" ||
+    lower === "true" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "none" ||
+    lower === "-" ||
+    lower === "--" ||
+    lower === "null" ||
+    lower === "nil" ||
+    lower === "0"
+  ) {
+    return null;
+  }
+
   // Try ISO / YYYY-MM-DD — only trust new Date() for ISO-like formats
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
     const d = new Date(trimmed);
@@ -898,25 +914,71 @@ async function resolveRelations(
       client: {
         masterLabel: "Client master",
         lookup: async (name: string) => {
-          const c = await prisma.client.findFirst({ where: { name } });
+          const clean = name.trim();
+          const c = await prisma.client.findFirst({
+            where: {
+              OR: [
+                { name: { equals: clean, mode: "insensitive" } },
+                { abbreviation: { equals: clean, mode: "insensitive" } },
+              ],
+            },
+          });
           return c?.id ?? null;
         },
         fuzzyLookup: async (name: string) => {
+          const clean = name.trim();
           const c = await prisma.client.findFirst({
-            where: { name: { equals: name, mode: "insensitive" } },
+            where: {
+              OR: [
+                { name: { contains: clean, mode: "insensitive" } },
+                { abbreviation: { contains: clean, mode: "insensitive" } },
+              ],
+            },
           });
           return c?.id ?? null;
+        },
+        autoCreate: async (name: string) => {
+          try {
+            const clean = name.trim();
+            const created = await prisma.client.create({
+              data: {
+                name: clean,
+                abbreviation: clean.length <= 8 ? clean.toUpperCase() : clean.slice(0, 8).toUpperCase(),
+              },
+              select: { id: true },
+            });
+            return created.id;
+          } catch {
+            const existing = await prisma.client.findFirst({
+              where: { name: { equals: name.trim(), mode: "insensitive" } },
+              select: { id: true },
+            });
+            return existing?.id ?? null;
+          }
         },
       },
       actionSuggestedStaff: {
         masterLabel: "Staff master",
         lookup: async (name: string) => {
-          const s = await prisma.staff.findFirst({ where: { name, isActive: true } });
+          const clean = name.trim();
+          const s = await prisma.staff.findFirst({
+            where: {
+              OR: [
+                { name: { equals: clean, mode: "insensitive" } },
+                { employeeCode: { equals: clean, mode: "insensitive" } },
+              ],
+              isActive: true,
+            },
+          });
           return s?.id ?? null;
         },
         fuzzyLookup: async (name: string) => {
+          const clean = name.trim();
           const s = await prisma.staff.findFirst({
-            where: { name: { equals: name, mode: "insensitive" }, isActive: true },
+            where: {
+              name: { contains: clean, mode: "insensitive" },
+              isActive: true,
+            },
           });
           return s?.id ?? null;
         },
