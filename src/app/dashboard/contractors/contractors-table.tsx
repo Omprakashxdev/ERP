@@ -607,28 +607,6 @@ export function ContractorsTable({
     useState<ContractorWithComputed | null>(null);
   const [createContractorOpen, setCreateContractorOpen] = useState(false);
 
-  if (rows.length === 0) {
-    return (
-      <Card className="shadow-sm">
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
-          <h3 className="mt-4 text-lg font-medium">No contractor records</h3>
-          <p className="mt-1 max-w-sm text-sm text-zinc-500">
-            Add a contractor to start tracking work orders, drawings, and billing.
-          </p>
-          <Button
-            size="sm"
-            className="mt-4"
-            onClick={() => setCreateContractorOpen(true)}
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New contractor
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   const typedRows = rows as ContractorWithComputed[];
 
   function buildQueryString(newPage: number): string {
@@ -648,7 +626,25 @@ export function ContractorsTable({
         </Button>
       </div>
 
-      <Card className="overflow-hidden shadow-sm">
+      {typedRows.length === 0 ? (
+        <Card className="shadow-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
+            <h3 className="mt-4 text-lg font-medium">No contractor records</h3>
+            <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
+              Add a contractor to start tracking work orders, drawings, and billing.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => setCreateContractorOpen(true)}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New contractor
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden shadow-sm">
         <div className="max-h-[70vh] overflow-auto">
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-10 bg-white">
@@ -765,6 +761,7 @@ export function ContractorsTable({
           </Table>
         </div>
       </Card>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between">

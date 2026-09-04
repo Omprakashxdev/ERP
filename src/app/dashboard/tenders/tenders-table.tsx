@@ -89,20 +89,6 @@ export function TendersTable({
     useState<TenderWithComputed | null>(null);
   const [createTenderOpen, setCreateTenderOpen] = useState(false);
 
-  if (rows.length === 0) {
-    return (
-      <Card className="shadow-sm">
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
-          <h3 className="mt-4 text-lg font-medium">No tender records</h3>
-          <p className="mt-1 max-w-sm text-sm text-zinc-500">
-            Add a tender to start tracking bidding, EMD, and price comparison.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   const typedRows = rows as TenderWithComputed[];
 
   function buildQueryString(newPage: number): string {
@@ -133,7 +119,22 @@ export function TendersTable({
         </Button>
       </div>
 
-      <Card className="overflow-hidden shadow-sm">
+      {typedRows.length === 0 ? (
+        <Card className="shadow-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
+            <h3 className="mt-4 text-lg font-medium">No tender records</h3>
+            <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
+              Add a tender to start tracking bidding, EMD, and price comparison.
+            </p>
+            <Button size="sm" onClick={() => setCreateTenderOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New tender
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden shadow-sm">
         <div className="max-h-[70vh] overflow-auto">
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-10 bg-white">
@@ -258,6 +259,7 @@ export function TendersTable({
           </Table>
         </div>
       </Card>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between">

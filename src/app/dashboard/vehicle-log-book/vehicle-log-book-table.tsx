@@ -754,9 +754,13 @@ export function VehicleLogBookTable({
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
           <Car className="h-12 w-12 text-zinc-300" />
           <h3 className="mt-4 text-lg font-medium">No vehicles</h3>
-          <p className="mt-1 max-w-sm text-sm text-zinc-500">
+          <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
             Add a vehicle to start tracking RC, insurance, PUC, and journey logs.
           </p>
+          <Button size="sm" onClick={() => setCreateVehicleOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New vehicle
+          </Button>
         </CardContent>
       </Card>
     );
@@ -768,9 +772,13 @@ export function VehicleLogBookTable({
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
           <Route className="h-12 w-12 text-zinc-300" />
           <h3 className="mt-4 text-lg font-medium">No journey logs</h3>
-          <p className="mt-1 max-w-sm text-sm text-zinc-500">
+          <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
             Record a journey to track route, KM, expenses, and approvals.
           </p>
+          <Button size="sm" onClick={() => setCreateJourneyOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New journey
+          </Button>
         </CardContent>
       </Card>
     );
