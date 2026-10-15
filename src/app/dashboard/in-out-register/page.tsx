@@ -6,6 +6,7 @@ import { getInOutRegisters } from "@/lib/actions/in-out-register";
 import { serialize } from "@/lib/utils";
 import { InOutRegisterTable } from "./in-out-register-table";
 import { InOutRegisterFilters } from "./in-out-register-filters";
+import { InOutRegisterTabs } from "./in-out-register-tabs";
 import { InOutRegisterSkeleton } from "./in-out-register-skeleton";
 import { InOutRegisterFilterInput } from "@/lib/schemas/in-out-register";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,8 +22,7 @@ interface InOutRegisterPageProps {
     department?: string;
     actionSuggestedStaffId?: string;
     ccStaffId?: string;
-    replyRequired?: string;
-    hasReply?: string;
+    hasDeadline?: string;
     receivedDateFrom?: string;
     receivedDateTo?: string;
     ageDue?: string;
@@ -55,14 +55,22 @@ export default async function InOutRegisterPage({
     department: params.department,
     actionSuggestedStaffId: params.actionSuggestedStaffId,
     ccStaffId: params.ccStaffId,
-    replyRequired: params.replyRequired as "true" | "false" | undefined,
-    hasReply: params.hasReply as "true" | "false" | undefined,
+    hasDeadline: params.hasDeadline as "true" | "false" | undefined,
     receivedDateFrom: parseDate(params.receivedDateFrom),
     receivedDateTo: parseDate(params.receivedDateTo),
     ageDue: params.ageDue as "15" | "20" | "25" | undefined,
   };
 
-  const [entriesResult, clients, departments, staff] = await Promise.all([
+  const [
+    entriesResult,
+    clients,
+    departments,
+    staff,
+    allCount,
+    inwardCount,
+    outwardCount,
+    pendingCount,
+  ] = await Promise.all([
     getInOutRegisters(filter, page, pageSize),
     prisma.client.findMany({
       select: { id: true, name: true, abbreviation: true },
@@ -76,6 +84,16 @@ export default async function InOutRegisterPage({
       where: { isActive: true },
       select: { id: true, name: true, employeeCode: true },
       orderBy: { name: "asc" },
+    }),
+    prisma.inOutRegister.count(),
+    prisma.inOutRegister.count({ where: { direction: "INWARD" } }),
+    prisma.inOutRegister.count({ where: { direction: "OUTWARD" } }),
+    prisma.inOutRegister.count({
+      where: {
+        direction: "INWARD",
+        replyDueDate: { not: null },
+        replies: { none: {} },
+      },
     }),
   ]);
 
@@ -100,10 +118,19 @@ export default async function InOutRegisterPage({
         <BulkImportDialog module="inOutRegister" moduleLabel="In-Out Register" />
       </ModuleHeader>
 
+      <InOutRegisterTabs
+        counts={{
+          all: allCount,
+          inward: inwardCount,
+          outward: outwardCount,
+          pending: pendingCount,
+        }}
+      />
 
       <Card className="shadow-sm">
         <CardContent className="p-4">
           <InOutRegisterFilters
+            key={`${filter.direction ?? "all"}-${filter.hasDeadline ?? "none"}`}
             initialFilter={filter}
             clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
             departments={serialize(departments) as { id: string; name: string }[]}

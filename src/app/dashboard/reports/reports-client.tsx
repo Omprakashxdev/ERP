@@ -13,8 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, FileBarChart, Calendar, Download } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, FileBarChart, Calendar, Download, RotateCcw } from "lucide-react";
 import { runReportAction } from "@/lib/actions/reports";
+import { ReportFilterParams } from "@/lib/reports";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import { formatDateIST, toInputDateIST } from "@/lib/date-utils";
@@ -40,6 +48,9 @@ export function ReportsClient({
   selectedReportId,
   isModuleFiltered = false,
   moduleLabel,
+  clients = [],
+  staff = [],
+  departments = [],
 }: {
   categories: ReportCategoryInfo[];
   reports: ReportInfo[];
@@ -47,6 +58,9 @@ export function ReportsClient({
   selectedReportId?: string;
   isModuleFiltered?: boolean;
   moduleLabel?: string;
+  clients?: { id: string; name: string }[];
+  staff?: { id: string; name: string }[];
+  departments?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,12 +73,22 @@ export function ReportsClient({
   } | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [staffId, setStaffId] = useState("");
+  const [department, setDepartment] = useState("");
+  const [ageDue, setAgeDue] = useState("");
 
   const selectCategory = useCallback(
     (cat: string) => {
       router.push(`/dashboard/reports?category=${cat}`);
       setResult(null);
       setError(null);
+      setDateFrom("");
+      setDateTo("");
+      setClientId("");
+      setStaffId("");
+      setDepartment("");
+      setAgeDue("");
     },
     [router]
   );
@@ -86,9 +110,13 @@ export function ReportsClient({
     setError(null);
     setResult(null);
 
-    const params: { dateFrom?: Date; dateTo?: Date } = {};
+    const params: ReportFilterParams = {};
     if (dateFrom) params.dateFrom = new Date(dateFrom);
     if (dateTo) params.dateTo = new Date(dateTo);
+    if (clientId) params.clientId = clientId;
+    if (staffId) params.staffId = staffId;
+    if (department) params.department = department;
+    if (ageDue) params.ageDue = ageDue;
 
     const res = await runReportAction(selectedReportId, params);
     setLoading(false);
@@ -100,7 +128,16 @@ export function ReportsClient({
       setError(res.error ?? "Failed to run report");
       toast.error(res.error ?? "Failed to run report");
     }
-  }, [selectedReportId, dateFrom, dateTo]);
+  }, [selectedReportId, dateFrom, dateTo, clientId, staffId, department, ageDue]);
+
+  const handleResetFilters = useCallback(() => {
+    setDateFrom("");
+    setDateTo("");
+    setClientId("");
+    setStaffId("");
+    setDepartment("");
+    setAgeDue("");
+  }, []);
 
   const handleExport = useCallback(() => {
     if (!result || result.rows.length === 0) return;
@@ -215,42 +252,147 @@ export function ReportsClient({
           </div>
         )}
 
-        {/* Date filters + Run button */}
+        {/* Filter inputs + Run button */}
         {selectedReport && (
           <Card>
+            <CardHeader className="py-2.5 px-4 border-b bg-zinc-50/50 flex flex-row items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-700 uppercase tracking-wider">
+                Report Filters
+              </span>
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-xs text-zinc-500 hover:text-zinc-800 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset filters
+              </button>
+            </CardHeader>
             <CardContent className="flex flex-wrap items-end gap-3 p-4">
+              {selectedCategory === "in-out-register" && (
+                <div className="space-y-1 min-w-[200px] flex-1">
+                  <label className="text-xs font-medium text-zinc-600">Client Wise</label>
+                  <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="All clients">
+                        {(val: string) => val ? clients.find((c) => c.id === val)?.name ?? "All clients" : "All clients"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All clients</SelectItem>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-500">From Date</label>
+                <label className="text-xs font-medium text-zinc-600">From Date</label>
                 <Input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-8"
+                  className="h-8 w-[140px]"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-500">To Date</label>
+                <label className="text-xs font-medium text-zinc-600">To Date</label>
                 <Input
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="h-8"
+                  className="h-8 w-[140px]"
                 />
               </div>
-              <Button onClick={handleRun} disabled={loading} size="sm">
-                {loading ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Run Report
-              </Button>
-              {result && result.rows.length > 0 && (
-                <Button onClick={handleExport} variant="outline" size="sm">
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Export CSV
-                </Button>
+
+              {selectedCategory === "in-out-register" && (
+                <>
+                  <div className="space-y-1 min-w-[170px]">
+                    <label className="text-xs font-medium text-zinc-600">Age Wise</label>
+                    <Select value={ageDue} onValueChange={(v) => setAgeDue(v ?? "")}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="All ages">
+                          {(val: string) => {
+                            if (val === "15") return "15+ days due";
+                            if (val === "20") return "20+ days due";
+                            if (val === "25") return "25+ days due";
+                            return "All ages";
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All ages</SelectItem>
+                        <SelectItem value="15">15+ days due</SelectItem>
+                        <SelectItem value="20">20+ days due</SelectItem>
+                        <SelectItem value="25">25+ days due</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1 min-w-[180px] flex-1">
+                    <label className="text-xs font-medium text-zinc-600">Staff Member</label>
+                    <Select value={staffId} onValueChange={(v) => setStaffId(v ?? "")}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="All staff">
+                          {(val: string) => val ? staff.find((s) => s.id === val)?.name ?? "All staff" : "All staff"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All staff</SelectItem>
+                        {staff.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(selectedReportId === "inout-pending-reply" || selectedReportId === "inout-outward") && (
+                    <div className="space-y-1 min-w-[180px] flex-1">
+                      <label className="text-xs font-medium text-zinc-600">
+                        {selectedReportId === "inout-outward" ? "To Department / Division" : "Department Wise"}
+                      </label>
+                      <Select value={department} onValueChange={(v) => setDepartment(v ?? "")}>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="All departments">
+                            {(val: string) => val ? departments.find((d) => d.name === val)?.name ?? val : "All departments"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All departments</SelectItem>
+                          {departments.map((d) => (
+                            <SelectItem key={d.id} value={d.name}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </>
               )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button onClick={handleRun} disabled={loading} size="sm" className="bg-zinc-900 text-white hover:bg-zinc-800">
+                  {loading ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Run Report
+                </Button>
+                {result && result.rows.length > 0 && (
+                  <Button onClick={handleExport} variant="outline" size="sm">
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Export CSV
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}

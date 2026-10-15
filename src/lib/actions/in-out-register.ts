@@ -19,23 +19,21 @@ import {
   ActionResult,
 } from "./wrapper";
 import { createInOutRegisterLinkedTasks, deleteLinkedTasks } from "./task-linking";
-import { computeAgeInDaysIST, toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
-
-function generateReplyRefNo(): string {
-  const random = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, "0");
-  return `REP-${Date.now()}-${random}`;
-}
+import {
+  computeAgeInDaysIST,
+  toInputDateIST,
+  getTodayISTDateString,
+  getIndianFinancialYear,
+} from "@/lib/date-utils";
 
 function computeInOutRegisterFlags(entry: {
-  replyDate: Date | null;
   receivedDate: Date;
-  replyRequired?: boolean;
   replyDueDate?: Date | null;
   direction?: string;
+  replies?: unknown[];
 }) {
-  const isPending = Boolean(entry.direction !== "OUTWARD" && entry.replyRequired && !entry.replyDate);
+  const hasReply = Boolean(entry.replies && entry.replies.length > 0);
+  const isPending = Boolean(entry.direction !== "OUTWARD" && entry.replyDueDate && !hasReply);
   const nowStr = getTodayISTDateString();
   const dueDateStr = entry.replyDueDate ? toInputDateIST(entry.replyDueDate) : null;
 
@@ -60,6 +58,7 @@ function computeInOutRegisterFlags(entry: {
 
   return {
     isPendingReply: isPending,
+    isReplied: hasReply,
     isOverdue,
     daysUntilDue,
     daysOverdue,
@@ -86,16 +85,12 @@ export async function createInOutRegister(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("inOutRegister", "create", async (user) => {
     const parsed = inOutRegisterCreateSchema.parse(input);
-    const { ccStaffIds, documents, replyDate, ...data } = parsed;
+    const { ccStaffIds, documents, ...data } = parsed;
     await checkRateLimit(user.id);
-
-    const replyRefNo = replyDate ? generateReplyRefNo() : null;
 
     const entry = await prisma.inOutRegister.create({
       data: {
         ...data,
-        replyDate,
-        replyRefNo,
         documents: buildDocumentCreateInput(documents),
         ccStaff: buildCcStaffCreateInput(ccStaffIds),
       },
@@ -125,16 +120,13 @@ export async function updateInOutRegister(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("inOutRegister", "update", async (user) => {
     const parsed = inOutRegisterUpdateSchema.parse(input);
-    const { id, ccStaffIds, documents, replyDate, ...data } = parsed;
+    const { id, ccStaffIds, documents, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const existing = await prisma.inOutRegister.findUnique({
       where: { id },
     });
     if (!existing) throw new Error("In-out register entry not found");
-
-    const replyRefNo =
-      replyDate && !existing.replyRefNo ? generateReplyRefNo() : undefined;
 
     await prisma.inOutRegisterDocument.deleteMany({
       where: { inOutRegisterId: id },
@@ -147,8 +139,6 @@ export async function updateInOutRegister(
       where: { id },
       data: {
         ...data,
-        replyDate,
-        replyRefNo,
         documents: buildDocumentCreateInput(documents),
         ccStaff: buildCcStaffCreateInput(ccStaffIds),
       },
@@ -202,6 +192,12 @@ export async function getInOutRegisters(
           ccStaff: {
             include: { staff: true },
           },
+          parentInward: {
+            select: { id: true, documentRefNo: true, details: true, documentDate: true },
+          },
+          replies: {
+            select: { id: true, documentRefNo: true, receivedDate: true, details: true },
+          },
         },
         orderBy: { receivedDate: "desc" },
         skip: (page - 1) * pageSize,
@@ -233,6 +229,12 @@ export async function getInOutRegisterById(
         ccStaff: {
           include: { staff: true },
         },
+        parentInward: {
+          select: { id: true, documentRefNo: true, details: true, documentDate: true },
+        },
+        replies: {
+          select: { id: true, documentRefNo: true, receivedDate: true, details: true },
+        },
       },
     });
 
@@ -245,3 +247,39 @@ export async function getInOutRegisterById(
     };
   });
 }
+
+export async function getNextRegisterRefNo(
+  direction: "INWARD" | "OUTWARD",
+  dateInput?: string | Date | null
+): Promise<ActionResult<{ refNo: string }>> {
+  return withPermission("inOutRegister", "read", async () => {
+    const fy = getIndianFinancialYear(dateInput || new Date());
+    const prefix = direction === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
+
+    const records = await prisma.inOutRegister.findMany({
+      where: {
+        direction,
+        documentRefNo: {
+          startsWith: prefix,
+          mode: "insensitive",
+        },
+      },
+      select: { documentRefNo: true },
+    });
+
+    let maxSeq = 0;
+    for (const rec of records) {
+      const parts = rec.documentRefNo.split("/");
+      const lastPart = parts[parts.length - 1];
+      const num = parseInt(lastPart, 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    const padded = String(nextSeq).padStart(3, "0");
+    return { refNo: `${prefix}${padded}` };
+  });
+}
+

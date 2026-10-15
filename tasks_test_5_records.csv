@@ -1,6 +1,6 @@
 title,description,status,priority,assignedTo,assignedBy,project,dueDate,reworkCount
-Complete DPR alignment maps and submit to SMC,Finalize geotechnical soil report annexures and submit 3 hard-bound DPR sets,IN_PROGRESS,HIGH,Amit Desai,,Riverfront Development,2026-09-15,0
-Witness 28-day concrete cube compression testing at NABL lab,Collect 6 test cubes for Pier P4 and obtain certified compression strength report,OPEN,CRITICAL,Bob Jones,,Water Supply Network Phase-1.,2026-09-12,0
-Reconcile GSTR-2B input tax credit and file August GSTR-3B,Verify GST invoices against PMC consultancy billing ledger before due date,PENDING_REVIEW,HIGH,Foram Shah,,,2026-09-10,0
-Send Leica TS07 Total Station for annual optical calibration,Coordinate with Leica authorized service center in Ahmedabad for calibration certificate,ON_HOLD,MEDIUM,Bob Jones,,,2026-09-25,1
-Scrutinize Contractor JMC Projects RA Bill 2 measurement sheets,Cross-check joint site measurement book records with BOQ Schedule B quantities,COMPLETED,HIGH,Amit Desai,,Water Supply Network Phase-1.,2026-09-02,0
+Review DPR Drawings for Morbi Site,Verify civil & structural drawings with TS sanction,IN_PROGRESS,HIGH,Amit Verma,System Administrator,,2026-05-25,0
+Vetting of Hydraulic Surge Analysis for KUWSDB Pipeline,Review Transient water hammer analysis report submitted by contractor for Mangaluru raw water rising main,OPEN,CRITICAL,Pooja Sharma,System Administrator,KUWSDB Mangaluru Bulk Water Scheme Ph-1,2026-11-05,0
+Effluent Carrier Trench Safety & Shoring Inspection,Conduct mandatory OHS audit and soil stabilization inspection for 4m deep effluent trenching at TSIIC site,IN_PROGRESS,HIGH,Rakesh Joshi,System Administrator,TSIIC Pharma City Effluent Network Ph-2,2026-11-10,0
+Structural Integrity Cross-Check of JDA Box Culvert Design,Cross-verify STAAD Pro finite element analysis with IRC 112:2020 limit state criteria for underpass deck,OPEN,MEDIUM,Jitendra Patel,System Administrator,JDA South Ring Road Underpass Construction,2026-11-15,0
+Preparation of Environmental Impact Assessment EIA Chapter 4,Draft environmental monitoring plan and tree transplantation inventory for MPRDC corridor stretch,IN_PROGRESS,HIGH,Amit Verma,System Administrator,MPRDC Bhopal-Indore Green Highway Corridor,2026-11-20,0

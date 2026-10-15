@@ -30,6 +30,7 @@ import {
   CheckSquare,
   BarChart3,
   Users,
+  Database,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -38,7 +39,8 @@ const navigationItems = [
   { label: "Fund Flow", href: "/dashboard/fund-flow", icon: Landmark },
   { label: "Due Bills", href: "/dashboard/due-bills", icon: FileText },
   { label: "WIP", href: "/dashboard/wip", icon: Hammer },
-  { label: "Clients", href: "/dashboard/clients", icon: Users },
+  { label: "Clients", href: "/dashboard/masters?tab=clients", icon: Users },
+  { label: "Masters", href: "/dashboard/masters", icon: Database },
   { label: "Contractors", href: "/dashboard/contractors", icon: HardHat },
   { label: "Tenders", href: "/dashboard/tenders", icon: ClipboardList },
   { label: "Payment Schedules", href: "/dashboard/payment-schedules", icon: CalendarDays },

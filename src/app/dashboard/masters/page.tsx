@@ -17,17 +17,24 @@ export default async function MastersPage({
 }) {
   const params = searchParams ? await searchParams : undefined;
   const session = await auth();
-  const canManage = session?.user
+  const canManageStaff = session?.user
     ? hasPermission(session.user.role, "staffManagement", "create")
     : false;
+  const canManageClients = session?.user
+    ? hasPermission(session.user.role, "clientManagement", "create")
+    : false;
 
-  const [staffResult, regions, departments, designations, cities] =
+  const [staffResult, regions, departments, designations, cities, clients] =
     await Promise.all([
       getStaff(undefined, false),
       prisma.region.findMany({ orderBy: { name: "asc" } }),
       prisma.department.findMany({ orderBy: { name: "asc" } }),
       prisma.designation.findMany({ orderBy: { name: "asc" } }),
       prisma.city.findMany({ orderBy: { name: "asc" } }),
+      prisma.client.findMany({
+        include: { contacts: true, _count: { select: { projects: true } } },
+        orderBy: { name: "asc" },
+      }),
     ]);
 
   const staff = staffResult.success ? (staffResult.data ?? []) : [];
@@ -43,19 +50,21 @@ export default async function MastersPage({
             Masters & Lookup Data
           </h1>
           <p className="text-sm text-zinc-500">
-            Manage system lookups, categories, regions, and employee master
+            Manage system lookups, categories, regions, clients, and employee master
           </p>
         </div>
       </div>
 
       <MastersManager
         initialTab={params?.tab}
+        clientsData={serialize(clients) as never}
         staffData={serialize(staff) as never}
         regionsData={serialize(regions) as never}
         departmentsData={serialize(departments) as never}
         designationsData={serialize(designations) as never}
         citiesData={serialize(cities) as never}
-        canManage={canManage}
+        canManage={canManageStaff}
+        canManageClients={canManageClients}
       />
     </div>
   );

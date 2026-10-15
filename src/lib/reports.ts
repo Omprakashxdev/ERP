@@ -37,6 +37,13 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     groupBy: ["client", "date", "age", "staff"],
   },
   {
+    id: "inout-outward",
+    category: "in-out-register",
+    title: "Outward Register Report",
+    description: "Outward dispatches: client wise, date wise, age wise, staff member wise, department wise",
+    groupBy: ["client", "date", "age", "staff", "department"],
+  },
+  {
     id: "inout-pending-reply",
     category: "in-out-register",
     title: "Pending for Reply",
@@ -468,13 +475,25 @@ export const REPORT_CATEGORIES: { id: ReportCategory; label: string; icon: strin
   { id: "tasks", label: "Tasks", icon: "CheckSquare" },
 ];
 
+export interface ReportFilterParams {
+  dateFrom?: Date;
+  dateTo?: Date;
+  groupBy?: string;
+  clientId?: string;
+  staffId?: string;
+  department?: string;
+  ageDue?: "15" | "20" | "25" | string;
+}
+
 export async function runReport(
   reportId: string,
-  params?: { dateFrom?: Date; dateTo?: Date; groupBy?: string }
+  params?: ReportFilterParams
 ): Promise<{ columns: string[]; rows: Record<string, unknown>[]; summary?: Record<string, number> }> {
   switch (reportId) {
     case "inout-general":
       return runInOutGeneral(params);
+    case "inout-outward":
+      return runInOutOutward(params);
     case "inout-pending-reply":
       return runInOutPendingReply(params);
     case "vehicle-km":
@@ -610,8 +629,46 @@ function dateFilter(params?: { dateFrom?: Date; dateTo?: Date }): Record<string,
   return filter;
 }
 
-async function runInOutGeneral(params?: { dateFrom?: Date; dateTo?: Date }) {
-  const where = dateFilter(params);
+function getAgeThresholdDate(days: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+async function runInOutGeneral(params?: ReportFilterParams) {
+  const where: Prisma.InOutRegisterWhereInput = {};
+
+  if (params?.clientId) {
+    where.clientId = params.clientId;
+  }
+  if (params?.staffId) {
+    where.actionSuggestedStaffId = params.staffId;
+  }
+  if (params?.department?.trim()) {
+    where.department = { contains: params.department.trim(), mode: "insensitive" };
+  }
+
+  // Date range and age filter on receivedDate
+  const dateFilterObj: Prisma.DateTimeFilter = {};
+  if (params?.dateFrom) {
+    dateFilterObj.gte = params.dateFrom;
+  }
+  if (params?.dateTo) {
+    const to = new Date(params.dateTo);
+    to.setDate(to.getDate() + 1);
+    dateFilterObj.lt = to;
+  }
+  if (params?.ageDue) {
+    const days = Number(params.ageDue);
+    if (!Number.isNaN(days)) {
+      dateFilterObj.lte = getAgeThresholdDate(days);
+    }
+  }
+  if (Object.keys(dateFilterObj).length > 0) {
+    where.receivedDate = dateFilterObj;
+  }
+
   const rows = await prisma.inOutRegister.findMany({
     where,
     include: {
@@ -623,7 +680,7 @@ async function runInOutGeneral(params?: { dateFrom?: Date; dateTo?: Date }) {
   });
 
   return {
-    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Department", "Details", "Reply Required", "Reply Due Date", "Action Staff", "Reply Date", "Reply Ref No", "Age (days)"],
+    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Department", "Details", "Reply Due Date", "Action Staff", "Age (days)"],
     rows: rows.map((r) => ({
       Direction: r.direction === "OUTWARD" ? "Outward" : "Inward",
       "Doc Date": r.documentDate,
@@ -632,23 +689,120 @@ async function runInOutGeneral(params?: { dateFrom?: Date; dateTo?: Date }) {
       Client: r.client.name,
       Department: r.department ?? "—",
       Details: r.details ?? "",
-      "Reply Required": r.replyRequired ? "Yes" : "No",
       "Reply Due Date": r.replyDueDate ? formatDateIST(r.replyDueDate) : "—",
       "Action Staff": r.actionSuggestedStaff?.name ?? "—",
-      "Reply Date": r.replyDate ?? "—",
-      "Reply Ref No": r.replyRefNo ?? "—",
       "Age (days)": computeAgeInDaysIST(r.receivedDate),
     })),
+    summary: { "Total records": rows.length },
   };
 }
 
-async function runInOutPendingReply(params?: { dateFrom?: Date; dateTo?: Date }) {
-  const where = {
-    ...dateFilter(params),
-    replyRequired: true,
-    replyDate: null,
-    direction: "INWARD" as const,
+async function runInOutOutward(params?: ReportFilterParams) {
+  const where: Prisma.InOutRegisterWhereInput = {
+    direction: "OUTWARD",
   };
+
+  if (params?.clientId) {
+    where.clientId = params.clientId;
+  }
+  if (params?.staffId) {
+    where.actionSuggestedStaffId = params.staffId;
+  }
+  if (params?.department?.trim()) {
+    where.department = { contains: params.department.trim(), mode: "insensitive" };
+  }
+
+  // Date range and age filter on receivedDate (sent/dispatched date)
+  const dateFilterObj: Prisma.DateTimeFilter = {};
+  if (params?.dateFrom) {
+    dateFilterObj.gte = params.dateFrom;
+  }
+  if (params?.dateTo) {
+    const to = new Date(params.dateTo);
+    to.setDate(to.getDate() + 1);
+    dateFilterObj.lt = to;
+  }
+  if (params?.ageDue) {
+    const days = Number(params.ageDue);
+    if (!Number.isNaN(days)) {
+      dateFilterObj.lte = getAgeThresholdDate(days);
+    }
+  }
+  if (Object.keys(dateFilterObj).length > 0) {
+    where.receivedDate = dateFilterObj;
+  }
+
+  const rows = await prisma.inOutRegister.findMany({
+    where,
+    include: {
+      client: { select: { name: true } },
+      actionSuggestedStaff: { select: { name: true } },
+    },
+    orderBy: { receivedDate: "desc" },
+    take: 500,
+  });
+
+  return {
+    columns: [
+      "Doc Date",
+      "Dispatched Date",
+      "Outward Ref No",
+      "Client",
+      "Department",
+      "Details",
+      "Action Staff",
+      "Age (days)",
+    ],
+    rows: rows.map((r) => ({
+      "Doc Date": r.documentDate,
+      "Dispatched Date": r.receivedDate,
+      "Outward Ref No": r.documentRefNo,
+      Client: r.client.name,
+      Department: r.department ?? "—",
+      Details: r.details ?? "",
+      "Action Staff": r.actionSuggestedStaff?.name ?? "—",
+      "Age (days)": computeAgeInDaysIST(r.receivedDate),
+    })),
+    summary: { "Total outward records": rows.length },
+  };
+}
+
+async function runInOutPendingReply(params?: ReportFilterParams) {
+  const where: Prisma.InOutRegisterWhereInput = {
+    direction: "INWARD",
+    replyDueDate: { not: null },
+  };
+
+  if (params?.clientId) {
+    where.clientId = params.clientId;
+  }
+  if (params?.staffId) {
+    where.actionSuggestedStaffId = params.staffId;
+  }
+  if (params?.department?.trim()) {
+    where.department = { contains: params.department.trim(), mode: "insensitive" };
+  }
+
+  // Date range and age filter on receivedDate
+  const dateFilterObj: Prisma.DateTimeFilter = {};
+  if (params?.dateFrom) {
+    dateFilterObj.gte = params.dateFrom;
+  }
+  if (params?.dateTo) {
+    const to = new Date(params.dateTo);
+    to.setDate(to.getDate() + 1);
+    dateFilterObj.lt = to;
+  }
+  if (params?.ageDue) {
+    const days = Number(params.ageDue);
+    if (!Number.isNaN(days)) {
+      dateFilterObj.lte = getAgeThresholdDate(days);
+    }
+  }
+  if (Object.keys(dateFilterObj).length > 0) {
+    where.receivedDate = dateFilterObj;
+  }
+
   const rows = await prisma.inOutRegister.findMany({
     where,
     include: {

@@ -95,8 +95,8 @@ Equipment tracking. Fields: itemCode, name, category, make, model, yearOfPurchas
 Statuses: AVAILABLE, ASSIGNED, UNDER_MAINTENANCE, DISPOSED.
 
 ### In-Out Register (/dashboard/in-out-register)
-Document tracking. Fields: documentDate, receivedDate, documentRefNo, details, client, actionSuggestedStaff, ccStaff, replyDate, replyRefNo.
-Links to clients and staff. Tracks replies and CC assignments.
+Document tracking. Fields: direction, documentDate, receivedDate, documentRefNo, details, client, actionSuggestedStaff, ccStaff, inwardType, receivedByPersonName, replyDueDate.
+Links to clients and staff. Tracks deadlines and CC assignments.
 
 ### TADA Bills (/dashboard/tada-bills)
 Travel & daily allowance claims. Fields: staff, tourPurpose, fromDate, toDate, location, travelExpense, accommodationExp, foodExpense, localConveyance, otherExpense, totalClaimAmount, advanceAmount, status.

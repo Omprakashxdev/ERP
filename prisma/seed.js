@@ -229,10 +229,10 @@ async function main() {
 
   // --- In-Out Register ---
   const inOuts = [
-    { documentDate: new Date("2025-07-01"), receivedDate: new Date("2025-07-03"), documentRefNo: "GSPHC/2025/001", details: "Approval for 1st RA bill", clientId: clients[0].id, actionSuggestedStaffId: staff[1].id, replyDate: new Date("2025-07-10"), replyRefNo: "REPLY/2025/001" },
-    { documentDate: new Date("2025-07-15"), receivedDate: new Date("2025-07-16"), documentRefNo: "GUDM/2025/045", details: "TPI work order copy", clientId: clients[1].id, actionSuggestedStaffId: staff[2].id, replyDate: null, replyRefNo: null },
-    { documentDate: new Date("2025-08-01"), receivedDate: new Date("2025-08-02"), documentRefNo: "SMC/2025/112", details: "Drainage tender query", clientId: clients[2].id, actionSuggestedStaffId: staff[3].id, replyDate: new Date("2025-08-10"), replyRefNo: "REPLY/2025/002" },
-    { documentDate: new Date("2025-08-20"), receivedDate: new Date("2025-08-21"), documentRefNo: "RMC/2025/078", details: "Water supply DPR feedback", clientId: clients[3].id, actionSuggestedStaffId: staff[1].id, replyDate: null, replyRefNo: null },
+    { documentDate: new Date("2025-07-01"), receivedDate: new Date("2025-07-03"), documentRefNo: "GSPHC/2025/001", details: "Approval for 1st RA bill", clientId: clients[0].id, actionSuggestedStaffId: staff[1].id, replyDueDate: new Date("2025-07-20") },
+    { documentDate: new Date("2025-07-15"), receivedDate: new Date("2025-07-16"), documentRefNo: "GUDM/2025/045", details: "TPI work order copy", clientId: clients[1].id, actionSuggestedStaffId: staff[2].id, replyDueDate: null },
+    { documentDate: new Date("2025-08-01"), receivedDate: new Date("2025-08-02"), documentRefNo: "SMC/2025/112", details: "Drainage tender query", clientId: clients[2].id, actionSuggestedStaffId: staff[3].id, replyDueDate: new Date("2025-08-15") },
+    { documentDate: new Date("2025-08-20"), receivedDate: new Date("2025-08-21"), documentRefNo: "RMC/2025/078", details: "Water supply DPR feedback", clientId: clients[3].id, actionSuggestedStaffId: staff[1].id, replyDueDate: null },
   ];
   for (const io of inOuts) {
     await prisma.inOutRegister.create({ data: io });

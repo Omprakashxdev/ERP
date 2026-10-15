@@ -64,12 +64,6 @@ export const navGroups: NavGroup[] = [
         icon: Hammer,
         description: "Active work status",
       },
-      {
-        label: "Clients",
-        href: "/dashboard/clients",
-        icon: Users,
-        description: "Client master",
-      },
     ],
   },
   {
@@ -142,7 +136,7 @@ export const navGroups: NavGroup[] = [
         label: "Masters",
         href: "/dashboard/masters",
         icon: Database,
-        description: "Lookup data & employee master",
+        description: "Lookup data, client & employee master",
       },
     ],
   },

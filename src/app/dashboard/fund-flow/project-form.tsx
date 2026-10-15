@@ -401,7 +401,7 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                     <div className="flex items-center justify-between">
                       <Label htmlFor="client">Client</Label>
                       <a
-                        href="/dashboard/clients"
+                        href="/dashboard/masters?tab=clients"
                         target="_blank"
                         className="text-[10px] text-zinc-500 hover:text-zinc-900 hover:underline"
                       >

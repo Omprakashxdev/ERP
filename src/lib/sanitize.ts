@@ -286,9 +286,6 @@ export function scrubInOutRegisterForAi(rows: unknown[]): unknown[] {
     if (typeof scrubbed.documentRefNo === "string") {
       scrubbed.documentRefNo = "[DOC_REF]";
     }
-    if (typeof scrubbed.replyRefNo === "string") {
-      scrubbed.replyRefNo = "[REPLY_REF]";
-    }
     if (typeof scrubbed.details === "string") {
       scrubbed.details = scrubPii(scrubbed.details);
     }

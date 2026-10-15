@@ -52,6 +52,7 @@ export async function createClient(
 
     revalidatePath("/dashboard/fund-flow");
     revalidatePath("/dashboard/clients");
+    revalidatePath("/dashboard/masters");
     return client;
   }, mutationRoles);
 }
@@ -107,6 +108,7 @@ export async function updateClient(
 
     revalidatePath("/dashboard/fund-flow");
     revalidatePath("/dashboard/clients");
+    revalidatePath("/dashboard/masters");
     return { id: client.id };
   }, mutationRoles);
 }

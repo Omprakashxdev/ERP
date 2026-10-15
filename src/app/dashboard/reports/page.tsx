@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { REPORT_DEFINITIONS, REPORT_CATEGORIES } from "@/lib/reports";
 import { ReportsClient } from "./reports-client";
 import { buttonVariants } from "@/components/ui/button";
@@ -38,7 +39,28 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     redirect("/login");
   }
 
-  const params = await searchParams;
+  const [params, clients, staff, masterDepartments, registerDepartments] = await Promise.all([
+    searchParams,
+    prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.staff.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.department.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.inOutRegister.findMany({
+      where: { department: { not: null } },
+      select: { department: true },
+      distinct: ["department"],
+    }),
+  ]);
+
+  const allDeptNames = Array.from(
+    new Set([
+      ...masterDepartments.map((d) => d.name.trim()),
+      ...registerDepartments
+        .map((r) => r.department?.trim())
+        .filter((d): d is string => Boolean(d)),
+    ])
+  ).sort((a, b) => a.localeCompare(b));
+
+  const departments = allDeptNames.map((name) => ({ id: name, name }));
   // ONLY activate the single-module view if explicitly coming from a module's "View Reports" button
   const isModuleFiltered = params.from === "module";
   const rawCategory = params.category ? params.category.replace(/_/g, "-") : "in-out-register";
@@ -103,6 +125,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         selectedReportId={params.report}
         isModuleFiltered={isModuleFiltered}
         moduleLabel={matchedModule?.label}
+        clients={clients}
+        staff={staff}
+        departments={departments}
       />
     </div>
   );

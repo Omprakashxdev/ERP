@@ -1,6 +1,6 @@
 date,dueDate,paymentType,category,detail,amount,status,remarks
-2026-08-01,2026-08-20,GSTR-3B Monthly Tax Return,GST,GSTR-3B liability for July 2026 turnover,185000,PAID,Paid via HDFC Corporate Net Banking challan #GST9912.
-2026-08-01,2026-08-07,Section 194C / 194J TDS Challan,TDS,TDS deducted from subcontractor & consultant bills July 2026,42500,PAID,Challan ITNS-281 generated and paid.
-2026-08-15,2026-09-05,Vehicle Loan EMI - ICICI Bank,VEHICLE_LOAN,Monthly EMI for Toyota Innova Crysta (GJ-01-AB-1234),28450,PENDING,Auto-debit mandate registered.
-2026-08-15,2026-09-10,Vehicle Loan EMI - HDFC Bank,VEHICLE_LOAN,Monthly EMI for Mahindra Scorpio-N (GJ-03-XY-5678),24500,PENDING,Cheque clearance scheduled.
-2026-08-20,2026-09-15,Municipal Professional Tax,EXCISE,Quarterly professional tax for technical engineering staff,15000,PENDING,AMC PT challan prepared.
+2026-05-01,2026-05-20,Statutory,GST,GSTR-3B Monthly Tax Deposit,125000,PENDING,Challan pending
+2026-10-01,2026-10-20,GSTR-3B Tax Liability September 2026,GST,GST liability on professional consultancy receipts for Sept 2026,245000,PENDING,Challan generated on GST portal
+2026-10-05,2026-10-07,TDS Deposit Section 194J September 2026,TDS,TDS on technical services and contractor billings for Sept 2026,115000,PAID,Paid via HDFC Bank Corporate Netbanking
+2026-10-10,2026-10-15,HDFC Vehicle Loan EMI Innova Hybrid,VEHICLE_LOAN,Monthly loan EMI for field inspection vehicle GJ-01-ET-2024,38500,PENDING,Auto-debit mandate registered with HDFC
+2026-10-15,2026-10-31,Quarterly Advance Corporate Income Tax Q2,EXCISE,Q2 Advance Corporate Income Tax installment,450000,PENDING,Awaiting statutory auditor advance tax computation

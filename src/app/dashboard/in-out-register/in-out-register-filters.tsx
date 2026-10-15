@@ -36,8 +36,7 @@ export function InOutRegisterFilters({
     initialFilter.actionSuggestedStaffId ?? ""
   );
   const [ccStaffId, setCcStaffId] = useState(initialFilter.ccStaffId ?? "");
-  const [replyRequired, setReplyRequired] = useState(initialFilter.replyRequired ?? "");
-  const [hasReply, setHasReply] = useState(initialFilter.hasReply ?? "");
+  const [hasDeadline, setHasDeadline] = useState(initialFilter.hasDeadline ?? "");
   const [receivedDateFrom, setReceivedDateFrom] = useState(
     initialFilter.receivedDateFrom
       ? new Date(initialFilter.receivedDateFrom).toISOString().split("T")[0]
@@ -59,8 +58,7 @@ export function InOutRegisterFilters({
     if (actionSuggestedStaffId)
       params.set("actionSuggestedStaffId", actionSuggestedStaffId);
     if (ccStaffId) params.set("ccStaffId", ccStaffId);
-    if (replyRequired) params.set("replyRequired", replyRequired);
-    if (hasReply) params.set("hasReply", hasReply);
+    if (hasDeadline) params.set("hasDeadline", hasDeadline);
     if (receivedDateFrom) params.set("receivedDateFrom", receivedDateFrom);
     if (receivedDateTo) params.set("receivedDateTo", receivedDateTo);
     if (ageDue) params.set("ageDue", ageDue);
@@ -79,8 +77,7 @@ export function InOutRegisterFilters({
     setDepartment("");
     setActionSuggestedStaffId("");
     setCcStaffId("");
-    setReplyRequired("");
-    setHasReply("");
+    setHasDeadline("");
     setReceivedDateFrom("");
     setReceivedDateTo("");
     setAgeDue("");
@@ -162,74 +159,16 @@ export function InOutRegisterFilters({
         )}
       </div>
 
-      <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Reply Required?</label>
-        <Select value={replyRequired} onValueChange={(v) => setReplyRequired(v ?? "")}>
-          <SelectTrigger className="w-full min-w-36" size="sm">
-            <SelectValue placeholder="All entries" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All entries</SelectItem>
-            <SelectItem value="true">Yes, Reply Required</SelectItem>
-            <SelectItem value="false">No, Informational</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex min-w-48 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Action suggested</label>
-        <Select
-          value={actionSuggestedStaffId}
-          onValueChange={(v) => setActionSuggestedStaffId(v ?? "")}
-        >
-          <SelectTrigger className="w-full min-w-48" size="sm">
-            <SelectValue placeholder="All staff">
-              {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All staff" : "All staff"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All staff</SelectItem>
-            {staff.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex min-w-48 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">CC marked</label>
-        <Select
-          value={ccStaffId}
-          onValueChange={(v) => setCcStaffId(v ?? "")}
-        >
-          <SelectTrigger className="w-full min-w-48" size="sm">
-            <SelectValue placeholder="All staff">
-              {(value: string) => value ? staff.find((s) => s.id === value)?.name ?? "All staff" : "All staff"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All staff</SelectItem>
-            {staff.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Reply status</label>
-        <Select value={hasReply} onValueChange={(v) => setHasReply(v ?? "")}>
+        <label className="text-xs font-medium text-zinc-600">Deadline Status</label>
+        <Select value={hasDeadline} onValueChange={(v) => setHasDeadline(v ?? "")}>
           <SelectTrigger className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="">All</SelectItem>
-            <SelectItem value="false">Pending reply</SelectItem>
-            <SelectItem value="true">Replied</SelectItem>
+            <SelectItem value="true">Has Due Date</SelectItem>
+            <SelectItem value="false">No Due Date</SelectItem>
           </SelectContent>
         </Select>
       </div>

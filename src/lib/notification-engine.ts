@@ -107,8 +107,8 @@ async function checkInOutRegisterReplies(thresholdDays: number): Promise<Generat
 
   const pending = await prisma.inOutRegister.findMany({
     where: {
-      replyDate: null,
-      receivedDate: { lte: threshold },
+      direction: "INWARD",
+      replyDueDate: { not: null, lte: new Date() },
     },
     include: { client: { select: { name: true } } },
   });

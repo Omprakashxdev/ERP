@@ -45,6 +45,7 @@ import {
 } from "@/lib/actions/masters";
 
 import { StaffTable } from "@/app/dashboard/employee/staff-table";
+import { ClientsTable } from "@/app/dashboard/clients/clients-table";
 import { Staff, Region, EmployeeDetail, Department, Designation, City } from "@prisma/client";
 
 type StaffWithDetails = Staff & {
@@ -53,7 +54,7 @@ type StaffWithDetails = Staff & {
   employeeDetail?: EmployeeDetail | null;
 };
 
-export type ExtendedMasterType = MasterType | "employee";
+export type ExtendedMasterType = MasterType | "employee" | "clients";
 
 interface MasterItem {
   id: string;
@@ -82,6 +83,7 @@ interface MasterConfig {
 }
 
 const MASTER_CONFIGS: MasterConfig[] = [
+  { type: "clients", label: "Clients", singularLabel: "Client", field: "name" },
   { type: "employee", label: "Employees", singularLabel: "Employee", field: "name" },
   { type: "region", label: "Regions", singularLabel: "Region", field: "name" },
   { type: "department", label: "Departments", singularLabel: "Department", field: "name" },
@@ -105,27 +107,31 @@ const MASTER_CONFIGS: MasterConfig[] = [
 
 interface MastersManagerProps {
   initialTab?: string;
+  clientsData?: any[];
   staffData?: StaffWithDetails[];
   regionsData?: Region[];
   departmentsData?: Department[];
   designationsData?: Designation[];
   citiesData?: City[];
   canManage?: boolean;
+  canManageClients?: boolean;
 }
 
 export function MastersManager({
   initialTab,
+  clientsData = [],
   staffData = [],
   regionsData = [],
   departmentsData = [],
   designationsData = [],
   citiesData = [],
   canManage = true,
+  canManageClients = true,
 }: MastersManagerProps) {
   const [activeType, setActiveType] = useState<ExtendedMasterType>(
     (initialTab as ExtendedMasterType) && MASTER_CONFIGS.some((c) => c.type === initialTab)
       ? (initialTab as ExtendedMasterType)
-      : "employee"
+      : "clients"
   );
   const [items, setItems] = useState<MasterItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,7 +154,7 @@ export function MastersManager({
   const activeConfig = MASTER_CONFIGS.find((c) => c.type === activeType)!;
 
   const loadItems = useCallback(async () => {
-    if (activeType === "employee") return;
+    if (activeType === "employee" || activeType === "clients") return;
     setLoading(true);
     const res = await getMasterList(activeType as MasterType, search || undefined);
     if (res.success && res.data) {
@@ -299,7 +305,29 @@ export function MastersManager({
         ))}
       </div>
 
-      {activeType === "employee" ? (
+      {activeType === "clients" ? (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle className="text-base font-medium">
+                Clients ({clientsData.length})
+              </CardTitle>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Manage client master, GSTIN/PAN details, and key authority contacts
+              </p>
+            </div>
+            {canManageClients && (
+              <BulkImportDialog module="clients" moduleLabel="Clients" />
+            )}
+          </CardHeader>
+          <CardContent>
+            <ClientsTable
+              clients={clientsData as never}
+              canManage={canManageClients}
+            />
+          </CardContent>
+        </Card>
+      ) : activeType === "employee" ? (
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <div>

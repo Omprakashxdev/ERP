@@ -1,0 +1,6 @@
+project,project_region,project_client,project_workOrderDate,project_timeLimitMonths,project_workType,project_serviceType,miscExp,staffExp,totalProjectCost,completedWorkAmt,proposedDueBillAmount,feeReceived
+GSPHC Abad Division - 1st RA,Ahmedabad,GSPHC,2019-01-15,12,BUILDING,SUPERVISION,500,2000,2500,10000,11800,11800
+KUWSDB Mangaluru Bulk Water Scheme Ph-1,Surat,Karnataka Urban Water Supply Board,2026-10-01,24,WATER_SUPPLY,PMC,60000,180000,85000000,14000000,1200000,750000
+TSIIC Pharma City Effluent Network Ph-2,Vadodara,Telangana State Industrial Infrastructure Corp,2026-10-15,18,DRAINAGE,SUPERVISION,45000,120000,62000000,8500000,950000,600000
+JDA South Ring Road Underpass Construction,Rajkot,Jaipur Development Authority,2026-11-01,12,ROAD,PMC,35000,95000,48000000,6000000,750000,500000
+MPRDC Bhopal-Indore Green Highway Corridor,Ahmedabad,Madhya Pradesh Road Development Corp,2026-11-10,36,ROAD,DPR,80000,220000,125000000,22000000,1800000,1100000

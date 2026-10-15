@@ -31,8 +31,9 @@ import {
 import {
   createInOutRegister,
   updateInOutRegister,
+  getNextRegisterRefNo,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2 } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { toast } from "sonner";
@@ -45,6 +46,19 @@ interface InOutRegisterFormProps {
     actionSuggestedStaff?: Staff | null;
     documents?: InOutRegisterDocument[];
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
+    parentInward?: {
+      id: string;
+      documentRefNo: string;
+      details?: string | null;
+    } | null;
+  };
+  defaultDirection?: InOutDirection;
+  parentInward?: {
+    id: string;
+    documentRefNo: string;
+    clientId: string;
+    department?: string | null;
+    details?: string | null;
   };
   clients: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
@@ -63,25 +77,29 @@ function emptyToNull(value: string): string | null {
 
 function getInitialForm(
   entry: InOutRegisterFormProps["entry"],
-  clients: { id: string; name: string }[]
+  clients: { id: string; name: string }[],
+  defaultDirection?: InOutDirection,
+  parentInward?: InOutRegisterFormProps["parentInward"]
 ) {
   if (!entry) {
+    const direction = defaultDirection ?? (parentInward ? "OUTWARD" : "INWARD");
     return {
-      direction: "INWARD" as InOutDirection,
+      direction: direction as InOutDirection,
       documentDate: toInputDate(new Date()),
       receivedDate: toInputDate(new Date()),
       documentRefNo: "",
-      department: "",
-      replyRequired: false,
-      details: "",
-      clientId: clients[0]?.id ?? "",
+      department: parentInward?.department ?? "",
+      details: parentInward
+        ? `Re: Inward ${parentInward.documentRefNo}${parentInward.details ? ` - ${parentInward.details}` : ""}`
+        : "",
+      clientId: parentInward?.clientId ?? clients[0]?.id ?? "",
       actionSuggestedStaffId: "",
       ccStaffIds: [] as string[],
       documents: [] as string[],
       replyDueDate: "",
-      replyDate: "",
       inwardType: "",
       receivedByPersonName: "",
+      parentInwardId: parentInward?.id ?? null,
     };
   }
   return {
@@ -90,21 +108,22 @@ function getInitialForm(
     receivedDate: toInputDate(entry.receivedDate),
     documentRefNo: entry.documentRefNo,
     department: (entry as Record<string, unknown>)?.department as string ?? "",
-    replyRequired: Boolean((entry as Record<string, unknown>)?.replyRequired),
     details: entry.details ?? "",
     clientId: entry.clientId,
     actionSuggestedStaffId: entry.actionSuggestedStaffId ?? "",
     ccStaffIds: entry.ccStaff?.map((cs) => cs.staffId) ?? [],
     documents: entry.documents?.map((d) => d.path) ?? [],
     replyDueDate: toInputDate((entry as Record<string, unknown>)?.replyDueDate as Date | null | undefined),
-    replyDate: toInputDate(entry.replyDate),
     inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
+    parentInwardId: (entry as Record<string, unknown>)?.parentInwardId as string ?? null,
   };
 }
 
 export function InOutRegisterForm({
   entry,
+  defaultDirection,
+  parentInward,
   clients,
   departments,
   staff,
@@ -114,7 +133,10 @@ export function InOutRegisterForm({
   const router = useRouter();
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(() => getInitialForm(entry, clients));
+  const [form, setForm] = useState(() =>
+    getInitialForm(entry, clients, defaultDirection, parentInward)
+  );
+  const [loadingRefNo, setLoadingRefNo] = useState(false);
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
   const documentListRef = useRef<HTMLDivElement>(null);
@@ -129,6 +151,31 @@ export function InOutRegisterForm({
       [field]: value,
     }));
   }
+
+  const fetchNextRefNo = async (dir: InOutDirection, dateVal?: string) => {
+    setLoadingRefNo(true);
+    try {
+      const res = await getNextRegisterRefNo(dir, dateVal);
+      if (res.success && res.data?.refNo) {
+        updateField("documentRefNo", res.data.refNo);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingRefNo(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isEdit && !form.documentRefNo) {
+      fetchNextRefNo(form.direction, form.documentDate);
+    }
+  }, [isEdit]);
+
+  const handleDirectionChange = (newDir: InOutDirection) => {
+    updateField("direction", newDir);
+    fetchNextRefNo(newDir, form.documentDate);
+  };
 
   useEffect(() => {
     const lastItem = documentListRef.current?.lastElementChild;
@@ -171,9 +218,8 @@ export function InOutRegisterForm({
       receivedDate: form.receivedDate || undefined,
       documentRefNo: form.documentRefNo,
       department: emptyToNull(form.department),
-      replyRequired: form.direction === "INWARD" ? Boolean(form.replyRequired) : false,
       replyDueDate:
-        form.direction === "INWARD" && form.replyRequired && form.replyDueDate
+        form.direction === "INWARD" && form.replyDueDate
           ? new Date(form.replyDueDate)
           : null,
       details: emptyToNull(form.details),
@@ -182,9 +228,9 @@ export function InOutRegisterForm({
         form.direction === "OUTWARD" ? null : form.actionSuggestedStaffId || null,
       ccStaffIds: form.ccStaffIds.length > 0 ? form.ccStaffIds : undefined,
       documents: form.documents.length > 0 ? form.documents : undefined,
-      replyDate: form.direction === "OUTWARD" ? null : form.replyDate || null,
       inwardType: form.direction === "INWARD" && form.inwardType ? form.inwardType : null,
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
+      parentInwardId: form.parentInwardId || null,
     };
 
     if (isEdit) {
@@ -197,17 +243,6 @@ export function InOutRegisterForm({
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-
-    // Frontend validation: reply date cannot be before received/sent date
-    if (
-      form.replyDate &&
-      form.receivedDate &&
-      form.replyDate < form.receivedDate
-    ) {
-      setError("Reply date cannot be before the received/sent date.");
-      setSubmitting(false);
-      return;
-    }
 
     if (
       form.replyDueDate &&
@@ -271,6 +306,7 @@ export function InOutRegisterForm({
     : "Log an inward document with source, CC marking, and action assignment.";
 
   const selectedCcStaff = staff.filter((s) => form.ccStaffIds.includes(s.id));
+  const linkedInward = parentInward || entry?.parentInward;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -280,23 +316,79 @@ export function InOutRegisterForm({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
+        {linkedInward && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between text-xs text-emerald-950">
+            <div className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>
+                Linked to Inward Letter: <strong className="font-semibold">{linkedInward.documentRefNo}</strong>
+                {linkedInward.details && <span className="text-emerald-700 ml-1">({linkedInward.details})</span>}
+              </span>
+            </div>
+            <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+              Outward Reply
+            </span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
           <div className="max-h-[60vh] overflow-y-auto py-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="direction">Direction</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="direction">Direction</Label>
+                  <span className="text-[10px] text-zinc-500 font-medium">
+                    {isOutward ? "Outward Dispatch" : "Inward Register"}
+                  </span>
+                </div>
                 <Select
                   value={form.direction}
-                  onValueChange={(v) => updateField("direction", v as InOutDirection)}
+                  disabled
                 >
-                  <SelectTrigger id="direction">
+                  <SelectTrigger id="direction" className="opacity-90 bg-zinc-50 cursor-not-allowed">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="INWARD">Inward</SelectItem>
-                    <SelectItem value="OUTWARD">Outward</SelectItem>
+                    {isOutward ? (
+                      <SelectItem value="OUTWARD">Outward</SelectItem>
+                    ) : (
+                      <SelectItem value="INWARD">Inward</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-zinc-500">
+                  {isOutward
+                    ? "Direction is fixed to Outward for dispatch entries."
+                    : "Direction is fixed to Inward for received documents."}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="documentRefNo">
+                    {isOutward ? "Outward Dispatch Ref. No" : "Inward Ref. No"}
+                  </Label>
+                  {!isEdit && (
+                    <button
+                      type="button"
+                      onClick={() => fetchNextRefNo(form.direction, form.documentDate)}
+                      disabled={loadingRefNo}
+                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Generate next sequential serial number for this financial year"
+                    >
+                      <Sparkles className={`h-3 w-3 ${loadingRefNo ? "animate-spin" : ""}`} />
+                      Auto-generate
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="documentRefNo"
+                  value={form.documentRefNo}
+                  onChange={(e) =>
+                    updateField("documentRefNo", e.target.value)
+                  }
+                  placeholder={isOutward ? "e.g. OUT/2026-27/001" : "e.g. INW/2026-27/001"}
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -306,9 +398,13 @@ export function InOutRegisterForm({
                   type="date"
                   value={form.documentDate}
                   max={getTodayISTDateString()}
-                  onChange={(e) =>
-                    updateField("documentDate", e.target.value)
-                  }
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    updateField("documentDate", newDate);
+                    if (!isEdit && newDate) {
+                      fetchNextRefNo(form.direction, newDate);
+                    }
+                  }}
                 />
               </div>
 
@@ -322,18 +418,6 @@ export function InOutRegisterForm({
                   onChange={(e) =>
                     updateField("receivedDate", e.target.value)
                   }
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="documentRefNo">Document ref. no</Label>
-                <Input
-                  id="documentRefNo"
-                  value={form.documentRefNo}
-                  onChange={(e) =>
-                    updateField("documentRefNo", e.target.value)
-                  }
-                  placeholder="e.g. GMB/XEN/C/BVC/PB/339"
                 />
               </div>
 
@@ -393,69 +477,6 @@ export function InOutRegisterForm({
 
               {!isOutward && (
                 <>
-                  <div className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50/80 p-3.5 space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Label className="font-semibold text-zinc-900 text-sm">
-                            Is an official reply required?
-                          </Label>
-                          {form.replyRequired ? (
-                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                              Action Tracked
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700">
-                              Informational
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {form.replyRequired
-                            ? "This document will be actively tracked in 'Pending for Reply' reports until replied."
-                            : "Mark as Informative if this letter is a general circular or does not need a reply."}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={form.replyRequired ? "default" : "outline"}
-                          className={
-                            form.replyRequired
-                              ? "bg-amber-600 hover:bg-amber-700 text-white shadow-sm h-8 px-3 text-xs font-medium"
-                              : "text-zinc-600 hover:bg-zinc-100 h-8 px-3 text-xs"
-                          }
-                          onClick={() => {
-                            updateField("replyRequired", true);
-                            if (!form.inwardType || form.inwardType === "INFORMATIVE") {
-                              updateField("inwardType", "ACTION_REQUIRED");
-                            }
-                          }}
-                        >
-                          Yes, Reply Required
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={!form.replyRequired ? "secondary" : "outline"}
-                          className={
-                            !form.replyRequired
-                              ? "bg-zinc-200 text-zinc-900 hover:bg-zinc-300 h-8 px-3 text-xs font-medium"
-                              : "text-zinc-600 hover:bg-zinc-100 h-8 px-3 text-xs"
-                          }
-                          onClick={() => {
-                            updateField("replyRequired", false);
-                            if (form.inwardType === "ACTION_REQUIRED") {
-                              updateField("inwardType", "INFORMATIVE");
-                            }
-                          }}
-                        >
-                          No, Informational
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="inwardType">Inward type</Label>
                     <Select
@@ -534,26 +555,6 @@ export function InOutRegisterForm({
                     </p>
                     {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
                       <p className="text-xs text-red-600">Due date cannot be before document date</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="replyDate">Actual Reply Date</Label>
-                      <span className="text-[10px] text-zinc-400">Optional until sent</span>
-                    </div>
-                    <Input
-                      id="replyDate"
-                      type="date"
-                      value={form.replyDate}
-                      onChange={(e) => updateField("replyDate", e.target.value)}
-                      min={form.receivedDate || undefined}
-                    />
-                    <p className="text-[11px] text-zinc-500">
-                      Leave blank while waiting. Fill this only when the reply letter is dispatched (marks Replied).
-                    </p>
-                    {form.replyDate && form.receivedDate && form.replyDate < form.receivedDate && (
-                      <p className="text-xs text-red-600">Reply date cannot be before received/sent date</p>
                     )}
                   </div>
                 </>

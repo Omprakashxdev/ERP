@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { addMonths } from "@/lib/date-utils";
+import { addMonths, getIndianFinancialYear } from "@/lib/date-utils";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
   withPermission,
@@ -223,6 +223,7 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
           actionSuggestedStaff: { select: { name: true, id: true } },
           documents: { select: { path: true } },
           ccStaff: { include: { staff: { select: { name: true } } } },
+          parentInward: { select: { documentRefNo: true } },
         },
       }) as Promise<Record<string, unknown>[]>;
 
@@ -329,6 +330,21 @@ export async function importModule(
           if (rawValue === "") continue;
 
           if (config.dateFields.includes(key)) {
+            // Smart auto-healing: if an inOutRegister row has an inward reference number in replyDueDate (e.g. INW/2026-27/001)
+            if (
+              parsed.module === "inOutRegister" &&
+              key === "replyDueDate" &&
+              (String(row.direction).toUpperCase() === "OUTWARD" ||
+                rawValue.startsWith("INW/") ||
+                rawValue.startsWith("OUT/"))
+            ) {
+              data.parentInwardRefNo = rawValue;
+              corrections.push(
+                `Row ${i + 1}: Auto-detected reference number "${rawValue}" in replyDueDate column and mapped it to parentInwardRefNo`
+              );
+              continue;
+            }
+
             const parsedDate = parseImportDate(rawValue);
             if (parsedDate === null) {
               throw new Error(
@@ -385,8 +401,14 @@ export async function importModule(
         // Resolve relation fields by name lookup
         await resolveRelations(parsed.module, data, row as Record<string, string>, corrections, i);
 
-        // Check for duplicate unique fields
-        await checkDuplicates(parsed.module, data);
+        // Check for duplicate unique fields and skip if already exists
+        const dupCheck = await checkDuplicates(parsed.module, data);
+        if (dupCheck.isDuplicate) {
+          corrections.push(
+            `Row ${i + 1}: Skipped existing record (${dupCheck.identifier}) — already exists in database`
+          );
+          continue;
+        }
 
         switch (parsed.module) {
           case "contractors": {
@@ -553,8 +575,8 @@ export async function importModule(
             }
             const allowedFields = [
               "direction", "documentDate", "receivedDate", "documentRefNo", "clientId",
-              "details", "actionSuggestedStaffId", "replyDate", "replyRefNo",
-              "inwardType", "receivedByPersonName", "department", "replyRequired", "replyDueDate"
+              "details", "actionSuggestedStaffId",
+              "inwardType", "receivedByPersonName", "department", "replyDueDate", "parentInwardId"
             ];
             const cleanData: Record<string, unknown> = {};
             for (const key of allowedFields) {
@@ -563,11 +585,72 @@ export async function importModule(
 
             // Outward letters are going outside, so they NEVER have pending reply or deadline
             if (cleanData.direction === "OUTWARD") {
-              cleanData.replyRequired = false;
               cleanData.replyDueDate = null;
-              cleanData.replyDate = null;
-              cleanData.replyRefNo = null;
               cleanData.actionSuggestedStaffId = null;
+
+              // If parent inward ref no was provided in CSV, resolve it to parentInwardId
+              const parentRef =
+                data.parentInwardRefNo ||
+                (row as Record<string, string>).parentInwardRefNo ||
+                data.parentInward ||
+                (row as Record<string, string>).parentInward ||
+                data.inwardRefNo ||
+                (row as Record<string, string>).inwardRefNo;
+
+              if (parentRef && !cleanData.parentInwardId) {
+                const parentDoc = await prisma.inOutRegister.findFirst({
+                  where: {
+                    documentRefNo: {
+                      equals: String(parentRef).trim(),
+                      mode: "insensitive",
+                    },
+                  },
+                  select: { id: true },
+                });
+                if (parentDoc) {
+                  cleanData.parentInwardId = parentDoc.id;
+                  corrections.push(
+                    `Row ${i + 1}: Linked Outward dispatch "${cleanData.documentRefNo}" to Inward letter "${parentRef}"`
+                  );
+                }
+              }
+            }
+
+            // InOutRegister schema requires both documentDate and receivedDate (not nullable)
+            if (!cleanData.receivedDate) {
+              cleanData.receivedDate = (cleanData.documentDate as Date) || new Date();
+            }
+            if (!cleanData.documentDate) {
+              cleanData.documentDate = (cleanData.receivedDate as Date) || new Date();
+            }
+
+            // Auto-generate standard documentRefNo if not provided in CSV
+            if (!cleanData.documentRefNo || String(cleanData.documentRefNo).trim() === "") {
+              const dir = (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
+              const dateVal = (cleanData.documentDate as Date) || (cleanData.receivedDate as Date) || new Date();
+              const fy = getIndianFinancialYear(dateVal);
+              const prefix = dir === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
+
+              const existing = await prisma.inOutRegister.findMany({
+                where: {
+                  direction: dir,
+                  documentRefNo: { startsWith: prefix, mode: "insensitive" },
+                },
+                select: { documentRefNo: true },
+              });
+
+              let maxSeq = 0;
+              for (const rec of existing) {
+                const parts = rec.documentRefNo.split("/");
+                const last = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(last) && last > maxSeq) maxSeq = last;
+              }
+
+              const nextSeq = maxSeq + 1;
+              cleanData.documentRefNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+              corrections.push(
+                `Row ${i + 1}: Auto-generated ${dir} reference number "${cleanData.documentRefNo}"`
+              );
             }
 
             await prisma.inOutRegister.create({ data: cleanData as never });
@@ -1016,14 +1099,32 @@ async function resolveRelations(
       assignedBy: {
         masterLabel: "User master",
         lookup: async (name: string) => {
-          const u = await prisma.user.findFirst({ where: { name } });
+          const u = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { name: { equals: name, mode: "insensitive" } },
+                { email: { equals: name, mode: "insensitive" } },
+              ],
+            },
+          });
           return u?.id ?? null;
         },
         fuzzyLookup: async (name: string) => {
           const u = await prisma.user.findFirst({
-            where: { name: { equals: name, mode: "insensitive" } },
+            where: {
+              OR: [
+                { name: { contains: name, mode: "insensitive" } },
+                { email: { contains: name, mode: "insensitive" } },
+              ],
+            },
           });
           return u?.id ?? null;
+        },
+        autoCreate: async () => {
+          // If assignedBy is not found in User master (since staff are in Staff master, not User master),
+          // fallback to the default system admin user so task import never fails.
+          const defaultUser = await prisma.user.findFirst();
+          return defaultUser?.id ?? null;
         },
       },
       project: {
@@ -1177,42 +1278,198 @@ async function resolveRelations(
 async function checkDuplicates(
   module: string,
   data: Record<string, unknown>
-): Promise<void> {
-  const checks: Record<string, { field: string; model: keyof typeof prisma }[]> = {
-    vehicleLogBook: [{ field: "registrationNumber", model: "vehicle" }],
-    assets: [{ field: "itemCode", model: "asset" }],
-    contractors: [{ field: "email", model: "contractor" }],
-    clients: [{ field: "name", model: "client" }],
-    staff: [
-      { field: "email", model: "staff" },
-      { field: "employeeCode", model: "staff" },
-    ],
-    masters_region: [{ field: "name", model: "region" }],
-    masters_department: [{ field: "name", model: "department" }],
-    masters_designation: [{ field: "name", model: "designation" }],
-    masters_state: [{ field: "name", model: "state" }],
-    masters_city: [{ field: "name", model: "city" }],
-    masters_platform: [{ field: "name", model: "platform" }],
-    masters_paymentType: [{ field: "name", model: "paymentType" }],
-    masters_assetCategory: [{ field: "name", model: "assetCategory" }],
-    masters_assetMake: [{ field: "name", model: "assetMake" }],
-  };
+): Promise<{ isDuplicate: boolean; identifier?: string }> {
+  switch (module) {
+    case "tenders": {
+      if (data.tenderId && String(data.tenderId).trim()) {
+        const existing = await prisma.tender.findFirst({
+          where: { tenderId: String(data.tenderId).trim() },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Tender ID: ${data.tenderId}` };
+      }
+      if (data.name && String(data.name).trim()) {
+        const existing = await prisma.tender.findFirst({
+          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Tender: ${data.name}` };
+      }
+      return { isDuplicate: false };
+    }
 
-  const fieldChecks = checks[module];
-  if (!fieldChecks) return;
+    case "contractors": {
+      if (data.email && String(data.email).trim()) {
+        const existing = await prisma.contractor.findFirst({
+          where: { email: { equals: String(data.email).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Contractor Email: ${data.email}` };
+      }
+      if (data.name && String(data.name).trim()) {
+        const existing = await prisma.contractor.findFirst({
+          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Contractor: ${data.name}` };
+      }
+      return { isDuplicate: false };
+    }
 
-  for (const { field, model } of fieldChecks) {
-    const value = data[field];
-    if (!value || String(value).trim() === "") continue;
+    case "clients": {
+      if (data.name && String(data.name).trim()) {
+        const existing = await prisma.client.findFirst({
+          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Client: ${data.name}` };
+      }
+      return { isDuplicate: false };
+    }
 
-    const existing = await (prisma[model] as unknown as { findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown> }).findFirst({
-      where: { [field]: value },
-    });
+    case "staff": {
+      if (data.employeeCode && String(data.employeeCode).trim()) {
+        const existing = await prisma.staff.findFirst({
+          where: { employeeCode: { equals: String(data.employeeCode).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Employee Code: ${data.employeeCode}` };
+      }
+      if (data.email && String(data.email).trim()) {
+        const existing = await prisma.staff.findFirst({
+          where: { email: { equals: String(data.email).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Staff Email: ${data.email}` };
+      }
+      return { isDuplicate: false };
+    }
 
-    if (existing) {
-      throw new Error(
-        `Duplicate ${field} "${value}" — a record with this value already exists`
-      );
+    case "dueBills": {
+      if (data.projectId && data.scheme) {
+        const existing = await prisma.dueBill.findFirst({
+          where: {
+            projectId: data.projectId as string,
+            scheme: { equals: String(data.scheme).trim(), mode: "insensitive" },
+          },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Bill: ${data.scheme}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "paymentSchedules": {
+      if (data.category && data.paymentType) {
+        const existing = await prisma.paymentSchedule.findFirst({
+          where: {
+            category: data.category as any,
+            paymentType: { equals: String(data.paymentType).trim(), mode: "insensitive" },
+            ...(data.amount ? { amount: data.amount as any } : {}),
+            ...(data.dueDate ? { dueDate: data.dueDate as Date } : {}),
+          },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Payment: ${data.paymentType}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "inOutRegister": {
+      if (data.documentRefNo && String(data.documentRefNo).trim()) {
+        const existing = await prisma.inOutRegister.findFirst({
+          where: { documentRefNo: { equals: String(data.documentRefNo).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Doc Ref: ${data.documentRefNo}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "vehicleLogBook": {
+      if (data.registrationNumber && String(data.registrationNumber).trim()) {
+        const existing = await prisma.vehicle.findFirst({
+          where: { registrationNumber: { equals: String(data.registrationNumber).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Vehicle: ${data.registrationNumber}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "assets": {
+      if (data.itemCode && String(data.itemCode).trim()) {
+        const existing = await prisma.asset.findFirst({
+          where: { itemCode: { equals: String(data.itemCode).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Asset Item Code: ${data.itemCode}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "tasks": {
+      if (data.title && String(data.title).trim()) {
+        const existing = await prisma.task.findFirst({
+          where: {
+            title: { equals: String(data.title).trim(), mode: "insensitive" },
+            ...(data.projectId ? { projectId: data.projectId as string } : {}),
+          },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Task: ${data.title}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "tadaBills": {
+      if (data.staffId && data.fromDate && data.toDate) {
+        const existing = await prisma.tadaClaim.findFirst({
+          where: {
+            staffId: data.staffId as string,
+            fromDate: data.fromDate as Date,
+            toDate: data.toDate as Date,
+          },
+        });
+        if (existing) return { isDuplicate: true, identifier: `TADA Claim: ${data.tourPurpose || "Claim"}` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "fundFlow": {
+      if (data.projectId) {
+        const existing = await prisma.fundFlow.findUnique({
+          where: { projectId: data.projectId as string },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Fund Flow for Project` };
+      }
+      return { isDuplicate: false };
+    }
+
+    case "wip": {
+      if (data.projectId) {
+        const existing = await prisma.workInProgress.findUnique({
+          where: { projectId: data.projectId as string },
+        });
+        if (existing) return { isDuplicate: true, identifier: `WIP for Project` };
+      }
+      return { isDuplicate: false };
+    }
+
+    default: {
+      const masterModelMap: Record<string, string> = {
+        masters_region: "region",
+        masters_department: "department",
+        masters_designation: "designation",
+        masters_state: "state",
+        masters_city: "city",
+        masters_platform: "platform",
+        masters_paymentType: "paymentType",
+        masters_assetCategory: "assetCategory",
+        masters_assetMake: "assetMake",
+        masters_assetModel: "assetModel",
+        masters_orderMaster: "orderMaster",
+        masters_workMaster: "workMaster",
+        masters_typeMaster: "typeMaster",
+        masters_workOrderMaster: "workOrderMaster",
+        masters_drawingMaster: "drawingMaster",
+        masters_contactMaster: "contactMaster",
+      };
+      const modelName = masterModelMap[module];
+      if (modelName && data.name) {
+        const existing = await (prisma[modelName as keyof typeof prisma] as any).findFirst({
+          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `${module}: ${data.name}` };
+      }
+      return { isDuplicate: false };
     }
   }
 }
@@ -1261,7 +1518,7 @@ function getTemplateFields(module: string): string[] {
     dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
     wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
     vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
-    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "replyRequired", "replyDueDate", "replyDate", "replyRefNo"],
+    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "inwardType", "receivedByPersonName", "replyDueDate", "parentInwardRefNo"],
     tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
     tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],
@@ -1294,7 +1551,7 @@ function getTemplateSampleRow(module: string): string[] {
     dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
     wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
     vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
-    inOutRegister: ["INWARD", "2025-01-15", "2025-01-16", "DOC-001", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "no", "", "", ""],
+    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "INW/2026-27/001", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
     tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
     tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],

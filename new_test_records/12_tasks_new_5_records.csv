@@ -1,0 +1,6 @@
+title,description,status,priority,assignedTo,assignedBy,project,dueDate,reworkCount
+Review DPR Drawings for Morbi Site,Verify civil & structural drawings with TS sanction,IN_PROGRESS,HIGH,Amit Verma,System Administrator,,2026-05-25,0
+Vetting of Hydraulic Surge Analysis for KUWSDB Pipeline,Review Transient water hammer analysis report submitted by contractor for Mangaluru raw water rising main,OPEN,CRITICAL,Pooja Sharma,System Administrator,KUWSDB Mangaluru Bulk Water Scheme Ph-1,2026-11-05,0
+Effluent Carrier Trench Safety & Shoring Inspection,Conduct mandatory OHS audit and soil stabilization inspection for 4m deep effluent trenching at TSIIC site,IN_PROGRESS,HIGH,Rakesh Joshi,System Administrator,TSIIC Pharma City Effluent Network Ph-2,2026-11-10,0
+Structural Integrity Cross-Check of JDA Box Culvert Design,Cross-verify STAAD Pro finite element analysis with IRC 112:2020 limit state criteria for underpass deck,OPEN,MEDIUM,Jitendra Patel,System Administrator,JDA South Ring Road Underpass Construction,2026-11-15,0
+Preparation of Environmental Impact Assessment EIA Chapter 4,Draft environmental monitoring plan and tree transplantation inventory for MPRDC corridor stretch,IN_PROGRESS,HIGH,Amit Verma,System Administrator,MPRDC Bhopal-Indore Green Highway Corridor,2026-11-20,0

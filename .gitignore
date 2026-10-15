@@ -42,3 +42,4 @@ yarn-error.log*
 # uploaded files
 /public/uploads
 next-env.d.ts
+scratch/

@@ -1,0 +1,6 @@
+itemCode,name,category,make,model,yearOfPurchase,quantity,securityCode,assigneeType,assignee,assignedQuantity,responsiblePerson,currentHolder,status,remarks
+AST-1786838493441-200,Executive Office Table,Furniture,Godrej,ErgoPlus,2024,5,Fur/Executive/Godrej/1,OFFICE,Madhapar Office,5,Pooja Sharma,Pooja Sharma,ASSIGNED,Installed in corporate office
+AST-SUR-2024-044,Trimble S7 Robotic Total Station 3-Sec,Survey Equipment,Trimble,S7 Vision 3-Sec,2024,1,SAEC/SUR/TRM/011,PERSON,Rahul M. Trivedi,1,Rahul M. Trivedi,Rahul M. Trivedi,ASSIGNED,High precision laser survey total station for highway alignment
+AST-IT-2024-118,Dell Precision 7780 Mobile Workstation RTX 4080,Computers & IT,Dell,Precision 7780,2024,1,SAEC/IT/DEL/055,PERSON,Pooja Sharma,1,Pooja Sharma,Pooja Sharma,ASSIGNED,Assigned for CAD structural drafting & 3D civil simulation
+AST-LAB-2024-032,Proceq SilverSchmidt Concrete Test Hammer,Testing Equipment,Proceq,SilverSchmidt PC Type N,2024,2,SAEC/LAB/PRQ/008,OFFICE,Ahmedabad Office,2,Jitendra Patel,Jitendra Patel,AVAILABLE,Non-destructive concrete compressive strength testing hammer
+AST-DRN-2024-006,DJI Matrice 350 RTK Surveying Drone,Survey Drone,DJI,Matrice 350 RTK,2024,1,SAEC/DRN/DJI/002,PERSON,Amit Verma,1,Amit Verma,Amit Verma,ASSIGNED,Equipped with Zenmuse P1 photogrammetry payload for LiDAR corridor survey

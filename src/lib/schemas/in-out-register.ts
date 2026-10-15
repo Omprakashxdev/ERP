@@ -21,12 +21,11 @@ const inOutRegisterBaseFields = z.object({
   actionSuggestedStaffId: z.string().cuid().optional().nullable(),
   ccStaffIds: z.array(cuid).optional(),
   documents: z.array(cleanedString(500)).optional(),
-  replyDate: z.coerce.date().optional().nullable(),
   inwardType: z.enum(["INFORMATIVE", "ACTION_REQUIRED", "COMPLAINT", "QUERY", "NOTICE"]).optional().nullable(),
   receivedByPersonName: cleanedString(200).optional().nullable(),
   department: cleanedString(200).optional().nullable(),
-  replyRequired: z.boolean().default(false),
   replyDueDate: z.coerce.date().optional().nullable(),
+  parentInwardId: z.string().cuid().optional().nullable(),
 });
 
 export const inOutRegisterCreateSchema = inOutRegisterBaseFields.refine(
@@ -34,12 +33,6 @@ export const inOutRegisterCreateSchema = inOutRegisterBaseFields.refine(
   {
     message: "Received/Sent date cannot be before document date",
     path: ["receivedDate"],
-  }
-).refine(
-  (data) => !data.replyDate || data.replyDate >= data.receivedDate,
-  {
-    message: "Reply date cannot be before received/sent date",
-    path: ["replyDate"],
   }
 ).refine(
   (data) => !data.replyDueDate || data.replyDueDate >= data.documentDate,
@@ -65,16 +58,6 @@ export const inOutRegisterUpdateSchema = inOutRegisterBaseFields
   )
   .refine(
     (data) => {
-      if (!data.replyDate || !data.receivedDate) return true;
-      return data.replyDate >= data.receivedDate;
-    },
-    {
-      message: "Reply date cannot be before received/sent date",
-      path: ["replyDate"],
-    }
-  )
-  .refine(
-    (data) => {
       if (!data.replyDueDate || !data.documentDate) return true;
       return data.replyDueDate >= data.documentDate;
     },
@@ -90,12 +73,11 @@ export const inOutRegisterFilterSchema = z.object({
   clientId: z.string().cuid().optional(),
   actionSuggestedStaffId: z.string().cuid().optional(),
   ccStaffId: z.string().cuid().optional(),
-  hasReply: z.enum(["true", "false"]).optional(),
+  hasDeadline: z.enum(["true", "false"]).optional(),
   receivedDateFrom: z.coerce.date().optional(),
   receivedDateTo: z.coerce.date().optional(),
   ageDue: z.enum(["15", "20", "25"]).optional(),
   department: z.string().optional(),
-  replyRequired: z.enum(["true", "false"]).optional(),
   replyDueDateFrom: z.coerce.date().optional(),
   replyDueDateTo: z.coerce.date().optional(),
 });

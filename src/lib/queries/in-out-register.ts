@@ -39,16 +39,10 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     });
   }
 
-  if (filter?.replyRequired === "true") {
-    and.push({ replyRequired: true });
-  } else if (filter?.replyRequired === "false") {
-    and.push({ replyRequired: false });
-  }
-
-  if (filter?.hasReply === "true") {
-    and.push({ replyDate: { not: null } });
-  } else if (filter?.hasReply === "false") {
-    and.push({ replyDate: null, replyRequired: true, direction: "INWARD" });
+  if (filter?.hasDeadline === "true") {
+    and.push({ replyDueDate: { not: null }, direction: "INWARD" });
+  } else if (filter?.hasDeadline === "false") {
+    and.push({ replyDueDate: null, direction: "INWARD" });
   }
 
   if (filter?.receivedDateFrom) {

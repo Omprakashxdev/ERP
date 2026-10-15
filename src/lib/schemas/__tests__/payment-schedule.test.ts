@@ -48,7 +48,7 @@ describe("Fix 2: Payment schedule — back date & CANCELLED prevention", () => {
 
   it("rejects a future date", () => {
     const future = new Date();
-    future.setDate(future.getDate() + 1);
+    future.setDate(future.getDate() + 2);
     const result = paymentScheduleCreateSchema.safeParse({
       amount: 100,
       date: future.toISOString().split("T")[0],

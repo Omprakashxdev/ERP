@@ -99,3 +99,26 @@ export function computeAgeInDaysIST(receivedDate: Date | string): number {
   const diffDays = Math.round(diffMs / 86400000);
   return Math.max(0, diffDays);
 }
+
+/**
+ * Returns the Indian Financial Year string (e.g. "2026-27") for a given date in IST.
+ * Financial Year in India begins on April 1 and ends on March 31.
+ */
+export function getIndianFinancialYear(value?: Date | string | null): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const [yearStr, monthStr] = value.split("-");
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    const fyStart = month >= 4 ? year : year - 1;
+    const fyEnd = (fyStart + 1).toString().slice(-2);
+    return `${fyStart}-${fyEnd}`;
+  }
+  const dStr = value ? toInputDateIST(value) : getTodayISTDateString();
+  if (!dStr) return getIndianFinancialYear(new Date());
+  const [yearStr, monthStr] = dStr.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10); // 1 to 12
+  const fyStart = month >= 4 ? year : year - 1;
+  const fyEnd = (fyStart + 1).toString().slice(-2);
+  return `${fyStart}-${fyEnd}`;
+}

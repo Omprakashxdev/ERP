@@ -1,0 +1,6 @@
+name,email,phone,employeeCode,designation,region,isActive,reportingManager
+Pooja Sharma,pooja.sharma@saec.in,9825123457,EMP002,Senior Executive,Ahmedabad,true,
+Rohan N. Deshmukh,rohan.deshmukh@saec.in,9825400001,EMP881,Senior Structural Engineer,Ahmedabad,true,Amit Desai
+Kavita S. Joshi,kavita.joshi@saec.in,9825400002,EMP882,Quality Assurance Engineer,Rajkot,true,Jitendra Patel
+Suresh M. Solanki,suresh.solanki@saec.in,9825400003,EMP883,Senior Geotechnical Surveyor,Surat,true,Rakesh Joshi
+Bhavna D. Vora,bhavna.vora@saec.in,9825400004,EMP884,Environmental Compliance Officer,Vadodara,true,Amit Desai

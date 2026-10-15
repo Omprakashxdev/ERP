@@ -550,19 +550,19 @@ model InOutRegister {
   details                String?
   clientId               String
   actionSuggestedStaffId String?
-  replyDate              DateTime?
-  replyRefNo             String?                 @unique
   inwardType             String?
   receivedByPersonName   String?
   department             String?
-  replyRequired          Boolean                 @default(false)
   replyDueDate           DateTime?
+  parentInwardId         String?
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
+  parentInward           InOutRegister?          @relation("InwardOutwardLink", fields: [parentInwardId], references: [id], onDelete: SetNull)
+  replies                InOutRegister[]         @relation("InwardOutwardLink")
   documents              InOutRegisterDocument[]
   ccStaff                InOutRegisterCcStaff[]
 
@@ -571,10 +571,9 @@ model InOutRegister {
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
-  @@index([replyDate])
   @@index([department])
-  @@index([replyRequired])
   @@index([replyDueDate])
+  @@index([parentInwardId])
 }
 
 model InOutRegisterDocument {

@@ -1,0 +1,6 @@
+staff,tourPurpose,fromDate,toDate,location,travelExpense,accommodationExp,foodExpense,localConveyance,otherExpense,totalClaimAmount,advanceAmount,adjustedAmount,balanceAmount,status,rejectReason
+Amit Verma,Site Inspection for Nagarpalika,2026-05-02,2026-05-04,Morbi,1500,2000,900,400,200,5000,0,0,5000,SUBMITTED,
+Pooja Sharma,Joint inspection of KUWSDB Mangaluru Bulk Water Scheme,2026-10-12,2026-10-15,Mangaluru,4500,6000,2400,1600,500,15000,10000,10000,5000,MANAGER_APPROVED,
+Amit Desai,Technical coordination meeting with TSIIC Chief Engineer,2026-10-18,2026-10-20,Hyderabad,5200,7500,3000,1800,600,18100,15000,15000,3100,SUBMITTED,
+Jitendra Patel,Site alignment audit of JDA South Ring Road Underpass,2026-10-22,2026-10-24,Jaipur,4100,5500,2200,1200,400,13400,10000,10000,3400,MANAGER_APPROVED,
+Rakesh Joshi,Corridor soil sampling review with MPRDC Project Director,2026-10-26,2026-10-29,Bhopal,4800,6500,2600,1500,500,15900,12000,12000,3900,SUBMITTED,

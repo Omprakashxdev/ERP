@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InOutRegisterFilterInput } from "@/lib/schemas/in-out-register";
 import { InOutRegisterWithComputed } from "@/types/in-out-register";
+import { getInOutRegisterById } from "@/lib/actions/in-out-register";
 import { InOutRegisterForm } from "./in-out-register-form";
 import {
   ChevronLeft,
@@ -23,6 +24,10 @@ import {
   ArrowLeftRight,
   Pencil,
   Plus,
+  Link2,
+  ArrowUpRight,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 
 interface InOutRegisterTableProps {
@@ -66,6 +71,14 @@ export function InOutRegisterTable({
   const [selectedEntry, setSelectedEntry] =
     useState<InOutRegisterWithComputed | null>(null);
   const [createEntryOpen, setCreateEntryOpen] = useState(false);
+  const [createDirection, setCreateDirection] = useState<"INWARD" | "OUTWARD">("INWARD");
+  const [replyParentInward, setReplyParentInward] = useState<{
+    id: string;
+    documentRefNo: string;
+    clientId: string;
+    department?: string | null;
+    details?: string | null;
+  } | null>(null);
 
   const typedRows = rows as InOutRegisterWithComputed[];
 
@@ -77,7 +90,7 @@ export function InOutRegisterTable({
     if (filter.actionSuggestedStaffId)
       params.set("actionSuggestedStaffId", filter.actionSuggestedStaffId);
     if (filter.ccStaffId) params.set("ccStaffId", filter.ccStaffId);
-    if (filter.hasReply) params.set("hasReply", filter.hasReply);
+    if (filter.hasDeadline) params.set("hasDeadline", filter.hasDeadline);
     if (filter.receivedDateFrom)
       params.set(
         "receivedDateFrom",
@@ -96,11 +109,34 @@ export function InOutRegisterTable({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-600">In-out entries</h2>
-        <Button size="sm" onClick={() => setCreateEntryOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          New entry
-        </Button>
+        <h2 className="text-sm font-medium text-zinc-600">Register Records</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+            onClick={() => {
+              setReplyParentInward(null);
+              setCreateDirection("OUTWARD");
+              setCreateEntryOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New Outward
+          </Button>
+          <Button
+            size="sm"
+            className="bg-zinc-900 text-white hover:bg-zinc-800"
+            onClick={() => {
+              setReplyParentInward(null);
+              setCreateDirection("INWARD");
+              setCreateEntryOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New Inward
+          </Button>
+        </div>
       </div>
 
       {typedRows.length === 0 ? (
@@ -132,7 +168,7 @@ export function InOutRegisterTable({
                 <TableHead className="whitespace-nowrap">Details</TableHead>
                 <TableHead className="whitespace-nowrap">CC marking</TableHead>
                 <TableHead className="whitespace-nowrap">Action</TableHead>
-                <TableHead className="whitespace-nowrap">Reply</TableHead>
+                <TableHead className="whitespace-nowrap">Due Date</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
@@ -151,10 +187,53 @@ export function InOutRegisterTable({
                     {formatDate(row.receivedDate)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap font-semibold text-zinc-900">
-                    {row.documentRefNo}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{row.documentRefNo}</span>
+                      {row.direction === "INWARD" && row.replies && row.replies.length > 0 && (
+                        <div
+                          className="flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const rep = row.replies![0];
+                            const repRow = typedRows.find((r) => r.id === rep.id);
+                            if (repRow) {
+                              setSelectedEntry(repRow);
+                            } else {
+                              const res = await getInOutRegisterById(rep.id);
+                              if (res.success && res.data) {
+                                setSelectedEntry(res.data as InOutRegisterWithComputed);
+                              }
+                            }
+                          }}
+                        >
+                          <Link2 className="h-3 w-3 shrink-0" />
+                          <span>Replied: {row.replies[0].documentRefNo}</span>
+                        </div>
+                      )}
+                      {row.direction === "OUTWARD" && row.parentInward && (
+                        <div
+                          className="flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-900 hover:underline cursor-pointer"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const parentRow = typedRows.find((r) => r.id === row.parentInward!.id);
+                            if (parentRow) {
+                              setSelectedEntry(parentRow);
+                            } else {
+                              const res = await getInOutRegisterById(row.parentInward!.id);
+                              if (res.success && res.data) {
+                                setSelectedEntry(res.data as InOutRegisterWithComputed);
+                              }
+                            }
+                          }}
+                        >
+                          <ArrowUpRight className="h-3 w-3 shrink-0" />
+                          <span>Re: {row.parentInward.documentRefNo}</span>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Badge variant="outline" className={row.direction === "OUTWARD" ? "text-blue-700" : "text-zinc-700"}>
+                    <Badge variant="outline" className={row.direction === "OUTWARD" ? "text-blue-700 border-blue-200 bg-blue-50/50" : "text-zinc-700 border-zinc-200"}>
                       {row.direction === "OUTWARD" ? "Outward" : "Inward"}
                     </Badge>
                   </TableCell>
@@ -174,13 +253,7 @@ export function InOutRegisterTable({
                     {row.actionSuggestedStaff?.name ?? "—"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {row.replyDate ? (
-                      <span className="text-xs">
-                        {formatDate(row.replyDate)}
-                        <br />
-                        <span className="text-zinc-500 font-mono text-[11px]">{row.replyRefNo}</span>
-                      </span>
-                    ) : row.replyDueDate ? (
+                    {row.replyDueDate ? (
                       <span className="text-xs text-amber-800 font-medium">
                         Due: {formatDate(row.replyDueDate)}
                       </span>
@@ -193,25 +266,22 @@ export function InOutRegisterTable({
                       <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 font-medium">
                         Dispatched
                       </Badge>
-                    ) : !row.replyRequired ? (
+                    ) : row.isReplied ? (
+                      <Badge variant="outline" className="border-emerald-300 text-emerald-800 bg-emerald-50 font-medium flex items-center gap-1 w-fit">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        Replied
+                      </Badge>
+                    ) : !row.replyDueDate ? (
                       <Badge variant="outline" className="border-zinc-200 text-zinc-500 bg-zinc-50">
                         Informational
-                      </Badge>
-                    ) : row.replyDate ? (
-                      <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 font-medium">
-                        Replied
                       </Badge>
                     ) : row.isOverdue ? (
                       <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 font-semibold">
                         Overdue ({row.daysOverdue}d)
                       </Badge>
-                    ) : row.replyDueDate ? (
+                    ) : (
                       <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 font-medium">
                         Pending (Due {formatDate(row.replyDueDate)})
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 font-medium">
-                        Pending ({row.ageInDays}d)
                       </Badge>
                     )}
                   </TableCell>
@@ -219,18 +289,43 @@ export function InOutRegisterTable({
                     className="whitespace-nowrap text-right"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedEntry(row);
-                      }}
-                      title="Edit entry"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {row.direction === "INWARD" && (!row.replies || row.replies.length === 0) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReplyParentInward({
+                              id: row.id,
+                              documentRefNo: row.documentRefNo,
+                              clientId: row.clientId,
+                              department: row.department,
+                              details: row.details,
+                            });
+                            setCreateDirection("OUTWARD");
+                            setCreateEntryOpen(true);
+                          }}
+                          title="Dispatch an outward reply linked to this inward letter"
+                        >
+                          <Send className="h-3 w-3" />
+                          Reply
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEntry(row);
+                        }}
+                        title="Edit entry"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -274,7 +369,7 @@ export function InOutRegisterTable({
 
       {selectedEntry && (
         <InOutRegisterForm
-          entry={selectedEntry}
+          entry={selectedEntry as never}
           clients={clients}
           departments={departments}
           staff={staff}
@@ -286,10 +381,15 @@ export function InOutRegisterTable({
       {createEntryOpen && (
         <InOutRegisterForm
           clients={clients}
+          defaultDirection={createDirection}
+          parentInward={replyParentInward ?? undefined}
           departments={departments}
           staff={staff}
           mode="create"
-          onClose={() => setCreateEntryOpen(false)}
+          onClose={() => {
+            setCreateEntryOpen(false);
+            setReplyParentInward(null);
+          }}
         />
       )}
     </div>
