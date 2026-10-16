@@ -164,8 +164,8 @@ export function FundFlowTable({
                 <TableHead className="whitespace-nowrap text-right">Remaining</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Total Fee</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Proposed/Due</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Received</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Remaining Fee</TableHead>
+                <TableHead className="whitespace-nowrap text-right">Legacy received</TableHead>
+                <TableHead className="whitespace-nowrap text-right">Legacy remaining fee</TableHead>
                 <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { upsertFundFlow } from "@/lib/actions/fund-flow";
+import { upsertFundFlow, getFundFlowByProjectId } from "@/lib/actions/fund-flow";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +28,16 @@ function toMoneyString(value: unknown): string {
   if (value == null) return "";
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(2) : "";
+}
+
+function formatMoney(value: unknown): string {
+  if (value == null) return "Unavailable";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "Unavailable";
+  return `₹${n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
@@ -46,6 +56,28 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
   });
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setDetailLoading(true);
+      try {
+        const result = await getFundFlowByProjectId(project.id);
+        if (!cancelled && result.success && result.data) {
+          setDetailData(result.data as Record<string, unknown>);
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
 
   const remainingWorkAmt = useMemo(() => {
     const total = Number(form.totalProjectCost) || 0;
@@ -102,9 +134,11 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
     onClose();
   }
 
+  const reconciliationAvailable = detailData?.reconciliationAvailable === true;
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit fund flow</DialogTitle>
           <DialogDescription>
@@ -170,7 +204,9 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="feeReceived">Fee received (₹)</Label>
+              <Label htmlFor="feeReceived">
+                Legacy recorded received amount — unverified (₹)
+              </Label>
               <Input
                 id="feeReceived"
                 type="number"
@@ -194,7 +230,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
               </p>
             </div>
             <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">Remaining fee</p>
+              <p className="text-xs text-zinc-500">Legacy remaining fee — unverified</p>
               <p className="font-mono font-medium">
                 ₹{remainingFee.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
@@ -202,6 +238,66 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                 })}
               </p>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium">
+              Reconciliation summary
+              {detailLoading && (
+                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
+              )}
+            </h4>
+
+            {reconciliationAvailable ? (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Contract fee</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.totalContractFee)}
+                  </p>
+                </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Total invoiced</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.totalInvoiced)}
+                  </p>
+                </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Invoice settlement</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.totalSettlement)}
+                  </p>
+                </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Recorded cheque</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.totalRecordedCheque)}
+                  </p>
+                </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Outstanding (settlement basis)</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.outstandingPerSettlement)}
+                  </p>
+                </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Legacy fee received</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.legacyFeeReceived)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500">Reconciliation data unavailable.</p>
+            )}
+
+            {reconciliationAvailable && typeof detailData!.recordedCashLabel === "string" && (
+              <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">
+                {detailData!.recordedCashLabel as string}
+              </p>
+            )}
           </div>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
