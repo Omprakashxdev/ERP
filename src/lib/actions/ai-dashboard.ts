@@ -14,7 +14,7 @@ async function checkAiAccess(role: string): Promise<boolean> {
   return setting.value.split(",").includes(role);
 }
 
-interface DashboardMetrics {
+export interface DashboardMetrics {
   projects: { total: number; active: number; byStatus: Record<string, number> };
   dueBills: {
     totalBilled: number;
@@ -39,7 +39,17 @@ interface DashboardMetrics {
     totalProjectCost: number;
     completedWorkAmt: number;
     feeReceived: number;
-    topProjects: { name: string; cost: number; completed: number; received: number }[];
+    /** Explicit label explaining that feeReceived is legacy and unverified. */
+    feeReceivedLabel: string;
+    topProjects: {
+      name: string;
+      cost: number;
+      completed: number;
+      /** Legacy FundFlow.feeReceived — unverified. */
+      received: number;
+      /** Label reminding that received is legacy and unverified. */
+      receivedLabel: string;
+    }[];
   };
   vehicles: { active: number; insuranceExpiring: number };
   paymentSchedules: {
@@ -49,7 +59,7 @@ interface DashboardMetrics {
   contractors: { total: number; missingDocs: number };
 }
 
-async function loadDashboardMetrics(): Promise<DashboardMetrics> {
+export async function loadDashboardMetrics(): Promise<DashboardMetrics> {
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -166,6 +176,9 @@ async function loadDashboardMetrics(): Promise<DashboardMetrics> {
   const taskStatusMap: Record<string, number> = {};
   taskStatusCounts.forEach((s) => { taskStatusMap[s.status] = s._count; });
 
+  const legacyFeeReceivedLabel =
+    "LEGACY — FundFlow.feeReceived is a legacy unverified field. Auto-sync from DueBills was disabled in FF-01C. This does NOT represent verified bank receipts or confirmed client payments.";
+
   return {
     projects: {
       total: projectCount,
@@ -205,11 +218,13 @@ async function loadDashboardMetrics(): Promise<DashboardMetrics> {
       totalProjectCost: fundFlows.reduce((sum, f) => sum + Number(f.totalProjectCost), 0),
       completedWorkAmt: fundFlows.reduce((sum, f) => sum + Number(f.completedWorkAmt), 0),
       feeReceived: fundFlows.reduce((sum, f) => sum + Number(f.feeReceived), 0),
+      feeReceivedLabel: legacyFeeReceivedLabel,
       topProjects: fundFlows.map((f) => ({
         name: f.project.name,
         cost: Number(f.totalProjectCost),
         completed: Number(f.completedWorkAmt),
         received: Number(f.feeReceived),
+        receivedLabel: "Legacy unverified — see feeReceivedLabel",
       })),
     },
     vehicles: {
@@ -257,9 +272,13 @@ Rules:
 - Use severity levels: CRITICAL, HIGH, MEDIUM, LOW.
 - Focus on what a CEO/COO would care about: cash flow, deadlines, compliance, risks.
 - ALWAYS bold important numbers, amounts, percentages, and severity labels using **double asterisks**.
-- Format priority actions as: - **[CRITICAL]**: **₹29,50,000** pending for **GUDM Kutiyana** project`;
+- Format priority actions as: - **[CRITICAL]**: **₹29,50,000** pending for **GUDM Kutiyana** project
 
-function buildDashboardPrompt(metrics: DashboardMetrics): string {
+CRITICAL FINANCIAL DATA RULE:
+- fundFlow.feeReceived and fundFlow.topProjects[].received are LEGACY UNVERIFIED figures derived from FundFlow.feeReceived. Automatic synchronization from DueBills was disabled (FF-01C). These do NOT represent verified bank receipts or confirmed client payments. When referencing these figures, ALWAYS label them as "legacy unverified" (e.g., "legacy unverified fee received of ₹X"). Do NOT present them as confirmed cash.
+- The authoritative settlement data is in dueBills.totalReceived (sum of DueBill chequeAmount + SD + TDS).`;
+
+export async function buildDashboardPrompt(metrics: DashboardMetrics): Promise<string> {
   return `Analyze the following ERP dashboard metrics and provide an executive summary.
 
 Current date: ${new Date().toISOString()}
@@ -280,7 +299,7 @@ export async function generateDashboardSummary(): Promise<ActionResult<string>> 
     }
 
     const metrics = await loadDashboardMetrics();
-    const userPrompt = buildDashboardPrompt(metrics);
+    const userPrompt = await buildDashboardPrompt(metrics);
 
     const { text } = await generateText({
       model: getGroqChatModel(),
