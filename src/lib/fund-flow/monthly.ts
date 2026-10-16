@@ -27,7 +27,6 @@ function gt(a: Decimal | null, b: Decimal | null): boolean {
 // ─── Discrepancy codes ────────────────────────────────────────
 
 export enum MonthlyDiscrepancyCode {
-  MONTHLY_INCOME_MISMATCH = "MONTHLY_INCOME_MISMATCH",
   MONTHLY_NET_MISMATCH = "MONTHLY_NET_MISMATCH",
   MISSING_MONTHLY_RECORD = "MISSING_MONTHLY_RECORD",
   UNALLOCATED_INVOICE_DATE = "UNALLOCATED_INVOICE_DATE",
@@ -101,6 +100,7 @@ export interface MonthRecord {
   year: number;
   month: number;
   storedIncome: Decimal | null;
+  storedIncomeClassification: "UNKNOWN";
   storedExpense: Decimal | null;
   storedNet: Decimal | null;
   storedCumulative: Decimal | null;
@@ -152,6 +152,21 @@ function sumNullable(values: (Decimal | null | undefined)[]): Decimal | null {
   return values.reduce<Decimal>((acc, v) => acc.plus(d(v)), new Decimal("0.00"));
 }
 
+/**
+ * Extracts year and month in IST (Asia/Kolkata) from a Date.
+ * Prevents server timezone from shifting dates across month boundaries.
+ */
+function getISTYearMonth(date: Date): { year: number; month: number } {
+  const formatted = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  const [yearStr, monthStr] = formatted.split("-");
+  return { year: parseInt(yearStr, 10), month: parseInt(monthStr, 10) };
+}
+
 // ─── Monthly breakdown engine ────────────────────────────────
 
 export function computeMonthlyBreakdown(
@@ -181,7 +196,8 @@ export function computeMonthlyBreakdown(
     if (bill.status !== "CANCELLED") {
       if (bill.billDate != null) {
         hasBillDates = true;
-        const key = monthKey(bill.billDate.getFullYear(), bill.billDate.getMonth() + 1);
+        const { year, month } = getISTYearMonth(bill.billDate);
+        const key = monthKey(year, month);
         const existing = invoicedByMonth.get(key);
         if (existing) {
           existing.total = existing.total.plus(d(bill.billAmount));
@@ -215,7 +231,8 @@ export function computeMonthlyBreakdown(
       if (hasReceipt) {
         if (bill.receiveDate != null) {
           hasReceiveDates = true;
-          const key = monthKey(bill.receiveDate.getFullYear(), bill.receiveDate.getMonth() + 1);
+          const { year, month } = getISTYearMonth(bill.receiveDate);
+          const key = monthKey(year, month);
           const existing = receivedByMonth.get(key);
           if (existing) {
             existing.total = existing.total.plus(d(bill.receivedAmount));
@@ -275,6 +292,7 @@ export function computeMonthlyBreakdown(
       year,
       month,
       storedIncome: stored ? dNull(stored.income) : null,
+      storedIncomeClassification: "UNKNOWN",
       storedExpense: stored ? dNull(stored.expense) : null,
       storedNet: stored ? dNull(stored.net) : null,
       storedCumulative: stored ? dNull(stored.cumulative) : null,
@@ -287,32 +305,6 @@ export function computeMonthlyBreakdown(
     };
 
     months.push(monthRecord);
-
-    // Variance: stored income vs derived invoiced
-    if (monthRecord.storedIncome != null && monthRecord.derivedInvoiced != null) {
-      if (!eq(monthRecord.storedIncome, monthRecord.derivedInvoiced)) {
-        discrepancies.push({
-          code: MonthlyDiscrepancyCode.MONTHLY_INCOME_MISMATCH,
-          severity: "WARNING",
-          message: `Monthly stored income does not match derived invoiced amount for ${key}.`,
-          projectId: project.id,
-          sourceModel: "FundFlowMonthly / DueBill",
-          sourceRecordIds: [stored?.id ?? "", ...(invoiced ? invoiced.ids : [])].filter(Boolean),
-          comparedValues: {
-            storedIncome: {
-              value: monthRecord.storedIncome.toString(),
-              source: "FundFlowMonthly.income",
-            },
-            derivedInvoiced: {
-              value: monthRecord.derivedInvoiced.toString(),
-              source: "sum(DueBill.billAmount)",
-            },
-          },
-          explanation:
-            "The stored monthly income from FundFlowMonthly differs from the actual invoiced amounts aggregated from DueBills for this month.",
-        });
-      }
-    }
 
     // Sanity check: stored net should equal stored income minus stored expense
     if (

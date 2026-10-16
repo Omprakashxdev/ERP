@@ -8,6 +8,11 @@ import {
   ReconciliationResult,
   ReconciliationSourceRecords,
 } from "@/lib/fund-flow/reconciliation";
+import {
+  computeMonthlyBreakdown,
+  MonthlyBreakdownResult,
+  MonthlyBreakdownSources,
+} from "@/lib/fund-flow/monthly";
 import { withPermission, ActionResult } from "./wrapper";
 
 const projectIdSchema = z.string().cuid("Invalid project ID");
@@ -90,6 +95,64 @@ export async function getProjectReconciliation(
     };
 
     const result = reconcileProject(sources);
+    return result;
+  });
+}
+
+export async function getProjectMonthlyBreakdown(
+  projectId: string
+): Promise<ActionResult<MonthlyBreakdownResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const parsedId = projectIdSchema.parse(projectId);
+
+    const project = await prisma.project.findUnique({
+      where: { id: parsedId },
+      include: {
+        fundFlow: { include: { monthlyData: true } },
+        dueBills: true,
+      },
+    });
+
+    if (!project) {
+      throw new Error("Project not found");
+    }
+
+    const sources: MonthlyBreakdownSources = {
+      project: {
+        id: project.id,
+        workOrderDate: project.workOrderDate,
+      },
+      fundFlow: project.fundFlow
+        ? {
+            id: project.fundFlow.id,
+            monthlyData: project.fundFlow.monthlyData.map((m) => ({
+              id: m.id,
+              month: m.month,
+              year: m.year,
+              income: m.income,
+              expense: m.expense,
+              net: m.net,
+              cumulative: m.cumulative,
+            })),
+          }
+        : null,
+      dueBills: project.dueBills.map((bill) => ({
+        id: bill.id,
+        grossAmount: bill.grossAmount,
+        sgst: bill.sgst,
+        cgst: bill.cgst,
+        billAmount: bill.billAmount,
+        chequeAmount: bill.chequeAmount,
+        sd: bill.sd,
+        itTds: bill.itTds,
+        receivedAmount: bill.receivedAmount,
+        billDate: bill.billDate,
+        receiveDate: bill.receiveDate,
+        status: bill.status,
+      })),
+    };
+
+    const result = computeMonthlyBreakdown(sources);
     return result;
   });
 }

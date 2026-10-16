@@ -173,8 +173,8 @@ describe("computeMonthlyBreakdown", () => {
     });
   });
 
-  describe("T19: Stored FundFlowMonthly vs derived DueBill amounts", () => {
-    it("emits income mismatch when stored income differs from derived invoiced", () => {
+  describe("T19: Stored FundFlowMonthly sanity checks", () => {
+    it("preserves storedIncome and derivedInvoiced as separate figures without flagging mismatch", () => {
       const sources = createMonthlySources({
         fundFlow: {
           id: "ff-1",
@@ -201,13 +201,15 @@ describe("computeMonthlyBreakdown", () => {
       });
 
       const result = computeMonthlyBreakdown(sources);
-      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.MONTHLY_INCOME_MISMATCH)).toBe(true);
-      const disc = findDiscrepancy(result, MonthlyDiscrepancyCode.MONTHLY_INCOME_MISMATCH)!;
-      expect(disc.comparedValues?.storedIncome.value).toBe("100000");
-      expect(disc.comparedValues?.derivedInvoiced.value).toBe("118000");
+      const jan = result.months.find((m) => m.year === 2026 && m.month === 1)!;
+      expect(jan.storedIncome?.toString()).toBe("100000");
+      expect(jan.storedIncomeClassification).toBe("UNKNOWN");
+      expect(jan.derivedInvoiced?.toString()).toBe("118000");
+      // No income mismatch discrepancy emitted — they are different concepts
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.MONTHLY_NET_MISMATCH)).toBe(false);
     });
 
-    it("emits net mismatch when stored net does not equal income minus expense", () => {
+    it("emits net mismatch when stored net does not equal stored income minus expense", () => {
       const sources = createMonthlySources({
         fundFlow: {
           id: "ff-1",
@@ -225,7 +227,7 @@ describe("computeMonthlyBreakdown", () => {
       expect(disc.comparedValues?.computedNet.value).toBe("80000");
     });
 
-    it("does not emit mismatch when stored values agree with derived values", () => {
+    it("does not emit net mismatch when stored values are consistent", () => {
       const sources = createMonthlySources({
         fundFlow: {
           id: "ff-1",
@@ -233,26 +235,10 @@ describe("computeMonthlyBreakdown", () => {
             { id: "ffm-1", month: 1, year: 2026, income: dec("118000"), expense: dec("0"), net: dec("118000"), cumulative: dec("118000") },
           ],
         },
-        dueBills: [
-          {
-            id: "db-1",
-            grossAmount: dec("100000"),
-            sgst: dec("9000"),
-            cgst: dec("9000"),
-            billAmount: dec("118000"),
-            chequeAmount: dec("0"),
-            sd: dec("0"),
-            itTds: dec("0"),
-            receivedAmount: dec("0"),
-            billDate: new Date("2026-01-10"),
-            receiveDate: null,
-            status: "PENDING",
-          },
-        ],
+        dueBills: [],
       });
 
       const result = computeMonthlyBreakdown(sources);
-      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.MONTHLY_INCOME_MISMATCH)).toBe(false);
       expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.MONTHLY_NET_MISMATCH)).toBe(false);
     });
   });
@@ -303,6 +289,7 @@ describe("computeMonthlyBreakdown", () => {
       const result = computeMonthlyBreakdown(sources);
       const jan = result.months.find((m) => m.year === 2026 && m.month === 1)!;
       expect(jan.storedIncome?.toString()).toBe("0");
+      expect(jan.storedIncomeClassification).toBe("UNKNOWN");
       expect(jan.storedExpense?.toString()).toBe("0");
     });
 
@@ -614,6 +601,66 @@ describe("computeMonthlyBreakdown", () => {
       const result = computeMonthlyBreakdown(sources);
       expect(result.summary.totalStoredIncome).toBeNull();
       expect(result.summary.totalDerivedInvoiced?.toString()).toBe("118000");
+    });
+  });
+
+  describe("T26: IST month boundary handling", () => {
+    it("assigns a UTC late-night date to the correct IST month", () => {
+      // 2026-01-31 23:30 UTC = 2026-02-01 05:00 IST
+      // Raw getFullYear/getMonth would classify this as January;
+      // IST-aware extraction must classify it as February.
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-boundary",
+            grossAmount: dec("100000"),
+            sgst: dec("9000"),
+            cgst: dec("9000"),
+            billAmount: dec("118000"),
+            chequeAmount: dec("0"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("0"),
+            billDate: new Date("2026-01-31T23:30:00Z"),
+            receiveDate: null,
+            status: "PENDING",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      expect(result.months.length).toBe(1);
+      expect(result.months[0].year).toBe(2026);
+      expect(result.months[0].month).toBe(2);
+    });
+
+    it("assigns a UTC early-morning date to the correct IST month", () => {
+      // 2026-02-01 04:30 UTC = 2026-02-01 10:00 IST
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-morning",
+            grossAmount: dec("50000"),
+            sgst: dec("4500"),
+            cgst: dec("4500"),
+            billAmount: dec("59000"),
+            chequeAmount: dec("0"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("0"),
+            billDate: new Date("2026-02-01T04:30:00Z"),
+            receiveDate: null,
+            status: "PENDING",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      expect(result.months.length).toBe(1);
+      expect(result.months[0].year).toBe(2026);
+      expect(result.months[0].month).toBe(2);
     });
   });
 });
