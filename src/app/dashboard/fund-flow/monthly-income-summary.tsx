@@ -67,7 +67,9 @@ export function MonthlyIncomeSummary() {
         </CardTitle>
         <p className="text-xs text-zinc-500">
           Total income per month across all projects (Apr 2026 – Mar 2028). Excludes
-          ambiguous historical records without FF-01K provenance.
+          ambiguous historical records without FF-01K provenance.{" "}
+          <span className="text-amber-600">*</span> marks incomplete months where
+          ambiguous records were excluded — totals are not fully reconciled.
         </p>
       </CardHeader>
       <CardContent>
@@ -82,13 +84,13 @@ export function MonthlyIncomeSummary() {
             <div className="text-center font-medium text-zinc-700">Total</div>
 
             {/* Values row */}
-            {summary.map(({ totalIncome, projectCount, unavailableCount }) => (
+            {summary.map(({ label, totalIncome, projectCount, unavailableCount }) => (
               <div
-                key={totalIncome?.toString() ?? "null"}
+                key={label}
                 className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
                 title={
                   unavailableCount > 0
-                    ? `${projectCount} projects with valid allocations, ${unavailableCount} with ambiguous records excluded`
+                    ? `Incomplete: ${projectCount} projects with valid allocations, ${unavailableCount} ambiguous record(s) excluded — total is not a fully reconciled workbook figure`
                     : projectCount > 0
                     ? `${projectCount} projects`
                     : "No allocations"
@@ -100,6 +102,9 @@ export function MonthlyIncomeSummary() {
                       maximumFractionDigits: 2,
                     })}`
                   : "—"}
+                {unavailableCount > 0 && (
+                  <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+                )}
               </div>
             ))}
             <div className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700">
