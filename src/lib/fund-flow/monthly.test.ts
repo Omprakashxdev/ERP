@@ -604,6 +604,117 @@ describe("computeMonthlyBreakdown", () => {
     });
   });
 
+  describe("T27: Negative receipt and cheque amounts", () => {
+    it("includes negative receivedAmount in monthly grouping and preserves signed value", () => {
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-neg-rec",
+            grossAmount: dec("100000"),
+            sgst: dec("9000"),
+            cgst: dec("9000"),
+            billAmount: dec("118000"),
+            chequeAmount: dec("0"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("-5000"),
+            billDate: new Date("2026-01-10"),
+            receiveDate: new Date("2026-01-15"),
+            status: "PAID",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      const jan = result.months.find((m) => m.year === 2026 && m.month === 1)!;
+      expect(jan.derivedReceived?.toString()).toBe("-5000");
+      expect(jan.receivedDueBillIds).toContain("db-neg-rec");
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.NEGATIVE_RECEIPT_AMOUNT)).toBe(true);
+    });
+
+    it("includes negative chequeAmount in monthly grouping and preserves signed value", () => {
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-neg-chq",
+            grossAmount: dec("100000"),
+            sgst: dec("9000"),
+            cgst: dec("9000"),
+            billAmount: dec("118000"),
+            chequeAmount: dec("-3000"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("0"),
+            billDate: new Date("2026-01-10"),
+            receiveDate: new Date("2026-01-15"),
+            status: "PAID",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      const jan = result.months.find((m) => m.year === 2026 && m.month === 1)!;
+      expect(jan.derivedCheque?.toString()).toBe("-3000");
+      expect(jan.receivedDueBillIds).toContain("db-neg-chq");
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.NEGATIVE_RECEIPT_AMOUNT)).toBe(true);
+    });
+
+    it("emits UNALLOCATED_RECEIPT_DATE for negative amounts with null receiveDate", () => {
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-neg-unalloc",
+            grossAmount: dec("100000"),
+            sgst: dec("9000"),
+            cgst: dec("9000"),
+            billAmount: dec("118000"),
+            chequeAmount: dec("-2000"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("-3000"),
+            billDate: new Date("2026-01-10"),
+            receiveDate: null,
+            status: "PAID",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      expect(result.months.length).toBe(1);
+      expect(result.months[0].derivedReceived).toBeNull();
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.UNALLOCATED_RECEIPT_DATE)).toBe(true);
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.NEGATIVE_RECEIPT_AMOUNT)).toBe(true);
+    });
+
+    it("does not emit NEGATIVE_RECEIPT_AMOUNT for positive amounts", () => {
+      const sources = createMonthlySources({
+        fundFlow: null,
+        dueBills: [
+          {
+            id: "db-pos",
+            grossAmount: dec("100000"),
+            sgst: dec("9000"),
+            cgst: dec("9000"),
+            billAmount: dec("118000"),
+            chequeAmount: dec("118000"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("118000"),
+            billDate: new Date("2026-01-10"),
+            receiveDate: new Date("2026-01-15"),
+            status: "PAID",
+          },
+        ],
+      });
+
+      const result = computeMonthlyBreakdown(sources);
+      expect(hasDiscrepancy(result, MonthlyDiscrepancyCode.NEGATIVE_RECEIPT_AMOUNT)).toBe(false);
+    });
+  });
+
   describe("T26: IST month boundary handling", () => {
     it("assigns a UTC late-night date to the correct IST month", () => {
       // 2026-01-31 23:30 UTC = 2026-02-01 05:00 IST

@@ -24,6 +24,11 @@ function gt(a: Decimal | null, b: Decimal | null): boolean {
   return new Decimal(a.toString()).greaterThan(new Decimal(b.toString()));
 }
 
+function lt(a: Decimal | null, b: Decimal | null): boolean {
+  if (a == null || b == null) return false;
+  return new Decimal(a.toString()).lessThan(new Decimal(b.toString()));
+}
+
 // ─── Discrepancy codes ────────────────────────────────────────
 
 export enum MonthlyDiscrepancyCode {
@@ -31,6 +36,7 @@ export enum MonthlyDiscrepancyCode {
   MISSING_MONTHLY_RECORD = "MISSING_MONTHLY_RECORD",
   UNALLOCATED_INVOICE_DATE = "UNALLOCATED_INVOICE_DATE",
   UNALLOCATED_RECEIPT_DATE = "UNALLOCATED_RECEIPT_DATE",
+  NEGATIVE_RECEIPT_AMOUNT = "NEGATIVE_RECEIPT_AMOUNT",
 }
 
 export type MonthlyDiscrepancySeverity = "CRITICAL" | "WARNING" | "INFO";
@@ -225,10 +231,30 @@ export function computeMonthlyBreakdown(
       }
     }
 
-    // Receipt grouping (non-cancelled, non-null receiveDate, positive amounts)
+    // Receipt grouping (non-cancelled, non-null receiveDate, non-zero amounts)
     if (bill.status !== "CANCELLED") {
-      const hasReceipt = gt(bill.receivedAmount, new Decimal("0")) || gt(bill.chequeAmount, new Decimal("0"));
+      const hasReceipt = !eq(bill.receivedAmount, new Decimal("0")) || !eq(bill.chequeAmount, new Decimal("0"));
       if (hasReceipt) {
+        // Flag negative amounts for verification
+        const receivedNeg = bill.receivedAmount != null && lt(bill.receivedAmount, new Decimal("0"));
+        const chequeNeg = bill.chequeAmount != null && lt(bill.chequeAmount, new Decimal("0"));
+        if (receivedNeg || chequeNeg) {
+          discrepancies.push({
+            code: MonthlyDiscrepancyCode.NEGATIVE_RECEIPT_AMOUNT,
+            severity: "WARNING",
+            message: "Negative receipt or cheque amount requires verification.",
+            projectId: project.id,
+            sourceModel: "DueBill",
+            sourceRecordIds: [bill.id],
+            comparedValues: {
+              receivedAmount: { value: bill.receivedAmount.toString(), source: "DueBill.receivedAmount" },
+              chequeAmount: { value: bill.chequeAmount.toString(), source: "DueBill.chequeAmount" },
+            },
+            explanation:
+              "Negative settlement or cheque amounts are present. Their accounting meaning cannot be established automatically; manual verification is required.",
+          });
+        }
+
         if (bill.receiveDate != null) {
           hasReceiveDates = true;
           const { year, month } = getISTYearMonth(bill.receiveDate);
@@ -246,7 +272,7 @@ export function computeMonthlyBreakdown(
             });
           }
         } else {
-          // Positive receipt with null receiveDate is unallocated
+          // Non-zero receipt with null receiveDate is unallocated
           missingDates = true;
           discrepancies.push({
             code: MonthlyDiscrepancyCode.UNALLOCATED_RECEIPT_DATE,
