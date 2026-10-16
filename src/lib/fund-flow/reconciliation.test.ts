@@ -535,6 +535,116 @@ describe("reconcileProject", () => {
     });
   });
 
+  describe("T16: Missing data versus zero", () => {
+    it("preserves null for WIP aggregates when all RA bill fields are null", () => {
+      const sources = createSources({
+        wip: {
+          id: "wip-null",
+          amountOfWorkDone: null,
+          finalProgressAmount: null,
+          raBill1Amount: null,
+          raBill2Amount: null,
+          raBill3Amount: null,
+          raBill4Amount: null,
+          raBill1SaecFee: null,
+          raBill2SaecFee: null,
+          raBill3SaecFee: null,
+          raBill4SaecFee: null,
+          raBill1ProjectExpense: null,
+          raBill2ProjectExpense: null,
+          raBill3ProjectExpense: null,
+          raBill4ProjectExpense: null,
+        },
+      });
+
+      const result = reconcileProject(sources);
+      expect(result.wipComparison.raBillAmountSum).toBeNull();
+      expect(result.wipComparison.totalSaecFee).toBeNull();
+      expect(result.wipComparison.totalProjectExpense).toBeNull();
+    });
+
+    it("sums partial WIP RA bill data correctly", () => {
+      const sources = createSources({
+        wip: {
+          id: "wip-partial",
+          amountOfWorkDone: dec("200000"),
+          finalProgressAmount: null,
+          raBill1Amount: dec("10000"),
+          raBill2Amount: null,
+          raBill3Amount: dec("20000"),
+          raBill4Amount: null,
+          raBill1SaecFee: dec("1000"),
+          raBill2SaecFee: null,
+          raBill3SaecFee: dec("2000"),
+          raBill4SaecFee: null,
+          raBill1ProjectExpense: dec("500"),
+          raBill2ProjectExpense: null,
+          raBill3ProjectExpense: null,
+          raBill4ProjectExpense: dec("300"),
+        },
+      });
+
+      const result = reconcileProject(sources);
+      expect(result.wipComparison.raBillAmountSum?.toString()).toBe("30000");
+      expect(result.wipComparison.totalSaecFee?.toString()).toBe("3000");
+      expect(result.wipComparison.totalProjectExpense?.toString()).toBe("800");
+    });
+
+    it("does not emit legacy feeReceived mismatch when there are no DueBills", () => {
+      const sources = createSources({
+        fundFlow: {
+          id: "ff-nobills",
+          miscExp: dec("0"),
+          staffExp: dec("0"),
+          totalProjectCost: dec("500000"),
+          completedWorkAmt: dec("200000"),
+          proposedDueBillAmount: dec("0"),
+          feeReceived: dec("100000"),
+        },
+        dueBills: [],
+      });
+
+      const result = reconcileProject(sources);
+      expect(
+        hasDiscrepancy(result, DiscrepancyCode.LEGACY_FEE_RECEIVED_MISMATCH)
+      ).toBe(false);
+    });
+  });
+
+  describe("T17: Overall status classification", () => {
+    it("returns INSUFFICIENT_DATA when GST data is ambiguous", () => {
+      const sources = createSources({
+        dueBills: [
+          {
+            id: "db-gst",
+            grossAmount: dec("100000"),
+            sgst: dec("0"),
+            cgst: dec("0"),
+            billAmount: dec("100000"),
+            chequeAmount: dec("0"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("0"),
+            billDate: new Date("2026-01-15"),
+            receiveDate: null,
+            status: "PENDING",
+          },
+        ],
+      });
+
+      const result = reconcileProject(sources);
+      expect(result.calculationIndicators.ambiguousGstData).toBe(true);
+      expect(result.overallStatus).toBe("INSUFFICIENT_DATA");
+    });
+
+    it("returns INSUFFICIENT_DATA when fee stages are missing", () => {
+      const sources = createSources({ feeStages: [] });
+      const result = reconcileProject(sources);
+      expect(result.calculationIndicators.missingFeeStages).toBe(true);
+      expect(result.overallStatus).toBe("INSUFFICIENT_DATA");
+    });
+  });
+
   describe("T15: Read-only behavior", () => {
     it("does not mutate input fixtures", () => {
       const sources = createSources();

@@ -48,6 +48,12 @@ function sum(values: (Decimal | null | undefined)[]): Decimal {
   return values.reduce<Decimal>((acc, v) => acc.plus(d(v)), new Decimal("0.00"));
 }
 
+function sumNullable(values: (Decimal | null | undefined)[]): Decimal | null {
+  const hasValue = values.some((v) => v != null);
+  if (!hasValue) return null;
+  return values.reduce<Decimal>((acc, v) => acc.plus(d(v)), new Decimal("0.00"));
+}
+
 // ─── Discrepancy codes ────────────────────────────────────────
 
 export enum DiscrepancyCode {
@@ -522,7 +528,7 @@ export function reconcileProject(
   }
 
   // ── Legacy FundFlow feeReceived comparison ──
-  if (fundFlow != null) {
+  if (fundFlow != null && dueBills.length > 0) {
     const aggregatedReceived = settlementTotal;
     if (!eq(fundFlow.feeReceived, aggregatedReceived)) {
       discrepancies.push({
@@ -560,21 +566,21 @@ export function reconcileProject(
     wipAmountOfWorkDone = dNull(wip.amountOfWorkDone);
     wipFinalProgressAmount = dNull(wip.finalProgressAmount);
 
-    wipRaBillAmountSum = sum([
+    wipRaBillAmountSum = sumNullable([
       wip.raBill1Amount,
       wip.raBill2Amount,
       wip.raBill3Amount,
       wip.raBill4Amount,
     ]);
 
-    wipTotalSaecFee = sum([
+    wipTotalSaecFee = sumNullable([
       wip.raBill1SaecFee,
       wip.raBill2SaecFee,
       wip.raBill3SaecFee,
       wip.raBill4SaecFee,
     ]);
 
-    wipTotalProjectExpense = sum([
+    wipTotalProjectExpense = sumNullable([
       wip.raBill1ProjectExpense,
       wip.raBill2ProjectExpense,
       wip.raBill3ProjectExpense,
@@ -638,7 +644,13 @@ export function reconcileProject(
   let overallStatus: OverallStatus;
   if (hasCritical || hasWarning) {
     overallStatus = "DISCREPANCIES_FOUND";
-  } else if (missingFundFlow || missingWip || dueBills.length === 0) {
+  } else if (
+    missingFundFlow ||
+    missingWip ||
+    dueBills.length === 0 ||
+    missingFeeStages ||
+    ambiguousGstData
+  ) {
     overallStatus = "INSUFFICIENT_DATA";
   } else {
     overallStatus = "RECONCILED";
