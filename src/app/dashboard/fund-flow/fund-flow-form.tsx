@@ -14,6 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { upsertFundFlow, getFundFlowByProjectId } from "@/lib/actions/fund-flow";
+import {
+  getMonthlyAllocations,
+  upsertMonthlyAllocation,
+  MONTHLY_ALLOCATION_WINDOW,
+} from "@/lib/actions/fund-flow-monthly";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,6 +65,13 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
 
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [monthlyAllocations, setMonthlyAllocations] = useState<
+    Record<string, string>
+  >({});
+  const [monthlyTotal, setMonthlyTotal] = useState<string | null>(null);
+  const [monthlySaving, setMonthlySaving] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -79,6 +91,35 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
     };
   }, [project.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMonthly() {
+      setMonthlyLoading(true);
+      try {
+        const result = await getMonthlyAllocations(project.id);
+        if (!cancelled && result.success && result.data) {
+          const data = result.data as {
+            allocations: { month: number; year: number; amount: { toString: () => string } | null }[];
+            total: { toString: () => string } | null;
+          };
+          const map: Record<string, string> = {};
+          for (const a of data.allocations) {
+            const key = `${a.year}-${String(a.month).padStart(2, "0")}`;
+            map[key] = a.amount != null ? Number(a.amount.toString()).toFixed(2) : "";
+          }
+          setMonthlyAllocations(map);
+          setMonthlyTotal(data.total != null ? Number(data.total.toString()).toFixed(2) : null);
+        }
+      } finally {
+        if (!cancelled) setMonthlyLoading(false);
+      }
+    }
+    loadMonthly();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const remainingWorkAmt = useMemo(() => {
     const total = Number(form.totalProjectCost) || 0;
     const completed = Number(form.completedWorkAmt) || 0;
@@ -93,6 +134,49 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
 
   function updateField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function saveMonthlyAllocation(month: number, year: number, value: string) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    const trimmed = value.trim();
+    setMonthlySaving(true);
+    try {
+      const result = await upsertMonthlyAllocation({
+        projectId: project.id,
+        month,
+        year,
+        amount: trimmed === "" ? null : trimmed,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to save monthly allocation.");
+        return;
+      }
+      // Recalculate local total
+      const num = trimmed === "" ? null : Number(trimmed);
+      setMonthlyAllocations((prev) => ({ ...prev, [key]: trimmed }));
+      setMonthlyTotal((prev) => {
+        if (num == null) {
+          // Need to recalc from all values
+          const sum = Object.entries(monthlyAllocations)
+            .filter(([k]) => k !== key)
+            .reduce((acc, [, v]) => acc + (v ? Number(v) : 0), 0);
+          return sum > 0 ? sum.toFixed(2) : null;
+        }
+        const currentSum = Object.entries(monthlyAllocations).reduce(
+          (acc, [, v]) => acc + (v ? Number(v) : 0),
+          0
+        );
+        const oldVal = monthlyAllocations[key] ? Number(monthlyAllocations[key]) : 0;
+        const newSum = currentSum - oldVal + num;
+        return newSum > 0 ? newSum.toFixed(2) : null;
+      });
+      toast.success("Monthly allocation saved");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unexpected error.";
+      toast.error(msg);
+    } finally {
+      setMonthlySaving(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -304,6 +388,65 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                 {detailData!.recordedCashLabel as string}
               </p>
             )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium">
+              Monthly allocations (Apr 2026 – Mar 2028)
+              {monthlyLoading && (
+                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
+              )}
+            </h4>
+            <p className="text-xs text-zinc-500">
+              Recorded monthly amounts from customer workbook. Kept separate from
+              invoiced and settlement figures.
+            </p>
+
+            <div className="overflow-x-auto">
+              <div className="grid grid-cols-[repeat(25,minmax(72px,1fr))] gap-1 text-xs">
+                {/* Header row */}
+                {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => (
+                  <div key={`h-${year}-${month}`} className="text-center text-zinc-500">
+                    {label}
+                  </div>
+                ))}
+                <div className="text-center font-medium text-zinc-700">Total</div>
+
+                {/* Input row */}
+                {MONTHLY_ALLOCATION_WINDOW.map(({ year, month }) => {
+                  const key = `${year}-${String(month).padStart(2, "0")}`;
+                  return (
+                    <input
+                      key={`i-${year}-${month}`}
+                      type="number"
+                      step="0.01"
+                      disabled={monthlySaving}
+                      className="h-8 rounded border border-zinc-200 px-1 text-right font-mono focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
+                      value={monthlyAllocations[key] ?? ""}
+                      onChange={(e) => {
+                        setMonthlyAllocations((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }));
+                      }}
+                      onBlur={(e) => {
+                        saveMonthlyAllocation(month, year, e.target.value);
+                      }}
+                    />
+                  );
+                })}
+                <div className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700">
+                  {monthlyTotal != null
+                    ? `₹${Number(monthlyTotal).toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                    : "—"}
+                </div>
+              </div>
+            </div>
           </div>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
