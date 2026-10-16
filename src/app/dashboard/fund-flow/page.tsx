@@ -9,6 +9,7 @@ import { serialize } from "@/lib/utils";
 import { FundFlowTable } from "./fund-flow-table";
 import { FundFlowFilters } from "./fund-flow-filters";
 import { FundFlowSkeleton } from "./fund-flow-skeleton";
+import { MonthlyIncomeSummary } from "./monthly-income-summary";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import { Card, CardContent } from "@/components/ui/card";
 import { Landmark, FileSpreadsheet } from "lucide-react";
@@ -81,6 +82,8 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
           />
         </CardContent>
       </Card>
+
+      <MonthlyIncomeSummary />
 
       {fundFlowResult.success ? (
         <FundFlowTable

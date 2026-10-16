@@ -59,6 +59,17 @@ export interface MonthlyAllocationResult {
   total: Decimal | null;
 }
 
+export interface MonthlyIncomeSummary {
+  month: number;
+  year: number;
+  label: string;
+  totalIncome: Decimal | null;
+  /** Number of projects with valid allocations for this month */
+  projectCount: number;
+  /** Number of projects with ambiguous/unavailable allocations for this month */
+  unavailableCount: number;
+}
+
 // ─── Schemas ────────────────────────────────────────────────────
 
 const upsertSchema = z.object({
@@ -288,5 +299,79 @@ export async function upsertMonthlyAllocation(
     });
 
     return { id: record.id };
+  });
+}
+
+// ─── Monthly Income Summary (FF-01L: Excel Row 12) ───────────────
+
+export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyIncomeSummary[]>> {
+  return withPermission("fundFlow", "read", async () => {
+    const allFundFlows = await prisma.fundFlow.findMany({
+      include: { monthlyData: true },
+    });
+
+    // Fetch all audit provenance for all monthly records in one query
+    const allMonthlyIds = allFundFlows.flatMap((ff) => ff.monthlyData.map((m) => m.id));
+    const provenanceSet = await fetchProvenanceSet(allMonthlyIds);
+
+    // Aggregate by month key (YYYY-MM)
+    const monthlyAggregates = new Map<
+      string,
+      { total: Decimal; projectCount: number; unavailableCount: number }
+    >();
+
+    for (const fundFlow of allFundFlows) {
+      for (const m of fundFlow.monthlyData) {
+        const key = `${m.year}-${m.month}`;
+
+        // Skip if outside 24-month window
+        if (!windowKeySet.has(key)) continue;
+
+        // Skip records with non-zero expense/net/cumulative (different meaning)
+        if (!isSafeWorkbookRecord(m)) continue;
+
+        // Check provenance
+        if (!provenanceSet.has(m.id)) {
+          // Ambiguous record - count as unavailable
+          const existing = monthlyAggregates.get(key) ?? {
+            total: new Decimal("0"),
+            projectCount: 0,
+            unavailableCount: 0,
+          };
+          existing.unavailableCount += 1;
+          monthlyAggregates.set(key, existing);
+          continue;
+        }
+
+        // Valid allocation - add to total
+        const existing = monthlyAggregates.get(key) ?? {
+          total: new Decimal("0"),
+          projectCount: 0,
+          unavailableCount: 0,
+        };
+        existing.total = existing.total.plus(new Decimal(m.income.toString()));
+        existing.projectCount += 1;
+        monthlyAggregates.set(key, existing);
+      }
+    }
+
+    // Build summary array in window order
+    const summary: MonthlyIncomeSummary[] = MONTHLY_ALLOCATION_WINDOW.map(
+      ({ year, month, label }) => {
+        const key = `${year}-${month}`;
+        const agg = monthlyAggregates.get(key);
+
+        return {
+          month,
+          year,
+          label,
+          totalIncome: agg && agg.projectCount > 0 ? agg.total : null,
+          projectCount: agg?.projectCount ?? 0,
+          unavailableCount: agg?.unavailableCount ?? 0,
+        };
+      }
+    );
+
+    return summary;
   });
 }
