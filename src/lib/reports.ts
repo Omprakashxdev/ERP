@@ -1522,21 +1522,105 @@ async function runFundFlowDeptExpense(_params?: { dateFrom?: Date; dateTo?: Date
 // --- Fund Flow Monthly Cash Flow Report ---
 
 async function runFundFlowMonthlyCashflow(_params?: { dateFrom?: Date; dateTo?: Date }) {
-  const flows = await prisma.fundFlow.findMany({
-    include: { project: { select: { workOrderDate: true } } },
-    take: 500,
-  });
-  const byMonth: Record<string, { inflow: number; outflow: number }> = {};
+  const [bills, flows] = await Promise.all([
+    prisma.dueBill.findMany({
+      where: { status: { not: "CANCELLED" } },
+      select: {
+        billAmount: true,
+        receivedAmount: true,
+        chequeAmount: true,
+        billDate: true,
+        receiveDate: true,
+      },
+      take: 5000,
+    }),
+    prisma.fundFlow.findMany({
+      include: { project: { select: { workOrderDate: true } } },
+      take: 500,
+    }),
+  ]);
+
+  // Actual figures from DueBills by real transaction dates
+  const actualInvoiced: Record<string, number> = {};
+  const actualSettled: Record<string, number> = {};
+  const actualCheque: Record<string, number> = {};
+
+  for (const bill of bills) {
+    if (bill.billDate != null) {
+      const d = bill.billDate;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      actualInvoiced[key] = (actualInvoiced[key] ?? 0) + Number(bill.billAmount);
+    }
+    if (bill.receiveDate != null) {
+      const d = bill.receiveDate;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      actualSettled[key] = (actualSettled[key] ?? 0) + Number(bill.receivedAmount);
+      actualCheque[key] = (actualCheque[key] ?? 0) + Number(bill.chequeAmount);
+    }
+  }
+
+  // Legacy figures from FundFlow grouped by project work-order date (inherently inaccurate)
+  const legacyInflow: Record<string, number> = {};
+  const legacyOutflow: Record<string, number> = {};
   for (const f of flows) {
     const d = f.project.workOrderDate;
-    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (!byMonth[monthKey]) byMonth[monthKey] = { inflow: 0, outflow: 0 };
-    byMonth[monthKey].inflow += Number(f.feeReceived);
-    byMonth[monthKey].outflow += Number(f.miscExp) + Number(f.staffExp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    legacyInflow[key] = (legacyInflow[key] ?? 0) + Number(f.feeReceived);
+    legacyOutflow[key] = (legacyOutflow[key] ?? 0) + Number(f.miscExp) + Number(f.staffExp);
   }
+
+  const allKeys = new Set([
+    ...Object.keys(actualInvoiced),
+    ...Object.keys(actualSettled),
+    ...Object.keys(actualCheque),
+    ...Object.keys(legacyInflow),
+    ...Object.keys(legacyOutflow),
+  ]);
+  const sortedKeys = Array.from(allKeys).sort();
+
   return {
-    columns: ["Month", "Inflow", "Outflow", "Net"],
-    rows: Object.entries(byMonth).sort().map(([month, v]) => ({ Month: month, Inflow: v.inflow, Outflow: v.outflow, Net: v.inflow - v.outflow })),
+    columns: [
+      "Month",
+      "Actual invoiced",
+      "Actual settled",
+      "Actual recorded cheque",
+      "Legacy fee received (unverified)",
+      "Legacy SAEC expenses (project total)",
+      "Net (actuals)",
+      "Data quality note",
+    ],
+    rows: sortedKeys.map((month) => {
+      const inv = actualInvoiced[month] ?? null;
+      const set = actualSettled[month] ?? null;
+      const chq = actualCheque[month] ?? null;
+      const legIn = legacyInflow[month] ?? null;
+      const legOut = legacyOutflow[month] ?? null;
+
+      const hasActuals = inv != null || set != null || chq != null;
+      const net = hasActuals ? (inv ?? 0) - (set ?? 0) : null;
+
+      let note = "";
+      if (hasActuals && legIn != null) {
+        note = "Actuals available; legacy figures shown for comparison only.";
+      } else if (hasActuals) {
+        note = "Actuals available.";
+      } else if (legIn != null) {
+        note = "Legacy only — grouped by project work-order date; not actual cash-flow timing.";
+      } else {
+        note = "No data.";
+      }
+
+      return {
+        Month: month,
+        "Actual invoiced": inv ?? "Unavailable",
+        "Actual settled": set ?? "Unavailable",
+        "Actual recorded cheque": chq ?? "Unavailable",
+        "Legacy fee received (unverified)": legIn ?? "Unavailable",
+        "Legacy SAEC expenses (project total)": legOut ?? "Unavailable",
+        "Net (actuals)": net ?? "Unavailable",
+        "Data quality note": note,
+      };
+    }),
   };
 }
 
