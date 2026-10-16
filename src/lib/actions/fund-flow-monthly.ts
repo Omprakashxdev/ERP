@@ -49,6 +49,9 @@ export interface MonthlyAllocation {
   month: number;
   year: number;
   amount: Decimal | null;
+  /** true if a record exists but its meaning is ambiguous (no audit provenance) */
+  unavailable?: boolean;
+  unavailableReason?: string;
 }
 
 export interface MonthlyAllocationResult {
@@ -83,6 +86,21 @@ function dZero(v: Decimal | null | undefined): Decimal {
   return new Decimal(v.toString());
 }
 
+async function fetchProvenanceSet(recordIds: string[]): Promise<Set<string>> {
+  if (recordIds.length === 0) return new Set();
+  const entries = await prisma.auditLog.findMany({
+    where: {
+      entity: "FundFlowMonthly",
+      entityId: { in: recordIds },
+      action: { in: ["create", "update"] },
+    },
+    select: { entityId: true },
+  });
+  return new Set(
+    entries.map((e) => e.entityId).filter(Boolean) as string[]
+  );
+}
+
 // ─── Read ───────────────────────────────────────────────────────
 
 export async function getMonthlyAllocations(
@@ -107,31 +125,42 @@ export async function getMonthlyAllocations(
       };
     }
 
-    const allocationMap = new Map<
-      string,
-      { month: number; year: number; amount: Decimal }
-    >();
+    const recordIds = fundFlow.monthlyData.map((m) => m.id);
+    const provenanceSet = await fetchProvenanceSet(recordIds);
+
+    const allocationMap = new Map<string, MonthlyAllocation>();
     for (const m of fundFlow.monthlyData) {
-      // Only treat records with zero expense/net/cumulative as workbook allocations.
-      // Records with non-zero derived fields may have been created with a different
-      // meaning and are ignored (treated as missing) to avoid reinterpretation.
+      const key = `${m.year}-${String(m.month).padStart(2, "0")}`;
+
+      // Non-zero expense/net/cumulative means the record was created with a
+      // different meaning — ignore entirely (treated as missing).
       if (!isSafeWorkbookRecord(m)) continue;
-      allocationMap.set(`${m.year}-${String(m.month).padStart(2, "0")}`, {
+
+      // Zero expense/net/cumulative is necessary but not sufficient.
+      // Without audit provenance the record's origin is ambiguous.
+      if (!provenanceSet.has(m.id)) {
+        allocationMap.set(key, {
+          month: m.month,
+          year: m.year,
+          amount: null,
+          unavailable: true,
+          unavailableReason:
+            "Historical record without audit provenance — unavailable for editing",
+        });
+        continue;
+      }
+
+      allocationMap.set(key, {
         month: m.month,
         year: m.year,
-        amount: m.income,
+        amount: new Decimal(m.income.toString()),
       });
     }
 
     const allocations: MonthlyAllocation[] = MONTHLY_ALLOCATION_WINDOW.map(
       ({ year, month }) => {
         const key = `${year}-${String(month).padStart(2, "0")}`;
-        const found = allocationMap.get(key);
-        return {
-          month,
-          year,
-          amount: found ? new Decimal(found.amount.toString()) : null,
-        };
+        return allocationMap.get(key) ?? { month, year, amount: null };
       }
     );
 
@@ -200,6 +229,15 @@ export async function upsertMonthlyAllocation(
       if (!isSafeWorkbookRecord(existing)) {
         throw new Error(
           "Cannot update existing FundFlowMonthly record: non-zero expense/net/cumulative indicates it was created with a different meaning."
+        );
+      }
+
+      // Provenance: zero EDC alone is not sufficient. Without an audit trail
+      // we cannot confirm the record was created by FF-01K.
+      const provenance = await fetchProvenanceSet([existing.id]);
+      if (!provenance.has(existing.id)) {
+        throw new Error(
+          "Cannot update existing FundFlowMonthly record: audit provenance missing — the record's meaning is ambiguous."
         );
       }
 

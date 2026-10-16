@@ -5,10 +5,10 @@ import {
   upsertMonthlyAllocation,
   MONTHLY_ALLOCATION_WINDOW,
 } from "../actions/fund-flow-monthly";
-import { prisma } from "../prisma";
+import { prisma } from "@/lib/prisma";
 import { withPermission } from "../actions/wrapper";
 
-vi.mock("../prisma", () => ({
+vi.mock("@/lib/prisma", () => ({
   prisma: {
     fundFlow: {
       findUnique: vi.fn(),
@@ -19,6 +19,9 @@ vi.mock("../prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    auditLog: {
+      findMany: vi.fn(),
     },
   },
 }));
@@ -42,8 +45,10 @@ function mockWithPermission() {
 
 describe("FundFlowMonthly allocations (FF-01K)", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockWithPermission();
+    vi.mocked(prisma.fundFlow.findUnique).mockResolvedValue({ id: "default" } as any);
+    vi.mocked(prisma.auditLog.findMany).mockResolvedValue([]);
   });
 
   describe("MONTHLY_ALLOCATION_WINDOW", () => {
@@ -82,6 +87,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
           { id: "m3", month: 1, year: 2027, income: new Decimal("10000.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([
+        { entityId: "m1", action: "create" }, { entityId: "m2", action: "create" }, { entityId: "m3", action: "create" },
+      ] as any);
 
       const result = await getMonthlyAllocations("c1234567890123456789012345");
       expect(result.success).toBe(true);
@@ -114,6 +122,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
           { id: "m1", month: 12, year: 2025, income: new Decimal("9999"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([
+        { entityId: "m1", action: "create" },
+      ] as any);
 
       const result = await getMonthlyAllocations("c1234567890123456789012345");
       const data = result.data as { allocations: any[] };
@@ -132,6 +143,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
           { id: "m-unsafe3", month: 7, year: 2026, income: new Decimal("1000"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("75") },
         ],
       } as any);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([
+        { entityId: "m-safe", action: "create" },
+      ] as any);
 
       const result = await getMonthlyAllocations("c1234567890123456789012345");
       const data = result.data as { allocations: any[] };
@@ -145,6 +159,26 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       expect(may!.amount).toBeNull(); // unsafe — ignored
       expect(jun!.amount).toBeNull(); // unsafe — ignored
       expect(jul!.amount).toBeNull(); // unsafe — ignored
+    });
+
+    it("rejects audit entries with non-create/update actions as insufficient provenance (T76.1)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+        monthlyData: [
+          { id: "m-system", month: 4, year: 2026, income: new Decimal("5000"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+        ],
+      } as any);
+      // Audit entry with "delete" action would be filtered out by the real implementation
+      // (action: { in: ["create", "update"] }), so simulate empty result
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([] as any);
+
+      const result = await getMonthlyAllocations("c1234567890123456789012345");
+      const data = result.data as { allocations: any[] };
+
+      const apr = data.allocations.find((a: any) => a.month === 4 && a.year === 2026);
+      expect(apr!.amount).toBeNull();
+      expect(apr!.unavailable).toBe(true);
+      expect(apr!.unavailableReason).toContain("audit provenance");
     });
   });
 
@@ -273,6 +307,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
           { id: "m-zero", month: 6, year: 2026, income: new Decimal("0.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([
+        { entityId: "m-zero", action: "create" },
+      ] as any);
 
       const result = await getMonthlyAllocations("c1234567890123456789012345");
       const data = result.data as { allocations: any[] };
@@ -368,6 +405,98 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe("Forbidden");
       expect(prisma.fundFlow.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("marks zero-EDC records without audit provenance as ambiguous (T76)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+        monthlyData: [
+          { id: "m-hist", month: 4, year: 2026, income: new Decimal("5000"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+        ],
+      } as any);
+      // No audit entry for m-hist → ambiguous
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([] as any);
+
+      const result = await getMonthlyAllocations("c1234567890123456789012345");
+      const data = result.data as { allocations: any[] };
+
+      const apr = data.allocations.find((a: any) => a.month === 4 && a.year === 2026);
+      expect(apr!.amount).toBeNull();
+      expect(apr!.unavailable).toBe(true);
+      expect(apr!.unavailableReason).toContain("audit provenance");
+    });
+
+    it("rejects updates to ambiguous zero-EDC records (T77)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+      } as any);
+      vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce({
+        id: "m-hist",
+        income: new Decimal("5000"),
+        expense: new Decimal("0"),
+        net: new Decimal("0"),
+        cumulative: new Decimal("0"),
+      } as any);
+      // No audit entry → ambiguous
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([] as any);
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 6,
+        year: 2026,
+        amount: "9999",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("audit provenance missing");
+      expect(prisma.fundFlowMonthly.update).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.create).not.toHaveBeenCalled();
+    });
+
+    it("rejects updates when audit entry action is not create/update (T77.1)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+      } as any);
+      vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce({
+        id: "m-system",
+        income: new Decimal("5000"),
+        expense: new Decimal("0"),
+        net: new Decimal("0"),
+        cumulative: new Decimal("0"),
+      } as any);
+      // Audit entry with "delete" action would be filtered out by the real implementation
+      // (action: { in: ["create", "update"] }), so simulate empty result
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([] as any);
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 6,
+        year: 2026,
+        amount: "9999",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("audit provenance missing");
+      expect(prisma.fundFlowMonthly.update).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.create).not.toHaveBeenCalled();
+    });
+
+    it("preserves Decimal(19,2) precision for large amounts (T78)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+        monthlyData: [
+          { id: "m-large", month: 4, year: 2026, income: new Decimal("99999999999999999.99"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+        ],
+      } as any);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([
+        { entityId: "m-large", action: "create" },
+      ] as any);
+
+      const result = await getMonthlyAllocations("c1234567890123456789012345");
+      const data = result.data as { allocations: any[] };
+
+      const apr = data.allocations.find((a: any) => a.month === 4 && a.year === 2026);
+      expect(apr!.amount!.toString()).toBe("99999999999999999.99");
     });
   });
 });

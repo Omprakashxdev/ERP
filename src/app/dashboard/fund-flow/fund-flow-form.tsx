@@ -45,6 +45,37 @@ function formatMoney(value: unknown): string {
   })}`;
 }
 
+/** Convert a Decimal-like value to an input-safe string without Number() precision loss. */
+function decimalToInputString(value: unknown): string {
+  if (value == null) return "";
+  const s = typeof value === "string" ? value : String(value);
+  if (s === "" || s === "null" || s === "undefined") return "";
+  if (!s.includes(".")) return `${s}.00`;
+  const [intPart, fracPart] = s.split(".");
+  if (fracPart.length === 1) return `${intPart}.${fracPart}0`;
+  if (fracPart.length > 2) return `${intPart}.${fracPart.slice(0, 2)}`;
+  return s;
+}
+
+/** Format a decimal-string as Indian-locale currency without Number() precision loss. */
+function formatDecimalAsCurrency(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const s = typeof value === "string" ? value : String(value);
+  if (s === "" || s === "null" || s === "undefined") return "—";
+  const negative = s.startsWith("-");
+  const absS = negative ? s.slice(1) : s;
+  const [intStr, fracStr = "00"] = absS.split(".");
+  const frac = (fracStr + "00").slice(0, 2);
+  const digits = intStr.replace(/^0+/, "") || "0";
+  if (digits.length <= 3) {
+    return `${negative ? "-" : ""}₹${digits}.${frac}`;
+  }
+  const lastThree = digits.slice(-3);
+  const remaining = digits.slice(0, -3);
+  const restWithCommas = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+  return `${negative ? "-" : ""}₹${restWithCommas},${lastThree}.${frac}`;
+}
+
 export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -68,6 +99,9 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   const [monthlyAllocations, setMonthlyAllocations] = useState<
     Record<string, string>
+  >({});
+  const [monthlyUnavailable, setMonthlyUnavailable] = useState<
+    Record<string, { reason: string }>
   >({});
   const [monthlyTotal, setMonthlyTotal] = useState<string | null>(null);
   const [monthlySaving, setMonthlySaving] = useState(false);
@@ -99,16 +133,32 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
         const result = await getMonthlyAllocations(project.id);
         if (!cancelled && result.success && result.data) {
           const data = result.data as {
-            allocations: { month: number; year: number; amount: { toString: () => string } | null }[];
+            allocations: {
+              month: number;
+              year: number;
+              amount: { toString: () => string } | null;
+              unavailable?: boolean;
+              unavailableReason?: string;
+            }[];
             total: { toString: () => string } | null;
           };
           const map: Record<string, string> = {};
+          const unavailableMap: Record<string, { reason: string }> = {};
           for (const a of data.allocations) {
             const key = `${a.year}-${String(a.month).padStart(2, "0")}`;
-            map[key] = a.amount != null ? Number(a.amount.toString()).toFixed(2) : "";
+            if (a.unavailable) {
+              unavailableMap[key] = {
+                reason: a.unavailableReason ?? "Unavailable for editing",
+              };
+            } else {
+              map[key] = decimalToInputString(a.amount);
+            }
           }
           setMonthlyAllocations(map);
-          setMonthlyTotal(data.total != null ? Number(data.total.toString()).toFixed(2) : null);
+          setMonthlyUnavailable(unavailableMap);
+          setMonthlyTotal(
+            data.total != null ? decimalToInputString(data.total) : null
+          );
         }
       } finally {
         if (!cancelled) setMonthlyLoading(false);
@@ -142,16 +192,32 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
       const result = await getMonthlyAllocations(project.id);
       if (result.success && result.data) {
         const data = result.data as {
-          allocations: { month: number; year: number; amount: { toString: () => string } | null }[];
+          allocations: {
+            month: number;
+            year: number;
+            amount: { toString: () => string } | null;
+            unavailable?: boolean;
+            unavailableReason?: string;
+          }[];
           total: { toString: () => string } | null;
         };
         const map: Record<string, string> = {};
+        const unavailableMap: Record<string, { reason: string }> = {};
         for (const a of data.allocations) {
           const key = `${a.year}-${String(a.month).padStart(2, "0")}`;
-          map[key] = a.amount != null ? Number(a.amount.toString()).toFixed(2) : "";
+          if (a.unavailable) {
+            unavailableMap[key] = {
+              reason: a.unavailableReason ?? "Unavailable for editing",
+            };
+          } else {
+            map[key] = decimalToInputString(a.amount);
+          }
         }
         setMonthlyAllocations(map);
-        setMonthlyTotal(data.total != null ? Number(data.total.toString()).toFixed(2) : null);
+        setMonthlyUnavailable(unavailableMap);
+        setMonthlyTotal(
+          data.total != null ? decimalToInputString(data.total) : null
+        );
       }
     } finally {
       setMonthlyLoading(false);
@@ -431,32 +497,51 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                 {/* Input row */}
                 {MONTHLY_ALLOCATION_WINDOW.map(({ year, month }) => {
                   const key = `${year}-${String(month).padStart(2, "0")}`;
+                  const isUnavailable = monthlyUnavailable[key] != null;
                   return (
                     <input
                       key={`i-${year}-${month}`}
-                      type="number"
-                      step="0.01"
-                      disabled={monthlySaving}
-                      className="h-8 rounded border border-zinc-200 px-1 text-right font-mono focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
-                      value={monthlyAllocations[key] ?? ""}
-                      onChange={(e) => {
-                        setMonthlyAllocations((prev) => ({
-                          ...prev,
-                          [key]: e.target.value,
-                        }));
-                      }}
-                      onBlur={(e) => {
-                        saveMonthlyAllocation(month, year, e.target.value);
-                      }}
+                      type="text"
+                      inputMode="decimal"
+                      disabled={monthlySaving || isUnavailable}
+                      className={
+                        isUnavailable
+                          ? "h-8 cursor-not-allowed rounded border border-zinc-200 bg-zinc-100 px-1 text-center text-zinc-400"
+                          : "h-8 rounded border border-zinc-200 px-1 text-right font-mono focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
+                      }
+                      value={
+                        isUnavailable
+                          ? "—"
+                          : (monthlyAllocations[key] ?? "")
+                      }
+                      title={
+                        isUnavailable
+                          ? monthlyUnavailable[key].reason
+                          : undefined
+                      }
+                      onChange={
+                        isUnavailable
+                          ? undefined
+                          : (e) => {
+                              setMonthlyAllocations((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }));
+                            }
+                      }
+                      onBlur={
+                        isUnavailable
+                          ? undefined
+                          : (e) => {
+                              saveMonthlyAllocation(month, year, e.target.value);
+                            }
+                      }
                     />
                   );
                 })}
                 <div className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700">
                   {monthlyTotal != null
-                    ? `₹${Number(monthlyTotal).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}`
+                    ? formatDecimalAsCurrency(monthlyTotal)
                     : "—"}
                 </div>
               </div>
