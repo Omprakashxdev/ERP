@@ -97,16 +97,20 @@ function dZero(v: Decimal | null | undefined): Decimal {
   return new Decimal(v.toString());
 }
 
-async function fetchProvenanceSet(recordIds: string[]): Promise<Set<string>> {
+async function fetchProvenanceSet(
+  recordIds: string[],
+  entity: string = "FundFlowMonthly",
+  source: string = "ff-01k-workbook-allocation"
+): Promise<Set<string>> {
   if (recordIds.length === 0) return new Set();
   const entries = await prisma.auditLog.findMany({
     where: {
-      entity: "FundFlowMonthly",
+      entity,
       entityId: { in: recordIds },
       action: "create",
       metadata: {
         path: ["source"],
-        equals: "ff-01k-workbook-allocation",
+        equals: source,
       },
     },
     select: { entityId: true },
@@ -373,5 +377,216 @@ export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyInc
     );
 
     return summary;
+  });
+}
+
+// ─── Worksheet-Level Monthly Expenses (FF-01M: Excel Row 14) ────
+// One company-level expense amount per month (Excel V–AS).
+// Manually entered values only — never derived from project staffing
+// columns I–N, staffExp or miscExp. Units are workbook-native and neutral.
+
+export interface MonthlyExpense {
+  month: number;
+  year: number;
+  amount: Decimal | null;
+  /** ISO timestamp of the stored record — optimistic concurrency token */
+  updatedAt: string | null;
+  /** true if a record exists but lacks FF-01M create provenance */
+  unavailable?: boolean;
+  unavailableReason?: string;
+}
+
+export interface MonthlyExpenseResult {
+  expenses: MonthlyExpense[];
+  /** Decimal sum of entered amounts only (Excel AU14 SUM parity) */
+  total: Decimal | null;
+}
+
+const expenseSchema = z.object({
+  month: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2100),
+  amount: z.string().nullable(),
+  /**
+   * Optimistic concurrency token: the updatedAt ISO string of the record
+   * as last read by the client. When a record exists, an update is only
+   * applied if the stored updatedAt still matches — two users editing
+   * the same month cannot silently overwrite each other.
+   */
+  expectedUpdatedAt: z.string().optional(),
+});
+
+// ─── Read ───────────────────────────────────────────────────────
+
+export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const records = await prisma.fundFlowMonthlyExpense.findMany();
+
+    const recordIds = records.map((r) => r.id);
+    const provenanceSet = await fetchProvenanceSet(
+      recordIds,
+      "FundFlowMonthlyExpense",
+      "ff-01m-workbook-expense"
+    );
+
+    const expenseMap = new Map<string, MonthlyExpense>();
+    for (const r of records) {
+      const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
+
+      if (!provenanceSet.has(r.id)) {
+        expenseMap.set(key, {
+          month: r.month,
+          year: r.year,
+          amount: null,
+          updatedAt: null,
+          unavailable: true,
+          unavailableReason:
+            "Record without audit provenance — unavailable for editing",
+        });
+        continue;
+      }
+
+      expenseMap.set(key, {
+        month: r.month,
+        year: r.year,
+        amount: new Decimal(r.amount.toString()),
+        updatedAt: r.updatedAt.toISOString(),
+      });
+    }
+
+    const expenses: MonthlyExpense[] = MONTHLY_ALLOCATION_WINDOW.map(
+      ({ year, month }) => {
+        const key = `${year}-${String(month).padStart(2, "0")}`;
+        return (
+          expenseMap.get(key) ?? {
+            month,
+            year,
+            amount: null,
+            updatedAt: null,
+          }
+        );
+      }
+    );
+
+    const total = expenses.reduce<Decimal | null>((acc, e) => {
+      if (e.amount == null) return acc;
+      return acc ? acc.plus(e.amount) : new Decimal(e.amount.toString());
+    }, null);
+
+    return { expenses, total };
+  });
+}
+
+// ─── Write ──────────────────────────────────────────────────────
+
+export async function upsertMonthlyExpense(
+  input: unknown
+): Promise<ActionResult<{ id: string }>> {
+  return withPermission("fundFlow", "update", async (user) => {
+    const parsed = expenseSchema.parse(input);
+    await checkRateLimit(user.id);
+
+    // Reject out-of-window writes (Excel V–AS only; AT is outside the window)
+    const reqKey = `${parsed.year}-${parsed.month}`;
+    if (!windowKeySet.has(reqKey)) {
+      throw new Error(
+        `Month ${parsed.month}/${parsed.year} is outside the supported 24-month allocation window.`
+      );
+    }
+
+    const existing = await prisma.fundFlowMonthlyExpense.findUnique({
+      where: {
+        month_year: { month: parsed.month, year: parsed.year },
+      },
+    });
+
+    // Blank input is a no-op: never delete or overwrite existing data.
+    if (parsed.amount == null || parsed.amount.trim() === "") {
+      return { id: existing?.id ?? "" };
+    }
+
+    let amountDecimal: Decimal;
+    try {
+      amountDecimal = new Decimal(parsed.amount);
+      if (!amountDecimal.isFinite()) throw new Error();
+    } catch {
+      throw new Error("Invalid monetary amount.");
+    }
+
+    if (existing) {
+      // Provenance: a record without an FF-01M create audit entry cannot be
+      // confirmed as a workbook expense entry — reject rather than overwrite.
+      const provenance = await fetchProvenanceSet(
+        [existing.id],
+        "FundFlowMonthlyExpense",
+        "ff-01m-workbook-expense"
+      );
+      if (!provenance.has(existing.id)) {
+        throw new Error(
+          "Cannot update existing FundFlowMonthlyExpense record: audit provenance missing — the record's meaning is ambiguous."
+        );
+      }
+
+      // Optimistic concurrency: the record must not have changed since the
+      // client last read it. A missing or stale token means another user
+      // already wrote to this month — reject instead of silently overwriting.
+      if (!parsed.expectedUpdatedAt) {
+        throw new Error(
+          "Concurrent update detected: the monthly expense record was created or modified after it was read — reload and retry."
+        );
+      }
+      const expected = new Date(parsed.expectedUpdatedAt);
+      const res = await prisma.fundFlowMonthlyExpense.updateMany({
+        where: { id: existing.id, updatedAt: expected },
+        data: { amount: amountDecimal },
+      });
+      if (res.count === 0) {
+        throw new Error(
+          "Concurrent update detected: the monthly expense record was modified by another user — reload and retry."
+        );
+      }
+
+      await audit(user.id, "update", "FundFlowMonthlyExpense", existing.id, {
+        source: "ff-01m-workbook-expense",
+        input: await sanitizeForAudit({
+          month: parsed.month,
+          year: parsed.year,
+          amount: parsed.amount,
+        }),
+      });
+
+      return { id: existing.id };
+    }
+
+    // Create path: the @@unique([month, year]) constraint makes concurrent
+    // creates atomic — a duplicate-key error means another user won the race.
+    let record: { id: string };
+    try {
+      record = await prisma.fundFlowMonthlyExpense.create({
+        data: {
+          month: parsed.month,
+          year: parsed.year,
+          amount: amountDecimal,
+        },
+      });
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === "P2002") {
+        throw new Error(
+          "Concurrent update detected: a monthly expense record was created by another user — reload and retry."
+        );
+      }
+      throw e;
+    }
+
+    await audit(user.id, "create", "FundFlowMonthlyExpense", record.id, {
+      source: "ff-01m-workbook-expense",
+      input: await sanitizeForAudit({
+        month: parsed.month,
+        year: parsed.year,
+        amount: parsed.amount,
+      }),
+    });
+
+    return { id: record.id };
   });
 }

@@ -1225,6 +1225,20 @@ model FundFlowMonthly {
   @@index([fundFlowId])
 }
 
+// Worksheet-level monthly expense plan (Excel Fund Flow Row 14).
+// One amount per month across the whole workbook — NOT project-scoped.
+// Row absence = blank/unentered month; amount = 0 = explicitly entered zero.
+model FundFlowMonthlyExpense {
+  id        String   @id @default(cuid())
+  month     Int      // 1-12
+  year      Int
+  amount    Decimal  @db.Decimal(19, 2) @default("0.00")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, year])
+}
+
 // ─── Employee Attendance (TADA linkage) ───────────────────────
 
 model Attendance {
