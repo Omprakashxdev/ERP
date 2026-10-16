@@ -54,10 +54,10 @@ describe("Fund Flow Monthly Cashflow Report (FF-01I)", () => {
     const octRow = result.rows.find((r: any) => r.Month === "2019-10");
 
     expect(marRow!["Actual invoiced"]).toBe(118000);
-    expect(marRow!["Actual settled"]).toBe("Unavailable"); // settlement was in May
+    expect(marRow!["Recorded settlement"]).toBe("Unavailable"); // settlement was in May
     expect(mayRow!["Actual invoiced"]).toBe(53100); // second bill invoiced in May
-    expect(mayRow!["Actual settled"]).toBe(118000); // first bill settled in May
-    expect(octRow!["Actual settled"]).toBe(53100);
+    expect(mayRow!["Recorded settlement"]).toBe(118000); // first bill settled in May
+    expect(octRow!["Recorded settlement"]).toBe(53100);
 
     // Legacy figures should land in work-order month (2019-01)
     const janRow = result.rows.find((r: any) => r.Month === "2019-01");
@@ -80,7 +80,7 @@ describe("Fund Flow Monthly Cashflow Report (FF-01I)", () => {
     const row = result.rows.find((r: any) => r.Month === "2020-06");
 
     expect(row!["Actual invoiced"]).toBe("Unavailable");
-    expect(row!["Actual settled"]).toBe("Unavailable");
+    expect(row!["Recorded settlement"]).toBe("Unavailable");
     expect(row!["Legacy fee received (unverified)"]).toBe(50000);
     expect(row!["Data quality note"]).toContain("Legacy only");
     expect(row!["Data quality note"]).toContain("work-order date");
@@ -112,15 +112,15 @@ describe("Fund Flow Monthly Cashflow Report (FF-01I)", () => {
     const febRow = result.rows.find((r: any) => r.Month === "2024-02");
 
     expect(janRow!["Actual invoiced"]).toBe(118000);
-    expect(janRow!["Actual settled"]).toBe("Unavailable");
+    expect(janRow!["Recorded settlement"]).toBe("Unavailable");
     expect(janRow!["Actual recorded cheque"]).toBe("Unavailable");
 
     expect(febRow!["Actual invoiced"]).toBe("Unavailable");
-    expect(febRow!["Actual settled"]).toBe(68000);
+    expect(febRow!["Recorded settlement"]).toBe(68000);
     expect(febRow!["Actual recorded cheque"]).toBe(50000);
   });
 
-  it("computes net from actuals, not legacy figures (T54)", async () => {
+  it("shows net cash flow as unavailable even when actuals exist (T54)", async () => {
     vi.mocked(prisma.dueBill.findMany).mockResolvedValueOnce([
       {
         billAmount: 100000,
@@ -142,8 +142,12 @@ describe("Fund Flow Monthly Cashflow Report (FF-01I)", () => {
     const result = await runReport("fundflow-monthly-cashflow");
     const row = result.rows.find((r: any) => r.Month === "2025-03");
 
-    // Net should be actuals: 100000 - 60000 = 40000
-    expect(row!["Net (actuals)"]).toBe(40000);
+    // Net cash flow must remain unavailable: invoiced is not cash inflow,
+    // settlement is recorded not verified, and no dated monthly expense source exists.
+    expect(row!["Net cash flow"]).toBe("Unavailable");
+    // Data quality note should explain why
+    expect(row!["Data quality note"]).toContain("Net cash flow unavailable");
+    expect(row!["Data quality note"]).toContain("invoiced is not cash inflow");
     // Legacy figures should still be present
     expect(row!["Legacy fee received (unverified)"]).toBe(200000);
   });
@@ -175,7 +179,7 @@ describe("Fund Flow Monthly Cashflow Report (FF-01I)", () => {
 
     const row = result.rows.find((r: any) => r.Month === "2025-04");
     expect(row!["Actual invoiced"]).toBe(30000);
-    expect(row!["Actual settled"]).toBe(30000);
+    expect(row!["Recorded settlement"]).toBe(30000);
     expect(row!["Legacy fee received (unverified)"]).toBe(50000);
   });
 });

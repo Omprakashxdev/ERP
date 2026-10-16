@@ -1582,11 +1582,11 @@ async function runFundFlowMonthlyCashflow(_params?: { dateFrom?: Date; dateTo?: 
     columns: [
       "Month",
       "Actual invoiced",
-      "Actual settled",
+      "Recorded settlement",
       "Actual recorded cheque",
       "Legacy fee received (unverified)",
       "Legacy SAEC expenses (project total)",
-      "Net (actuals)",
+      "Net cash flow",
       "Data quality note",
     ],
     rows: sortedKeys.map((month) => {
@@ -1597,15 +1597,20 @@ async function runFundFlowMonthlyCashflow(_params?: { dateFrom?: Date; dateTo?: 
       const legOut = legacyOutflow[month] ?? null;
 
       const hasActuals = inv != null || set != null || chq != null;
-      const net = hasActuals ? (inv ?? 0) - (set ?? 0) : null;
+
+      // Net cash flow cannot be reliably computed:
+      // - Invoiced is a receivable, not cash inflow
+      // - Recorded settlement is entered by users, not verified bank cash
+      // - No verified dated monthly SAEC expense source exists
+      const net: null = null;
 
       let note = "";
       if (hasActuals && legIn != null) {
-        note = "Actuals available; legacy figures shown for comparison only.";
+        note = "Actuals available; legacy figures shown for comparison only. Net cash flow unavailable — invoiced is not cash inflow, settlement is recorded not verified, and no dated monthly expense source exists.";
       } else if (hasActuals) {
-        note = "Actuals available.";
+        note = "Actuals available. Net cash flow unavailable — invoiced is not cash inflow, settlement is recorded not verified, and no dated monthly expense source exists.";
       } else if (legIn != null) {
-        note = "Legacy only — grouped by project work-order date; not actual cash-flow timing.";
+        note = "Legacy only — grouped by project work-order date; not actual cash-flow timing. Net cash flow unavailable.";
       } else {
         note = "No data.";
       }
@@ -1613,11 +1618,11 @@ async function runFundFlowMonthlyCashflow(_params?: { dateFrom?: Date; dateTo?: 
       return {
         Month: month,
         "Actual invoiced": inv ?? "Unavailable",
-        "Actual settled": set ?? "Unavailable",
+        "Recorded settlement": set ?? "Unavailable",
         "Actual recorded cheque": chq ?? "Unavailable",
         "Legacy fee received (unverified)": legIn ?? "Unavailable",
         "Legacy SAEC expenses (project total)": legOut ?? "Unavailable",
-        "Net (actuals)": net ?? "Unavailable",
+        "Net cash flow": "Unavailable",
         "Data quality note": note,
       };
     }),
