@@ -10,6 +10,7 @@ interface InOutRegisterTabsProps {
     all: number;
     inward: number;
     outward: number;
+    unclassified: number;
     pending: number;
   };
 }
@@ -20,18 +21,20 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
   const direction = searchParams.get("direction");
   const hasDeadline = searchParams.get("hasDeadline");
 
-  let activeTab: "all" | "inward" | "outward" | "pending" = "all";
+  let activeTab: "all" | "inward" | "outward" | "unclassified" | "pending" = "all";
   if (direction === "INWARD" && hasDeadline === "true") {
     activeTab = "pending";
   } else if (direction === "INWARD") {
     activeTab = "inward";
   } else if (direction === "OUTWARD") {
     activeTab = "outward";
+  } else if (direction === "null") {
+    activeTab = "unclassified";
   } else {
     activeTab = "all";
   }
 
-  function createTabUrl(tab: "all" | "inward" | "outward" | "pending") {
+  function createTabUrl(tab: "all" | "inward" | "outward" | "unclassified" | "pending") {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
 
@@ -43,6 +46,9 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
       params.delete("hasDeadline");
     } else if (tab === "outward") {
       params.set("direction", "OUTWARD");
+      params.delete("hasDeadline");
+    } else if (tab === "unclassified") {
+      params.set("direction", "null");
       params.delete("hasDeadline");
     } else if (tab === "pending") {
       params.set("direction", "INWARD");
@@ -74,6 +80,13 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
       icon: Send,
       count: counts.outward,
       countVariant: "outward",
+    },
+    {
+      key: "unclassified" as const,
+      label: "Unclassified",
+      icon: AlertCircle,
+      count: counts.unclassified,
+      countVariant: "unclassified",
     },
     {
       key: "pending" as const,
@@ -108,6 +121,8 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
                   ? "text-zinc-100"
                   : tab.key === "pending" && counts.pending > 0
                   ? "text-amber-600 group-hover:text-amber-700"
+                  : tab.key === "unclassified" && counts.unclassified > 0
+                  ? "text-orange-600 group-hover:text-orange-700"
                   : "text-zinc-400 group-hover:text-zinc-600"
               )}
             />
@@ -123,6 +138,8 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
                   ? "bg-blue-50 text-blue-700"
                   : tab.key === "inward"
                   ? "bg-emerald-50 text-emerald-700"
+                  : tab.key === "unclassified"
+                  ? "bg-orange-50 text-orange-700"
                   : "bg-zinc-100 text-zinc-600"
               )}
             >

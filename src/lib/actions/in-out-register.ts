@@ -29,11 +29,11 @@ import {
 function computeInOutRegisterFlags(entry: {
   receivedDate: Date;
   replyDueDate?: Date | null;
-  direction?: string;
+  direction?: string | null;
   replies?: unknown[];
 }) {
   const hasReply = Boolean(entry.replies && entry.replies.length > 0);
-  const isPending = Boolean(entry.direction !== "OUTWARD" && entry.replyDueDate && !hasReply);
+  const isPending = Boolean(entry.direction === "INWARD" && entry.replyDueDate && !hasReply);
   const nowStr = getTodayISTDateString();
   const dueDateStr = entry.replyDueDate ? toInputDateIST(entry.replyDueDate) : null;
 

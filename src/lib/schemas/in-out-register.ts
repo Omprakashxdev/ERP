@@ -69,7 +69,7 @@ export const inOutRegisterUpdateSchema = inOutRegisterBaseFields
 
 export const inOutRegisterFilterSchema = z.object({
   search: z.string().optional(),
-  direction: z.enum(["INWARD", "OUTWARD"]).optional(),
+  direction: z.enum(["INWARD", "OUTWARD", "null"]).optional(),
   clientId: z.string().cuid().optional(),
   actionSuggestedStaffId: z.string().cuid().optional(),
   ccStaffId: z.string().cuid().optional(),

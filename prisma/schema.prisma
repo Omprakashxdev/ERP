@@ -543,7 +543,7 @@ enum InOutDirection {
 
 model InOutRegister {
   id                     String                  @id @default(cuid())
-  direction              InOutDirection          @default(INWARD)
+  direction              InOutDirection?         @default(INWARD)
   documentDate           DateTime
   receivedDate           DateTime
   documentRefNo          String
@@ -554,6 +554,8 @@ model InOutRegister {
   receivedByPersonName   String?
   department             String?
   replyDueDate           DateTime?
+  replyDate              DateTime?
+  replyRefNo             String?                 @unique
   parentInwardId         String?
 
   createdAt              DateTime                @default(now())
@@ -573,6 +575,7 @@ model InOutRegister {
   @@index([actionSuggestedStaffId])
   @@index([department])
   @@index([replyDueDate])
+  @@index([replyDate])
   @@index([parentInwardId])
 }
 

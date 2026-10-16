@@ -17,7 +17,7 @@ import { ModuleHeader } from "@/components/module-header";
 interface InOutRegisterPageProps {
   searchParams: Promise<{
     search?: string;
-    direction?: "INWARD" | "OUTWARD";
+    direction?: "INWARD" | "OUTWARD" | "null";
     clientId?: string;
     department?: string;
     actionSuggestedStaffId?: string;
@@ -69,6 +69,7 @@ export default async function InOutRegisterPage({
     allCount,
     inwardCount,
     outwardCount,
+    unclassifiedCount,
     pendingCount,
   ] = await Promise.all([
     getInOutRegisters(filter, page, pageSize),
@@ -88,6 +89,7 @@ export default async function InOutRegisterPage({
     prisma.inOutRegister.count(),
     prisma.inOutRegister.count({ where: { direction: "INWARD" } }),
     prisma.inOutRegister.count({ where: { direction: "OUTWARD" } }),
+    prisma.inOutRegister.count({ where: { direction: null } }),
     prisma.inOutRegister.count({
       where: {
         direction: "INWARD",
@@ -123,6 +125,7 @@ export default async function InOutRegisterPage({
           all: allCount,
           inward: inwardCount,
           outward: outwardCount,
+          unclassified: unclassifiedCount,
           pending: pendingCount,
         }}
       />

@@ -23,7 +23,13 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     });
   }
 
-  if (filter?.direction) and.push({ direction: filter.direction });
+  if (filter?.direction) {
+    if (filter.direction === "null") {
+      and.push({ direction: null });
+    } else {
+      and.push({ direction: filter.direction });
+    }
+  }
   if (filter?.clientId) and.push({ clientId: filter.clientId });
   if (filter?.department) {
     and.push({ department: { contains: filter.department, mode: "insensitive" } });

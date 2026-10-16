@@ -682,7 +682,7 @@ async function runInOutGeneral(params?: ReportFilterParams) {
   return {
     columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Department", "Details", "Reply Due Date", "Action Staff", "Age (days)"],
     rows: rows.map((r) => ({
-      Direction: r.direction === "OUTWARD" ? "Outward" : "Inward",
+      Direction: r.direction === "OUTWARD" ? "Outward" : r.direction === "INWARD" ? "Inward" : "Unclassified",
       "Doc Date": r.documentDate,
       "Received/Sent Date": r.receivedDate,
       "Doc Ref No": r.documentRefNo,

@@ -233,8 +233,21 @@ export function InOutRegisterTable({
                     </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Badge variant="outline" className={row.direction === "OUTWARD" ? "text-blue-700 border-blue-200 bg-blue-50/50" : "text-zinc-700 border-zinc-200"}>
-                      {row.direction === "OUTWARD" ? "Outward" : "Inward"}
+                    <Badge
+                      variant="outline"
+                      className={
+                        row.direction === "OUTWARD"
+                          ? "text-blue-700 border-blue-200 bg-blue-50/50"
+                          : row.direction === "INWARD"
+                          ? "text-zinc-700 border-zinc-200"
+                          : "text-orange-700 border-orange-200 bg-orange-50/50"
+                      }
+                    >
+                      {row.direction === "OUTWARD"
+                        ? "Outward"
+                        : row.direction === "INWARD"
+                        ? "Inward"
+                        : "Unclassified"}
                     </Badge>
                   </TableCell>
                   <TableCell className="whitespace-nowrap font-medium text-zinc-800">
