@@ -55,22 +55,22 @@ function computeStatus(
   return DueBillStatus.PENDING;
 }
 
-async function syncFundFlowFeeReceived(projectId: string): Promise<void> {
+export async function syncFundFlowFeeReceived(projectId: string): Promise<void> {
   const result = await prisma.dueBill.aggregate({
-    where: { projectId },
-    _sum: { receivedAmount: true },
+    where: { projectId, status: { notIn: [DueBillStatus.CANCELLED] } },
+    _sum: { chequeAmount: true },
   });
 
-  const totalReceived = result._sum.receivedAmount ?? new Decimal("0");
+  const totalCheque = result._sum.chequeAmount ?? new Decimal("0");
 
   await prisma.fundFlow.update({
     where: { projectId },
-    data: { feeReceived: totalReceived },
+    data: { feeReceived: totalCheque },
   }).catch(() => {
     return prisma.fundFlow.create({
       data: {
         projectId,
-        feeReceived: totalReceived,
+        feeReceived: totalCheque,
       },
     });
   });
@@ -116,7 +116,7 @@ export async function createDueBill(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
-    // Sync FundFlow.feeReceived with sum of DueBill.receivedAmount for this project
+    // Sync FundFlow.feeReceived with sum of DueBill.chequeAmount for active (non-cancelled) bills
     await syncFundFlowFeeReceived(parsed.projectId);
 
     revalidatePath("/dashboard/due-bills");
@@ -169,7 +169,7 @@ export async function updateDueBill(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
-    // Sync FundFlow.feeReceived with sum of DueBill.receivedAmount for this project
+    // Sync FundFlow.feeReceived with sum of DueBill.chequeAmount for active (non-cancelled) bills
     await syncFundFlowFeeReceived(dueBill.projectId);
 
     revalidatePath("/dashboard/due-bills");
