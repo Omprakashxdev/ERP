@@ -55,25 +55,12 @@ function computeStatus(
   return DueBillStatus.PENDING;
 }
 
-export async function syncFundFlowFeeReceived(projectId: string): Promise<void> {
-  const result = await prisma.dueBill.aggregate({
-    where: { projectId, status: { notIn: [DueBillStatus.CANCELLED] } },
-    _sum: { chequeAmount: true },
-  });
-
-  const totalCheque = result._sum.chequeAmount ?? new Decimal("0");
-
-  await prisma.fundFlow.update({
-    where: { projectId },
-    data: { feeReceived: totalCheque },
-  }).catch(() => {
-    return prisma.fundFlow.create({
-      data: {
-        projectId,
-        feeReceived: totalCheque,
-      },
-    });
-  });
+// FF-01C: Automatic sync to FundFlow.feeReceived disabled.
+// chequeAmount is recorded cheque value, not verified cash.
+// Historical FundFlow.feeReceived values are preserved.
+// Use FF-01A/FF-01B reconciliation for read-only cheque and settlement totals.
+export async function syncFundFlowFeeReceived(_projectId: string): Promise<void> {
+  // no-op — unverified automatic writes to feeReceived are unsafe
 }
 
 export async function createDueBill(
@@ -115,9 +102,6 @@ export async function createDueBill(
     await audit(user.id, "create", "DueBill", dueBill.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
-
-    // Sync FundFlow.feeReceived with sum of DueBill.chequeAmount for active (non-cancelled) bills
-    await syncFundFlowFeeReceived(parsed.projectId);
 
     revalidatePath("/dashboard/due-bills");
     revalidatePath("/dashboard/fund-flow");
@@ -169,9 +153,6 @@ export async function updateDueBill(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
-    // Sync FundFlow.feeReceived with sum of DueBill.chequeAmount for active (non-cancelled) bills
-    await syncFundFlowFeeReceived(dueBill.projectId);
-
     revalidatePath("/dashboard/due-bills");
     revalidatePath("/dashboard/fund-flow");
     return { id: dueBill.id };
@@ -187,9 +168,6 @@ export async function deleteDueBill(
     const dueBill = await prisma.dueBill.delete({ where: { id } });
 
     await audit(user.id, "delete", "DueBill", dueBill.id, {});
-
-    // Sync FundFlow after deletion
-    await syncFundFlowFeeReceived(dueBill.projectId);
 
     revalidatePath("/dashboard/due-bills");
     revalidatePath("/dashboard/fund-flow");

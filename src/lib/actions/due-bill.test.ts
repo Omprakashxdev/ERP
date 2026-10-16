@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Decimal } from "@prisma/client/runtime/library";
-import { DueBillStatus } from "@prisma/client";
 import {
   createDueBill,
   updateDueBill,
@@ -56,65 +55,12 @@ describe("syncFundFlowFeeReceived", () => {
     vi.resetAllMocks();
   });
 
-  it("syncs sum of chequeAmount for non-cancelled bills (T30)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("75000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
-
+  it("is a no-op and does not query or write FundFlow (T30)", async () => {
     await syncFundFlowFeeReceived("c1234567890123456789012345");
 
-    expect(prisma.dueBill.aggregate).toHaveBeenCalledWith({
-      where: { projectId: "c1234567890123456789012345", status: { notIn: [DueBillStatus.CANCELLED] } },
-      _sum: { chequeAmount: true },
-    });
-    expect(prisma.fundFlow.update).toHaveBeenCalledWith({
-      where: { projectId: "c1234567890123456789012345" },
-      data: { feeReceived: dec("75000") },
-    });
-  });
-
-  it("excludes cancelled bills from the aggregate (T31)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("50000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
-
-    await syncFundFlowFeeReceived("c1234567890123456789012345");
-
-    const aggregateCall = vi.mocked(prisma.dueBill.aggregate).mock.calls[0][0];
-    expect(aggregateCall.where).toMatchObject({
-      projectId: "c1234567890123456789012345",
-      status: { notIn: [DueBillStatus.CANCELLED] },
-    });
-  });
-
-  it("creates FundFlow record when update fails (T32)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("30000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockRejectedValue(new Error("Not found"));
-    vi.mocked(prisma.fundFlow.create).mockResolvedValue({ id: "ff-new" } as any);
-
-    await syncFundFlowFeeReceived("c1234567890123456789012345");
-
-    expect(prisma.fundFlow.create).toHaveBeenCalledWith({
-      data: { projectId: "c1234567890123456789012345", feeReceived: dec("30000") },
-    });
-  });
-
-  it("writes zero when no active bills exist (T33)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: null },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
-
-    await syncFundFlowFeeReceived("c1234567890123456789012345");
-
-    expect(prisma.fundFlow.update).toHaveBeenCalledWith({
-      where: { projectId: "c1234567890123456789012345" },
-      data: { feeReceived: dec("0") },
-    });
+    expect(prisma.dueBill.aggregate).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.update).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.create).not.toHaveBeenCalled();
   });
 });
 
@@ -124,15 +70,11 @@ describe("createDueBill", () => {
     mockWithPermission();
   });
 
-  it("triggers feeReceived sync using chequeAmount after creation (T34)", async () => {
+  it("creates a DueBill but does not overwrite FundFlow.feeReceived (T31)", async () => {
     vi.mocked(prisma.dueBill.create).mockResolvedValue({
       id: "c1234567890123456789012346",
       projectId: "c1234567890123456789012345",
     } as any);
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("100000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
 
     await createDueBill({
       projectId: "c1234567890123456789012345",
@@ -150,17 +92,8 @@ describe("createDueBill", () => {
     } as any);
 
     expect(prisma.dueBill.create).toHaveBeenCalled();
-    expect(prisma.dueBill.aggregate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ status: { notIn: [DueBillStatus.CANCELLED] } }),
-        _sum: { chequeAmount: true },
-      })
-    );
-    expect(prisma.fundFlow.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: { feeReceived: dec("100000") },
-      })
-    );
+    expect(prisma.fundFlow.update).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.create).not.toHaveBeenCalled();
   });
 });
 
@@ -170,7 +103,7 @@ describe("updateDueBill", () => {
     mockWithPermission();
   });
 
-  it("triggers feeReceived sync using chequeAmount after update (T35)", async () => {
+  it("updates a DueBill but does not overwrite FundFlow.feeReceived (T32)", async () => {
     vi.mocked(prisma.dueBill.findUnique).mockResolvedValue({
       id: "c1234567890123456789012346",
       projectId: "c1234567890123456789012345",
@@ -193,11 +126,6 @@ describe("updateDueBill", () => {
       projectId: "c1234567890123456789012345",
     } as any);
 
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("120000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
-
     await updateDueBill({
       id: "c1234567890123456789012346",
       grossAmount: "100000",
@@ -213,12 +141,8 @@ describe("updateDueBill", () => {
     } as any);
 
     expect(prisma.dueBill.update).toHaveBeenCalled();
-    expect(prisma.dueBill.aggregate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ status: { notIn: [DueBillStatus.CANCELLED] } }),
-        _sum: { chequeAmount: true },
-      })
-    );
+    expect(prisma.fundFlow.update).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.create).not.toHaveBeenCalled();
   });
 });
 
@@ -228,43 +152,17 @@ describe("deleteDueBill", () => {
     mockWithPermission();
   });
 
-  it("triggers feeReceived sync after deletion (T36)", async () => {
+  it("deletes a DueBill but does not overwrite FundFlow.feeReceived (T33)", async () => {
     vi.mocked(prisma.dueBill.delete).mockResolvedValue({
       id: "c1234567890123456789012346",
       projectId: "c1234567890123456789012345",
     } as any);
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("0") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
 
     await deleteDueBill("c1234567890123456789012346");
 
     expect(prisma.dueBill.delete).toHaveBeenCalledWith({ where: { id: "c1234567890123456789012346" } });
-    expect(prisma.dueBill.aggregate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ status: { notIn: [DueBillStatus.CANCELLED] } }),
-        _sum: { chequeAmount: true },
-      })
-    );
-  });
-});
-
-describe("settlement vs cheque amount separation", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it("does not include sd or itTds in feeReceived sync (T37)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("50000") },
-    } as any);
-    vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
-
-    await syncFundFlowFeeReceived("c1234567890123456789012345");
-
-    const updateCall = vi.mocked(prisma.fundFlow.update).mock.calls[0][0];
-    expect(updateCall!.data!.feeReceived!.toString()).toBe("50000");
+    expect(prisma.fundFlow.update).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.create).not.toHaveBeenCalled();
   });
 });
 
@@ -273,18 +171,13 @@ describe("preservation of existing financial records", () => {
     vi.resetAllMocks();
   });
 
-  it("only updates feeReceived in FundFlow, leaving other fields untouched (T38)", async () => {
-    vi.mocked(prisma.dueBill.aggregate).mockResolvedValue({
-      _sum: { chequeAmount: dec("60000") },
-    } as any);
+  it("leaves FundFlow untouched when syncFundFlowFeeReceived is invoked (T34)", async () => {
     vi.mocked(prisma.fundFlow.update).mockResolvedValue({ id: "ff-1" } as any);
+    vi.mocked(prisma.fundFlow.create).mockResolvedValue({ id: "ff-new" } as any);
 
     await syncFundFlowFeeReceived("c1234567890123456789012345");
 
-    const updateCall = vi.mocked(prisma.fundFlow.update).mock.calls[0][0];
-    expect(updateCall).toEqual({
-      where: { projectId: "c1234567890123456789012345" },
-      data: { feeReceived: dec("60000") },
-    });
+    expect(prisma.fundFlow.update).not.toHaveBeenCalled();
+    expect(prisma.fundFlow.create).not.toHaveBeenCalled();
   });
 });
