@@ -288,6 +288,12 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                     {formatMoney(detailData!.legacyFeeReceived)}
                   </p>
                 </div>
+                <div className="rounded-md bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Contractor RA-bill project expenses (WIP)</p>
+                  <p className="font-mono font-medium">
+                    {formatMoney(detailData!.wipRaBillProjectExpense)}
+                  </p>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-zinc-500">Reconciliation data unavailable.</p>

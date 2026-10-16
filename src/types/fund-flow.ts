@@ -44,6 +44,8 @@ export type FundFlowWithComputed = FundFlowListRow & {
   legacyFeeReceived?: Decimal | null;
   /** Explicit limitation note for recorded cheque totals. */
   recordedCashLabel?: string;
+  /** Sum of WIP RA-bill project expenses (contractor-side costs). Read-only; not mixed with SAEC miscExp/staffExp. */
+  wipRaBillProjectExpense?: Decimal | null;
 };
 
 export { ProjectStatus };

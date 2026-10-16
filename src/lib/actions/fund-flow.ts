@@ -205,6 +205,7 @@ export async function getFundFlowByProjectId(
       outstandingPerSettlement: reconciliation.invoiceSettlementTotals.outstandingTotal,
       legacyFeeReceived: fundFlow?.feeReceived ?? null,
       recordedCashLabel: reconciliation.recordedCash.explanation,
+      wipRaBillProjectExpense: reconciliation.wipComparison.totalProjectExpense,
     };
   });
 }

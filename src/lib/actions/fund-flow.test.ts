@@ -292,4 +292,68 @@ describe("getFundFlowByProjectId", () => {
     expect((data.totalRecordedCheque as Decimal).toString()).toBe("80000"); // 50000 + 30000
     expect((data.outstandingPerSettlement as Decimal).toString()).toBe("79000"); // 177000 - 98000
   });
+
+  it("exposes WIP RA-bill project expenses when WIP data exists (T45)", async () => {
+    vi.mocked(prisma.project.findUnique).mockResolvedValue({
+      id: "c1234567890123456789012345",
+      totalFee: dec("600000"),
+      estimatedCost: dec("500000"),
+      workOrderDate: new Date("2026-01-15"),
+      region: { id: "r1", name: "North" },
+      client: { id: "c1", name: "Client A" },
+      contractor: null,
+      assignments: [],
+      feeStages: [],
+      fundFlow: null,
+      dueBills: [],
+      wip: {
+        id: "wip-1",
+        amountOfWorkDone: dec("200000"),
+        finalProgressAmount: null,
+        raBill1Amount: dec("50000"),
+        raBill2Amount: dec("50000"),
+        raBill3Amount: dec("50000"),
+        raBill4Amount: dec("50000"),
+        raBill1SaecFee: dec("10000"),
+        raBill2SaecFee: dec("10000"),
+        raBill3SaecFee: dec("10000"),
+        raBill4SaecFee: dec("10000"),
+        raBill1ProjectExpense: dec("5000"),
+        raBill2ProjectExpense: dec("5000"),
+        raBill3ProjectExpense: dec("5000"),
+        raBill4ProjectExpense: dec("5000"),
+      },
+    } as any);
+
+    const result = await getFundFlowByProjectId("c1234567890123456789012345");
+    expect(result.success).toBe(true);
+
+    const data = result.data as Record<string, unknown>;
+    expect(data.reconciliationAvailable).toBe(true);
+    expect((data.wipRaBillProjectExpense as Decimal).toString()).toBe("20000"); // 5000 * 4
+  });
+
+  it("returns null WIP RA-bill project expenses when WIP is absent (T46)", async () => {
+    vi.mocked(prisma.project.findUnique).mockResolvedValue({
+      id: "c1234567890123456789012345",
+      totalFee: dec("600000"),
+      estimatedCost: dec("500000"),
+      workOrderDate: new Date("2026-01-15"),
+      region: { id: "r1", name: "North" },
+      client: { id: "c1", name: "Client A" },
+      contractor: null,
+      assignments: [],
+      feeStages: [],
+      fundFlow: null,
+      dueBills: [],
+      wip: null,
+    } as any);
+
+    const result = await getFundFlowByProjectId("c1234567890123456789012345");
+    expect(result.success).toBe(true);
+
+    const data = result.data as Record<string, unknown>;
+    expect(data.reconciliationAvailable).toBe(true);
+    expect(data.wipRaBillProjectExpense).toBeNull();
+  });
 });
