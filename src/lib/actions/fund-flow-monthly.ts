@@ -92,7 +92,11 @@ async function fetchProvenanceSet(recordIds: string[]): Promise<Set<string>> {
     where: {
       entity: "FundFlowMonthly",
       entityId: { in: recordIds },
-      action: { in: ["create", "update"] },
+      action: "create",
+      metadata: {
+        path: ["source"],
+        equals: "ff-01k-workbook-allocation",
+      },
     },
     select: { entityId: true },
   });
@@ -248,6 +252,7 @@ export async function upsertMonthlyAllocation(
       });
 
       await audit(user.id, "update", "FundFlowMonthly", existing.id, {
+        source: "ff-01k-workbook-allocation",
         input: await sanitizeForAudit({
           projectId: parsed.projectId,
           month: parsed.month,
@@ -273,6 +278,7 @@ export async function upsertMonthlyAllocation(
     });
 
     await audit(user.id, "create", "FundFlowMonthly", record.id, {
+      source: "ff-01k-workbook-allocation",
       input: await sanitizeForAudit({
         projectId: parsed.projectId,
         month: parsed.month,
