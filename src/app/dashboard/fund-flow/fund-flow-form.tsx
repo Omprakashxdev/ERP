@@ -93,7 +93,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadMonthly() {
+    async function load() {
       setMonthlyLoading(true);
       try {
         const result = await getMonthlyAllocations(project.id);
@@ -114,7 +114,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
         if (!cancelled) setMonthlyLoading(false);
       }
     }
-    loadMonthly();
+    load();
     return () => {
       cancelled = true;
     };
@@ -136,44 +136,58 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  async function loadMonthlyAllocations() {
+    setMonthlyLoading(true);
+    try {
+      const result = await getMonthlyAllocations(project.id);
+      if (result.success && result.data) {
+        const data = result.data as {
+          allocations: { month: number; year: number; amount: { toString: () => string } | null }[];
+          total: { toString: () => string } | null;
+        };
+        const map: Record<string, string> = {};
+        for (const a of data.allocations) {
+          const key = `${a.year}-${String(a.month).padStart(2, "0")}`;
+          map[key] = a.amount != null ? Number(a.amount.toString()).toFixed(2) : "";
+        }
+        setMonthlyAllocations(map);
+        setMonthlyTotal(data.total != null ? Number(data.total.toString()).toFixed(2) : null);
+      }
+    } finally {
+      setMonthlyLoading(false);
+    }
+  }
+
   async function saveMonthlyAllocation(month: number, year: number, value: string) {
     const key = `${year}-${String(month).padStart(2, "0")}`;
     const trimmed = value.trim();
+
+    // Blank input is a no-op: do not delete or overwrite existing data.
+    if (trimmed === "") {
+      await loadMonthlyAllocations();
+      return;
+    }
+
     setMonthlySaving(true);
     try {
       const result = await upsertMonthlyAllocation({
         projectId: project.id,
         month,
         year,
-        amount: trimmed === "" ? null : trimmed,
+        amount: trimmed,
       });
       if (!result.success) {
         toast.error(result.error ?? "Failed to save monthly allocation.");
+        // Restore committed state
+        await loadMonthlyAllocations();
         return;
       }
-      // Recalculate local total
-      const num = trimmed === "" ? null : Number(trimmed);
-      setMonthlyAllocations((prev) => ({ ...prev, [key]: trimmed }));
-      setMonthlyTotal((prev) => {
-        if (num == null) {
-          // Need to recalc from all values
-          const sum = Object.entries(monthlyAllocations)
-            .filter(([k]) => k !== key)
-            .reduce((acc, [, v]) => acc + (v ? Number(v) : 0), 0);
-          return sum > 0 ? sum.toFixed(2) : null;
-        }
-        const currentSum = Object.entries(monthlyAllocations).reduce(
-          (acc, [, v]) => acc + (v ? Number(v) : 0),
-          0
-        );
-        const oldVal = monthlyAllocations[key] ? Number(monthlyAllocations[key]) : 0;
-        const newSum = currentSum - oldVal + num;
-        return newSum > 0 ? newSum.toFixed(2) : null;
-      });
       toast.success("Monthly allocation saved");
+      await loadMonthlyAllocations();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unexpected error.";
       toast.error(msg);
+      await loadMonthlyAllocations();
     } finally {
       setMonthlySaving(false);
     }

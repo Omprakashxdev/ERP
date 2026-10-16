@@ -15,7 +15,8 @@ vi.mock("../prisma", () => ({
     },
     fundFlowMonthly: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
     },
@@ -76,9 +77,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
         id: "ff-1",
         monthlyData: [
-          { id: "m1", month: 4, year: 2026, income: new Decimal("5000.00") },
-          { id: "m2", month: 5, year: 2026, income: new Decimal("3000.50") },
-          { id: "m3", month: 1, year: 2027, income: new Decimal("10000.00") },
+          { id: "m1", month: 4, year: 2026, income: new Decimal("5000.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+          { id: "m2", month: 5, year: 2026, income: new Decimal("3000.50"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+          { id: "m3", month: 1, year: 2027, income: new Decimal("10000.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
 
@@ -110,7 +111,7 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
         id: "ff-1",
         monthlyData: [
-          { id: "m1", month: 12, year: 2025, income: new Decimal("9999") },
+          { id: "m1", month: 12, year: 2025, income: new Decimal("9999"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
 
@@ -120,6 +121,31 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       // Dec 2025 is outside the window, so all 24 slots should be null
       expect(data.allocations.every((a: any) => a.amount === null)).toBe(true);
     });
+
+    it("ignores records with non-zero expense/net/cumulative to avoid reinterpretation (T70)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+        monthlyData: [
+          { id: "m-safe", month: 4, year: 2026, income: new Decimal("5000"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+          { id: "m-unsafe", month: 5, year: 2026, income: new Decimal("3000"), expense: new Decimal("100"), net: new Decimal("0"), cumulative: new Decimal("0") },
+          { id: "m-unsafe2", month: 6, year: 2026, income: new Decimal("2000"), expense: new Decimal("0"), net: new Decimal("50"), cumulative: new Decimal("0") },
+          { id: "m-unsafe3", month: 7, year: 2026, income: new Decimal("1000"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("75") },
+        ],
+      } as any);
+
+      const result = await getMonthlyAllocations("c1234567890123456789012345");
+      const data = result.data as { allocations: any[] };
+
+      const apr = data.allocations.find((a: any) => a.month === 4 && a.year === 2026);
+      const may = data.allocations.find((a: any) => a.month === 5 && a.year === 2026);
+      const jun = data.allocations.find((a: any) => a.month === 6 && a.year === 2026);
+      const jul = data.allocations.find((a: any) => a.month === 7 && a.year === 2026);
+
+      expect(apr!.amount!.toString()).toBe("5000");
+      expect(may!.amount).toBeNull(); // unsafe — ignored
+      expect(jun!.amount).toBeNull(); // unsafe — ignored
+      expect(jul!.amount).toBeNull(); // unsafe — ignored
+    });
   });
 
   describe("upsertMonthlyAllocation", () => {
@@ -128,7 +154,7 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
         id: "ff-1",
       } as any);
       vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce(null);
-      vi.mocked(prisma.fundFlowMonthly.upsert).mockResolvedValueOnce({
+      vi.mocked(prisma.fundFlowMonthly.create).mockResolvedValueOnce({
         id: "m-new",
       } as any);
 
@@ -140,9 +166,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthly.upsert).toHaveBeenCalledWith(
+      expect(prisma.fundFlowMonthly.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          create: expect.objectContaining({
+          data: expect.objectContaining({
             fundFlowId: "ff-1",
             month: 6,
             year: 2026,
@@ -151,19 +177,21 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
             net: expect.any(Decimal),
             cumulative: expect.any(Decimal),
           }),
-          update: { income: expect.any(Decimal) },
         })
       );
     });
 
-    it("deletes the record when amount is null (T66)", async () => {
+    it("is a no-op when amount is null — does not delete (T66)", async () => {
       vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
         id: "ff-1",
       } as any);
       vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce({
         id: "m-old",
+        income: new Decimal("5000"),
+        expense: new Decimal("0"),
+        net: new Decimal("0"),
+        cumulative: new Decimal("0"),
       } as any);
-      vi.mocked(prisma.fundFlowMonthly.delete).mockResolvedValueOnce({} as any);
 
       const result = await upsertMonthlyAllocation({
         projectId: "c1234567890123456789012345",
@@ -173,20 +201,22 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthly.delete).toHaveBeenCalledWith({
-        where: { id: "m-old" },
-      });
-      expect(prisma.fundFlowMonthly.upsert).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.delete).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.update).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.create).not.toHaveBeenCalled();
     });
 
-    it("deletes the record when amount is empty string (T67)", async () => {
+    it("is a no-op when amount is empty string — does not delete (T67)", async () => {
       vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
         id: "ff-1",
       } as any);
       vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce({
         id: "m-old",
+        income: new Decimal("5000"),
+        expense: new Decimal("0"),
+        net: new Decimal("0"),
+        cumulative: new Decimal("0"),
       } as any);
-      vi.mocked(prisma.fundFlowMonthly.delete).mockResolvedValueOnce({} as any);
 
       const result = await upsertMonthlyAllocation({
         projectId: "c1234567890123456789012345",
@@ -196,8 +226,9 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthly.delete).toHaveBeenCalled();
-      expect(prisma.fundFlowMonthly.upsert).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.delete).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.update).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.create).not.toHaveBeenCalled();
     });
 
     it("rejects when FundFlow does not exist (T68)", async () => {
@@ -219,7 +250,7 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
         id: "ff-1",
       } as any);
       vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce(null);
-      vi.mocked(prisma.fundFlowMonthly.upsert).mockResolvedValueOnce({
+      vi.mocked(prisma.fundFlowMonthly.create).mockResolvedValueOnce({
         id: "m-zero",
       } as any);
 
@@ -230,16 +261,16 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
         amount: "0.00",
       });
 
-      const upsertCalls = vi.mocked(prisma.fundFlowMonthly.upsert).mock.calls;
-      expect(upsertCalls.length).toBeGreaterThan(0);
-      const upsertCall = upsertCalls[0][0] as any;
-      expect(upsertCall.create.income.toString()).toBe("0");
+      const createCalls = vi.mocked(prisma.fundFlowMonthly.create).mock.calls;
+      expect(createCalls.length).toBeGreaterThan(0);
+      const createCall = createCalls[0][0] as any;
+      expect(createCall.data.income.toString()).toBe("0");
 
       // Then read it back — zero should appear as a real Decimal(0), not null
       vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
         id: "ff-1",
         monthlyData: [
-          { id: "m-zero", month: 6, year: 2026, income: new Decimal("0.00") },
+          { id: "m-zero", month: 6, year: 2026, income: new Decimal("0.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
         ],
       } as any);
 
@@ -250,6 +281,93 @@ describe("FundFlowMonthly allocations (FF-01K)", () => {
       );
       expect(jun2026.amount).not.toBeNull();
       expect(jun2026.amount.toString()).toBe("0");
+    });
+
+    it("rejects out-of-window month/year writes (T71)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+      } as any);
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 1,
+        year: 2025,
+        amount: "1000",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("outside the supported 24-month allocation window");
+    });
+
+    it("rejects invalid monetary amounts (T72)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+      } as any);
+      vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce(null);
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 6,
+        year: 2026,
+        amount: "not-a-number",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Invalid monetary amount");
+    });
+
+    it("rejects updates to records with non-zero expense/net/cumulative (T73)", async () => {
+      vi.mocked(prisma.fundFlow.findUnique).mockResolvedValueOnce({
+        id: "ff-1",
+      } as any);
+      vi.mocked(prisma.fundFlowMonthly.findUnique).mockResolvedValueOnce({
+        id: "m-old",
+        income: new Decimal("5000"),
+        expense: new Decimal("100"),
+        net: new Decimal("0"),
+        cumulative: new Decimal("0"),
+      } as any);
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 6,
+        year: 2026,
+        amount: "9999",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("non-zero expense/net/cumulative indicates it was created with a different meaning");
+      expect(prisma.fundFlowMonthly.update).not.toHaveBeenCalled();
+      expect(prisma.fundFlowMonthly.create).not.toHaveBeenCalled();
+    });
+
+    it("requires fundFlow update permission — rejects unauthorized (T74)", async () => {
+      vi.mocked(withPermission).mockImplementation(async () => {
+        return { success: false, error: "Forbidden" };
+      });
+
+      const result = await upsertMonthlyAllocation({
+        projectId: "c1234567890123456789012345",
+        month: 6,
+        year: 2026,
+        amount: "1000",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Forbidden");
+      expect(prisma.fundFlow.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("requires fundFlow read permission — rejects unauthorized reads (T75)", async () => {
+      vi.mocked(withPermission).mockImplementation(async () => {
+        return { success: false, error: "Forbidden" };
+      });
+
+      const result = await getMonthlyAllocations("c1234567890123456789012345");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Forbidden");
+      expect(prisma.fundFlow.findUnique).not.toHaveBeenCalled();
     });
   });
 });
