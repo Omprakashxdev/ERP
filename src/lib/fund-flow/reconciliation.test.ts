@@ -313,6 +313,22 @@ describe("reconcileProject", () => {
       expect(result.calculationIndicators.missingWip).toBe(true);
       expect(hasDiscrepancy(result, DiscrepancyCode.MISSING_WIP)).toBe(true);
     });
+
+    it("emits UNSUPPORTED_CALCULATION when contract value cannot be determined", () => {
+      const sources = createSources({
+        project: {
+          id: "proj-t07u",
+          estimatedCost: null,
+          totalFee: dec("600000"),
+        },
+        fundFlow: null,
+      });
+      const result = reconcileProject(sources);
+      expect(result.projectWorkTotals.contractValue).toBeNull();
+      expect(hasDiscrepancy(result, DiscrepancyCode.UNSUPPORTED_CALCULATION)).toBe(true);
+      const disc = findDiscrepancy(result, DiscrepancyCode.UNSUPPORTED_CALCULATION)!;
+      expect(disc.message).toContain("Cannot determine project contract value");
+    });
   });
 
   describe("T08: Receipt amount without valid required date", () => {
@@ -382,6 +398,32 @@ describe("reconcileProject", () => {
       expect(result.invoiceSettlementTotals.settlementTotal.toString()).toBe("118000");
       // But contradiction still detected
       expect(hasDiscrepancy(result, DiscrepancyCode.CANCELLED_BILL_WITH_PAYMENT)).toBe(true);
+    });
+
+    it("detects cancelled bill with negative payment components", () => {
+      const sources = createSources({
+        dueBills: [
+          {
+            id: "db-t09-neg",
+            grossAmount: dec("50000"),
+            sgst: dec("4500"),
+            cgst: dec("4500"),
+            billAmount: dec("59000"),
+            chequeAmount: dec("-5000"),
+            sd: dec("0"),
+            itTds: dec("0"),
+            receivedAmount: dec("-5000"),
+            billDate: new Date("2026-03-15"),
+            receiveDate: new Date("2026-04-01"),
+            status: "CANCELLED",
+          },
+        ],
+      });
+
+      const result = reconcileProject(sources);
+      expect(hasDiscrepancy(result, DiscrepancyCode.CANCELLED_BILL_WITH_PAYMENT)).toBe(true);
+      const disc = findDiscrepancy(result, DiscrepancyCode.CANCELLED_BILL_WITH_PAYMENT)!;
+      expect(disc.comparedValues?.chequeAmount.value).toBe("-5000");
     });
   });
 

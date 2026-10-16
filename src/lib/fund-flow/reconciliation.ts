@@ -273,6 +273,19 @@ export function reconcileProject(
   const contractValue = project.estimatedCost ?? fundFlow?.totalProjectCost ?? null;
   const contractValueSource = project.estimatedCost != null ? "Project.estimatedCost" : fundFlow != null ? "FundFlow.totalProjectCost" : "unknown";
 
+  if (contractValue == null) {
+    discrepancies.push({
+      code: DiscrepancyCode.UNSUPPORTED_CALCULATION,
+      severity: "INFO",
+      message: "Cannot determine project contract value from available sources.",
+      projectId: project.id,
+      sourceModel: "Project / FundFlow",
+      sourceRecordIds: [project.id],
+      explanation:
+        "Both Project.estimatedCost and FundFlow.totalProjectCost are null or missing. Work-value comparisons and remaining-work calculations cannot be performed.",
+    });
+  }
+
   const completedWork = fundFlow?.completedWorkAmt ?? null;
   let remainingWork: Decimal | null = null;
   let completedExceedsTotal = false;
@@ -429,10 +442,10 @@ export function reconcileProject(
     // Cancelled bill checks
     if (bill.status === "CANCELLED") {
       if (
-        gt(bill.chequeAmount, new Decimal("0")) ||
-        gt(bill.receivedAmount, new Decimal("0")) ||
-        gt(bill.sd, new Decimal("0")) ||
-        gt(bill.itTds, new Decimal("0"))
+        !eq(bill.chequeAmount, new Decimal("0")) ||
+        !eq(bill.receivedAmount, new Decimal("0")) ||
+        !eq(bill.sd, new Decimal("0")) ||
+        !eq(bill.itTds, new Decimal("0"))
       ) {
         discrepancies.push({
           code: DiscrepancyCode.CANCELLED_BILL_WITH_PAYMENT,
