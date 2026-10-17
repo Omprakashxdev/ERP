@@ -165,6 +165,54 @@ describe("Monthly income plan (Phase 1)", () => {
     expect(updMeta.metadata.newValue).toBe("2.777744");
   });
 
+  it("apply: zero creates + one explicit replace still saves (TEST-001 scenario)", async () => {
+    // 17 months already correct at 2.777744, Jul 2027 saved as 5.00
+    const monthlyData: any[] = [];
+    for (let i = 0; i < 18; i++) {
+      const m = ((4 + i - 1) % 12) + 1;
+      const y = 2026 + Math.floor((4 + i - 1) / 12);
+      monthlyData.push({
+        id: `m${i}`, fundFlowId: "ff1", month: m, year: y,
+        income: new Decimal(m === 7 && y === 2027 ? "5" : "2.777744"),
+        expense: new Decimal(0), net: new Decimal(0), cumulative: new Decimal(0),
+      });
+    }
+    setup(
+      { id: PID, name: "TEST-001", totalFee: new Decimal("49.9994") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData }
+    );
+    prismaMock.auditLog.findMany.mockResolvedValue(
+      monthlyData.map((m) => ({ entityId: m.id, entity: "FundFlowMonthly", action: "create", metadata: { source: "ff-01k-workbook-allocation" } }))
+    );
+    prismaMock.fundFlowMonthly.findUnique.mockImplementation(async ({ where }: any) =>
+      monthlyData.find((m) => m.month === where.fundFlowId_month_year.month && m.year === where.fundFlowId_month_year.year) ?? null
+    );
+    prismaMock.auditLog.count = vi.fn().mockResolvedValue(1);
+
+    const preview = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 18, startMonth: 4, startYear: 2026,
+    });
+    expect(preview.data!.createCount).toBe(0);
+    expect(preview.data!.conflictCount).toBe(1);
+
+    const res = await applyMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 18, startMonth: 4, startYear: 2026,
+      replace: ["2027-7"],
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.created).toBe(0);
+    expect(res.data!.replaced).toBe(1);
+    // July 2027 income updated to the calculated amount; old/new recorded
+    const updCall = prismaMock.fundFlowMonthly.update.mock.calls[0][0];
+    expect(updCall.where.id).toBe(monthlyData[15].id);
+    expect(updCall.data.income.toString()).toBe("2.777744");
+    const updMeta = prismaMock.auditLog.create.mock.calls
+      .map((c: any) => c[0].data)
+      .find((d: any) => d.action === "update");
+    expect(updMeta.metadata.oldValue).toBe("5");
+    expect(updMeta.metadata.newValue).toBe("2.777744");
+  });
+
   it("apply: stale conflict (amount changed after preview) aborts everything", async () => {
     const stale = { id: "m-old", fundFlowId: "ff1", month: 7, year: 2026, income: new Decimal("9"), expense: new Decimal(0), net: new Decimal(0), cumulative: new Decimal(0) };
     const previewRec = { ...stale, income: new Decimal("5.5") };

@@ -874,12 +874,16 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                         type="button"
                         size="lg"
                         onClick={handleConfirmPlan}
-                        disabled={planSaving || planPreview.createCount === 0}
+                        disabled={
+                          planSaving ||
+                          (planPreview.createCount === 0 &&
+                            !Object.values(planReplace).some(Boolean))
+                        }
                       >
                         {planSaving && (
                           <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                         )}
-                        Confirm &amp; save
+                        Confirm &amp; save monthly plan
                       </Button>
                       <Button
                         type="button"
