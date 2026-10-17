@@ -308,56 +308,59 @@ export async function upsertMonthlyAllocation(
 
 // ─── Monthly Income Summary (FF-01L: Excel Row 12) ───────────────
 
+interface IncomeMonthAggregate {
+  total: Decimal;
+  projectCount: number;
+  unavailableCount: number;
+}
+
+/** Verified workbook income aggregated per month key "YYYY-M". */
+async function aggregateIncomeByMonth(): Promise<Map<string, IncomeMonthAggregate>> {
+  const allFundFlows = await prisma.fundFlow.findMany({
+    include: { monthlyData: true },
+  });
+
+  // Fetch all audit provenance for all monthly records in one query
+  const allMonthlyIds = allFundFlows.flatMap((ff) => ff.monthlyData.map((m) => m.id));
+  const provenanceSet = await fetchProvenanceSet(allMonthlyIds);
+
+  const monthlyAggregates = new Map<string, IncomeMonthAggregate>();
+
+  for (const fundFlow of allFundFlows) {
+    for (const m of fundFlow.monthlyData) {
+      const key = `${m.year}-${m.month}`;
+
+      // Skip if outside 24-month window
+      if (!windowKeySet.has(key)) continue;
+
+      // Skip records with non-zero expense/net/cumulative (different meaning)
+      if (!isSafeWorkbookRecord(m)) continue;
+
+      const existing = monthlyAggregates.get(key) ?? {
+        total: new Decimal("0"),
+        projectCount: 0,
+        unavailableCount: 0,
+      };
+
+      if (!provenanceSet.has(m.id)) {
+        // Ambiguous record - count as unavailable
+        existing.unavailableCount += 1;
+        monthlyAggregates.set(key, existing);
+        continue;
+      }
+
+      existing.total = existing.total.plus(new Decimal(m.income.toString()));
+      existing.projectCount += 1;
+      monthlyAggregates.set(key, existing);
+    }
+  }
+
+  return monthlyAggregates;
+}
+
 export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyIncomeSummary[]>> {
   return withPermission("fundFlow", "read", async () => {
-    const allFundFlows = await prisma.fundFlow.findMany({
-      include: { monthlyData: true },
-    });
-
-    // Fetch all audit provenance for all monthly records in one query
-    const allMonthlyIds = allFundFlows.flatMap((ff) => ff.monthlyData.map((m) => m.id));
-    const provenanceSet = await fetchProvenanceSet(allMonthlyIds);
-
-    // Aggregate by month key (YYYY-MM)
-    const monthlyAggregates = new Map<
-      string,
-      { total: Decimal; projectCount: number; unavailableCount: number }
-    >();
-
-    for (const fundFlow of allFundFlows) {
-      for (const m of fundFlow.monthlyData) {
-        const key = `${m.year}-${m.month}`;
-
-        // Skip if outside 24-month window
-        if (!windowKeySet.has(key)) continue;
-
-        // Skip records with non-zero expense/net/cumulative (different meaning)
-        if (!isSafeWorkbookRecord(m)) continue;
-
-        // Check provenance
-        if (!provenanceSet.has(m.id)) {
-          // Ambiguous record - count as unavailable
-          const existing = monthlyAggregates.get(key) ?? {
-            total: new Decimal("0"),
-            projectCount: 0,
-            unavailableCount: 0,
-          };
-          existing.unavailableCount += 1;
-          monthlyAggregates.set(key, existing);
-          continue;
-        }
-
-        // Valid allocation - add to total
-        const existing = monthlyAggregates.get(key) ?? {
-          total: new Decimal("0"),
-          projectCount: 0,
-          unavailableCount: 0,
-        };
-        existing.total = existing.total.plus(new Decimal(m.income.toString()));
-        existing.projectCount += 1;
-        monthlyAggregates.set(key, existing);
-      }
-    }
+    const monthlyAggregates = await aggregateIncomeByMonth();
 
     // Build summary array in window order
     const summary: MonthlyIncomeSummary[] = MONTHLY_ALLOCATION_WINDOW.map(
@@ -417,25 +420,46 @@ const expenseSchema = z.object({
 
 // ─── Read ───────────────────────────────────────────────────────
 
+interface ExpenseRecordInfo {
+  amount: Decimal;
+  updatedAt: Date;
+  /** true only when a create audit carries the ff-01m source marker */
+  verified: boolean;
+}
+
+/** All worksheet-level expense records keyed "YYYY-MM", with provenance verdicts. */
+async function loadExpenseMap(): Promise<Map<string, ExpenseRecordInfo>> {
+  const records = await prisma.fundFlowMonthlyExpense.findMany();
+
+  const provenanceSet = await fetchProvenanceSet(
+    records.map((r) => r.id),
+    "FundFlowMonthlyExpense",
+    "ff-01m-workbook-expense"
+  );
+
+  const map = new Map<string, ExpenseRecordInfo>();
+  for (const r of records) {
+    map.set(`${r.year}-${String(r.month).padStart(2, "0")}`, {
+      amount: new Decimal(r.amount.toString()),
+      updatedAt: r.updatedAt,
+      verified: provenanceSet.has(r.id),
+    });
+  }
+  return map;
+}
+
 export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseResult>> {
   return withPermission("fundFlow", "read", async () => {
-    const records = await prisma.fundFlowMonthlyExpense.findMany();
-
-    const recordIds = records.map((r) => r.id);
-    const provenanceSet = await fetchProvenanceSet(
-      recordIds,
-      "FundFlowMonthlyExpense",
-      "ff-01m-workbook-expense"
-    );
+    const expenseInfo = await loadExpenseMap();
 
     const expenseMap = new Map<string, MonthlyExpense>();
-    for (const r of records) {
-      const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
+    for (const [key, r] of expenseInfo) {
+      const [y, m] = key.split("-").map(Number);
 
-      if (!provenanceSet.has(r.id)) {
+      if (!r.verified) {
         expenseMap.set(key, {
-          month: r.month,
-          year: r.year,
+          month: m,
+          year: y,
           amount: null,
           updatedAt: null,
           unavailable: true,
@@ -446,9 +470,9 @@ export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseR
       }
 
       expenseMap.set(key, {
-        month: r.month,
-        year: r.year,
-        amount: new Decimal(r.amount.toString()),
+        month: m,
+        year: y,
+        amount: r.amount,
         updatedAt: r.updatedAt.toISOString(),
       });
     }
@@ -588,5 +612,114 @@ export async function upsertMonthlyExpense(
     });
 
     return { id: record.id };
+  });
+}
+
+// ─── Planned Net (FF-01N: Excel Row 16) ─────────────────────────
+// V16–AJ16: =<month income row 12> − <month expense row 14>
+// AU16:     =AU12 − AU14  (total net = total income − total expenses)
+// Excel treats blank cells as 0 in subtraction; we mirror that arithmetic
+// but flag every month whose inputs are missing or excluded as incomplete
+// rather than presenting the result as a fully reconciled figure.
+// Row 16 is computed on read — net values are never written to the database.
+
+export interface PlannedNetMonth {
+  month: number;
+  year: number;
+  label: string;
+  /** income − expense; null when no verified input exists for the month */
+  plannedNet: Decimal | null;
+  /** verified Row 12 workbook allocations exist for this month */
+  incomePresent: boolean;
+  /** a verified Row 14 expense entry exists for this month */
+  expensePresent: boolean;
+  /** ambiguous records excluded from this month's inputs */
+  excludedCount: number;
+  /** true when a source input is missing or excluded — net treats it as 0 */
+  incomplete: boolean;
+}
+
+export interface PlannedNetResult {
+  months: PlannedNetMonth[];
+  /** AU16 parity: total income − total expenses over the window */
+  totalNet: Decimal | null;
+  totalIncomplete: boolean;
+}
+
+export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const [incomeMap, expenseMap] = await Promise.all([
+      aggregateIncomeByMonth(),
+      loadExpenseMap(),
+    ]);
+
+    let incomeTotal: Decimal | null = null;
+    let expenseTotal: Decimal | null = null;
+
+    const months: PlannedNetMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
+      ({ year, month, label }) => {
+        const inc = incomeMap.get(`${year}-${month}`);
+        const exp = expenseMap.get(`${year}-${String(month).padStart(2, "0")}`);
+
+        const incomePresent = (inc?.projectCount ?? 0) > 0;
+        const expensePresent = exp?.verified === true;
+        const excludedCount =
+          (inc?.unavailableCount ?? 0) + (exp && !exp.verified ? 1 : 0);
+
+        if (incomePresent) {
+          incomeTotal = incomeTotal
+            ? incomeTotal.plus(inc!.total)
+            : new Decimal(inc!.total.toString());
+        }
+        if (expensePresent) {
+          expenseTotal = expenseTotal
+            ? expenseTotal.plus(exp!.amount)
+            : new Decimal(exp!.amount.toString());
+        }
+
+        // Excel =V12-V14 arithmetic: missing side treated as 0.
+        // Only surfaced when at least one verified input exists — a month with
+        // no verified data shows blank, not a fabricated zero.
+        const plannedNet =
+          incomePresent || expensePresent
+            ? (incomePresent
+                ? new Decimal(inc!.total.toString())
+                : new Decimal("0")
+              ).minus(
+                expensePresent
+                  ? new Decimal(exp!.amount.toString())
+                  : new Decimal("0")
+              )
+            : null;
+
+        return {
+          month,
+          year,
+          label,
+          plannedNet,
+          incomePresent,
+          expensePresent,
+          excludedCount,
+          incomplete: !incomePresent || !expensePresent || excludedCount > 0,
+        };
+      }
+    );
+
+    const totalNet =
+      incomeTotal != null || expenseTotal != null
+        ? (incomeTotal ?? new Decimal("0")).minus(expenseTotal ?? new Decimal("0"))
+        : null;
+
+    return {
+      months,
+      totalNet,
+      // AU16 = AU12 − AU14 treats every blank input cell as 0. The total is
+      // flagged incomplete when any side is entirely absent or any month in
+      // the window lacks a verified input — it is not a fully reconciled sum.
+      totalIncomplete:
+        incomeTotal == null ||
+        expenseTotal == null ||
+        months.some((m) => m.incomplete),
+    };
   });
 }

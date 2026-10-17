@@ -8,6 +8,7 @@ import {
   getMonthlyIncomeSummary,
   getMonthlyExpenses,
   upsertMonthlyExpense,
+  getMonthlyPlannedNet,
 } from "@/lib/actions/fund-flow-monthly";
 
 interface IncomeMonth {
@@ -28,6 +29,17 @@ interface ExpenseMonth {
   unavailableReason?: string;
 }
 
+interface PlannedNetMonth {
+  month: number;
+  year: number;
+  label: string;
+  plannedNet: { toString: () => string } | null;
+  incomePresent: boolean;
+  expensePresent: boolean;
+  excludedCount: number;
+  incomplete: boolean;
+}
+
 /** Convert a Decimal-like value to an input-safe string without Number() precision loss. */
 function decimalToInputString(value: unknown): string {
   if (value == null) return "";
@@ -45,14 +57,18 @@ export function MonthlyIncomeSummary() {
   const [summary, setSummary] = useState<IncomeMonth[]>([]);
   const [expenses, setExpenses] = useState<ExpenseMonth[]>([]);
   const [expenseTotal, setExpenseTotal] = useState<string | null>(null);
+  const [planned, setPlanned] = useState<PlannedNetMonth[]>([]);
+  const [plannedTotal, setPlannedTotal] = useState<string | null>(null);
+  const [plannedIncomplete, setPlannedIncomplete] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const [incomeResult, expenseResult] = await Promise.all([
+      const [incomeResult, expenseResult, netResult] = await Promise.all([
         getMonthlyIncomeSummary(),
         getMonthlyExpenses(),
+        getMonthlyPlannedNet(),
       ]);
       if (incomeResult.success && incomeResult.data) {
         setSummary(incomeResult.data);
@@ -64,6 +80,16 @@ export function MonthlyIncomeSummary() {
         };
         setExpenses(data.expenses);
         setExpenseTotal(decimalToInputString(data.total) || null);
+      }
+      if (netResult.success && netResult.data) {
+        const data = netResult.data as {
+          months: PlannedNetMonth[];
+          totalNet: { toString: () => string } | null;
+          totalIncomplete: boolean;
+        };
+        setPlanned(data.months);
+        setPlannedTotal(decimalToInputString(data.totalNet) || null);
+        setPlannedIncomplete(data.totalIncomplete);
       }
     } finally {
       setLoading(false);
@@ -114,7 +140,7 @@ export function MonthlyIncomeSummary() {
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium">
-            Monthly Income &amp; Expense Summary (Rows 12 &amp; 14)
+            Monthly Income, Expense &amp; Planned Net (Rows 12, 14 &amp; 16)
             <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
           </CardTitle>
         </CardHeader>
@@ -134,14 +160,15 @@ export function MonthlyIncomeSummary() {
     <Card className="shadow-sm">
       <CardHeader>
         <CardTitle className="text-sm font-medium">
-          Monthly Income &amp; Expense Summary (Rows 12 &amp; 14)
+          Monthly Income, Expense &amp; Planned Net (Rows 12, 14 &amp; 16)
         </CardTitle>
         <p className="text-xs text-zinc-500">
           Income: verified workbook allocations summed across projects. Expenses:
           worksheet-level manually entered monthly plan (units as entered — not
-          assumed). Blank = unentered, distinct from zero.{" "}
-          <span className="text-amber-600">*</span> marks incomplete months where
-          ambiguous records were excluded — totals are not fully reconciled.
+          assumed). Planned Net = income − expenses; a plan figure, not verified
+          cash flow or bank balance. Blank = unentered, distinct from zero.{" "}
+          <span className="text-amber-600">*</span> marks months where inputs are
+          missing or ambiguous records were excluded — not fully reconciled.
         </p>
       </CardHeader>
       <CardContent>
@@ -228,6 +255,47 @@ export function MonthlyIncomeSummary() {
               title="Sum of entered monthly expense values (Excel AU14 parity)"
             >
               {expenseTotal ?? "—"}
+            </div>
+
+            {/* Row 16 — Planned Net = income − expense (computed, display only) */}
+            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
+              Planned Net (Row 16 = Row 12 − Row 14)
+            </div>
+            {planned.map((p) => {
+              const reasons: string[] = [];
+              if (!p.incomePresent) reasons.push("income missing — treated as 0");
+              if (!p.expensePresent) reasons.push("expense missing — treated as 0");
+              if (p.excludedCount > 0)
+                reasons.push(`${p.excludedCount} ambiguous record(s) excluded`);
+              return (
+                <div
+                  key={`${p.year}-${p.month}`}
+                  className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
+                  title={
+                    reasons.length > 0
+                      ? `Incomplete: ${reasons.join("; ")}`
+                      : "Planned net = monthly income − monthly expense"
+                  }
+                >
+                  {p.plannedNet != null ? decimalToInputString(p.plannedNet) : "—"}
+                  {p.incomplete && p.plannedNet != null && (
+                    <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+                  )}
+                </div>
+              );
+            })}
+            <div
+              className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700"
+              title={
+                plannedIncomplete
+                  ? "Incomplete: computed treating missing or excluded inputs as 0 (Excel AU16 = AU12 − AU14 parity)"
+                  : "Total income − total expenses (Excel AU16 = AU12 − AU14 parity)"
+              }
+            >
+              {plannedTotal ?? "—"}
+              {plannedIncomplete && plannedTotal != null && (
+                <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+              )}
             </div>
           </div>
         </div>
