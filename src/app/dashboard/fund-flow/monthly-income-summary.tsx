@@ -16,6 +16,8 @@ interface IncomeMonth {
   month: number;
   year: number;
   label: string;
+  /** Excel Row 12 formulas exist only for Apr 2026 – Jun 2027 */
+  formulaCovered: boolean;
   totalIncome: { toString: () => string } | null;
   projectCount: number;
   unavailableCount: number;
@@ -206,12 +208,16 @@ export function MonthlyIncomeSummary() {
             <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
               Total Income per Month (Row 12)
             </div>
-            {summary.map(({ label, totalIncome, projectCount, unavailableCount }) => (
+            {summary.map(({ label, formulaCovered, totalIncome, projectCount, unavailableCount }) => (
               <div
                 key={label}
                 className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
                 title={
-                  unavailableCount > 0
+                  !formulaCovered
+                    ? projectCount > 0
+                      ? "Workbook has no Row 12 formula for this month — project allocations exist but are not summarized here"
+                      : "Workbook has no Row 12 formula for this month"
+                    : unavailableCount > 0
                     ? `Incomplete: ${projectCount} projects with valid allocations, ${unavailableCount} ambiguous record(s) excluded — total is not a fully reconciled workbook figure`
                     : projectCount > 0
                     ? `${projectCount} projects`
@@ -224,7 +230,7 @@ export function MonthlyIncomeSummary() {
                       maximumFractionDigits: 2,
                     })}`
                   : "—"}
-                {unavailableCount > 0 && (
+                {formulaCovered && unavailableCount > 0 && (
                   <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
                 )}
               </div>

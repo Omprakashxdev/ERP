@@ -63,6 +63,10 @@ export interface MonthlyIncomeSummary {
   month: number;
   year: number;
   label: string;
+  /** Excel Row 12 SUM formulas exist only in V12:AJ12 (Apr 2026 – Jun 2027).
+      Months beyond that range contain no workbook formula — allocations there
+      are preserved in the data but produce no Row 12 value. */
+  formulaCovered: boolean;
   totalIncome: Decimal | null;
   /** Number of projects with valid allocations for this month */
   projectCount: number;
@@ -362,17 +366,25 @@ export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyInc
   return withPermission("fundFlow", "read", async () => {
     const monthlyAggregates = await aggregateIncomeByMonth();
 
-    // Build summary array in window order
+    // Excel Row 12 has SUM formulas only in V12:AJ12 (Apr 2026 – Jun 2027);
+    // AK12:AT12 are blank. No Row 12 value is generated beyond AJ, so the
+    // AU12-equivalent grand total (a client-side sum over non-null months)
+    // reproduces SUM(V12:AT12) exactly — it can only ever see covered cells.
+    const ROW12_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
+
     const summary: MonthlyIncomeSummary[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month, label }) => {
+      ({ year, month, label }, index) => {
         const key = `${year}-${month}`;
         const agg = monthlyAggregates.get(key);
+        const formulaCovered = index <= ROW12_LAST_COVERED_INDEX;
 
         return {
           month,
           year,
           label,
-          totalIncome: agg && agg.projectCount > 0 ? agg.total : null,
+          formulaCovered,
+          totalIncome:
+            formulaCovered && agg && agg.projectCount > 0 ? agg.total : null,
           projectCount: agg?.projectCount ?? 0,
           unavailableCount: agg?.unavailableCount ?? 0,
         };
@@ -662,6 +674,10 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
     // Excel Row 16 formulas are populated only in V16:AJ16 — the first 15
     // months of the window (Apr 2026 – Jun 2027). Later months (AK–AS) have
     // no formula in the workbook, so no net is produced for them.
+    // AU16 = AU12 − AU14: AU12 sums only populated Row 12 cells (V12:AJ12),
+    // so the income side of the total is likewise restricted to the same
+    // coverage. AU14's SUM(V14:AT14) spans every month column, so any
+    // entered expense counts toward the expense side.
     const ROW16_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
 
     const months: PlannedNetMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
@@ -674,7 +690,7 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
         const excludedCount =
           (inc?.unavailableCount ?? 0) + (exp && !exp.verified ? 1 : 0);
 
-        if (incomePresent) {
+        if (incomePresent && index <= ROW16_LAST_COVERED_INDEX) {
           incomeTotal = incomeTotal
             ? incomeTotal.plus(inc!.total)
             : new Decimal(inc!.total.toString());
@@ -724,12 +740,13 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
       months,
       totalNet,
       // AU16 = AU12 − AU14 treats every blank input cell as 0. The total is
-      // flagged incomplete when any side is entirely absent or any month in
-      // the window lacks a verified input — it is not a fully reconciled sum.
+      // flagged incomplete when any covered side is absent or any month the
+      // workbook's formulas actually read lacks a verified input — it is not
+      // a fully reconciled sum. Months without Row 16 formulas are excluded.
       totalIncomplete:
         incomeTotal == null ||
         expenseTotal == null ||
-        months.some((m) => m.incomplete),
+        months.some((m) => m.formulaCovered && m.incomplete),
     };
   });
 }

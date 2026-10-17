@@ -206,6 +206,37 @@ describe("Monthly Income Summary (FF-01L)", () => {
       expect(apr.projectCount).toBe(1);
     });
 
+    it("produces no Row 12 value beyond AJ12 while preserving allocations (T88)", async () => {
+      // Workbook: V12:AJ12 contain SUM formulas; AK12:AT12 have none.
+      // Aug 2027 (index 16) allocation exists in data but must not appear
+      // in Row 12 — no formula → no value, distinct from "missing data".
+      vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
+        {
+          id: "ff-1",
+          monthlyData: [
+            { id: "m1", month: 6, year: 2027, income: new Decimal("100.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+            { id: "m2", month: 8, year: 2027, income: new Decimal("200.00"), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
+          ],
+        },
+      ] as any);
+      mockAuditLogEntries = [
+        { entityId: "m1", action: "create", metadata: { source: "ff-01k-workbook-allocation" } },
+        { entityId: "m2", action: "create", metadata: { source: "ff-01k-workbook-allocation" } },
+      ];
+
+      const result = await getMonthlyIncomeSummary();
+      const data = result.data as any[];
+
+      const jun27 = data.find((d: any) => d.month === 6 && d.year === 2027);
+      expect(jun27.formulaCovered).toBe(true);
+      expect(jun27.totalIncome!.toFixed(2)).toBe("100.00");
+
+      const aug27 = data.find((d: any) => d.month === 8 && d.year === 2027);
+      expect(aug27.formulaCovered).toBe(false);
+      expect(aug27.totalIncome).toBeNull(); // no Row 12 formula → no value
+      expect(aug27.projectCount).toBe(1);   // allocation preserved in data
+    });
+
     it("requires fundFlow read permission (T87)", async () => {
       vi.mocked(withPermission).mockImplementation(async () => {
         return { success: false, error: "Forbidden" };
