@@ -3,8 +3,8 @@ import { Decimal } from "@prisma/client/runtime/library";
 import {
   getMonthlyAllocations,
   upsertMonthlyAllocation,
-  MONTHLY_ALLOCATION_WINDOW,
 } from "../actions/fund-flow-monthly";
+import { MONTHLY_ALLOCATION_WINDOW } from "../fund-flow-window";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "../actions/wrapper";
 

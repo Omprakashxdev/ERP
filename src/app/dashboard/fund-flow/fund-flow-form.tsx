@@ -17,8 +17,8 @@ import { upsertFundFlow, getFundFlowByProjectId } from "@/lib/actions/fund-flow"
 import {
   getMonthlyAllocations,
   upsertMonthlyAllocation,
-  MONTHLY_ALLOCATION_WINDOW,
 } from "@/lib/actions/fund-flow-monthly";
+import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";

@@ -15,29 +15,10 @@ import {
 // NOTE: Workbook formulas (e.g., remainingFee / N) are not reproduced here.
 //       Every value is explicitly entered by the user.
 
-export interface MonthWindow {
-  year: number;
-  month: number;
-  label: string;
-}
-
-export const MONTHLY_ALLOCATION_WINDOW: MonthWindow[] = (() => {
-  const months: MonthWindow[] = [];
-  const startYear = 2026;
-  const startMonth = 4; // April
-  for (let i = 0; i < 24; i++) {
-    const monthIndex = startMonth - 1 + i; // 0-based
-    const year = startYear + Math.floor(monthIndex / 12);
-    const month = (monthIndex % 12) + 1;
-    const d = new Date(year, month - 1, 1);
-    months.push({
-      year,
-      month,
-      label: d.toLocaleString("en-IN", { month: "short", year: "numeric" }),
-    });
-  }
-  return months;
-})();
+// MonthWindow / MONTHLY_ALLOCATION_WINDOW live in @/lib/fund-flow-window so
+// client components can use them without importing a "use server" module.
+export type { MonthWindow } from "@/lib/fund-flow-window";
+import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
 
 const windowKeySet = new Set(
   MONTHLY_ALLOCATION_WINDOW.map((m) => `${m.year}-${m.month}`)
