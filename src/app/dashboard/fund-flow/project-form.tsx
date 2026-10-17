@@ -38,6 +38,8 @@ interface ProjectFormProps {
   project?: FundFlowWithComputed;
   mode: "create" | "edit";
   onClose: () => void;
+  /** Render content without the Dialog wrapper (embedded inside a parent dialog). */
+  embedded?: boolean;
 }
 
 interface MasterData {
@@ -172,7 +174,7 @@ function getInitialFeeStages(project?: FundFlowWithComputed): FeeStageRow[] {
   }));
 }
 
-export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
+export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
 
@@ -367,13 +369,14 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
     ? "Update project details, staff assignments, and fee stages."
     : "Create a new project to start tracking fund flow.";
 
-  return (
-    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  const body = (
+    <>
+      {!embedded && (
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+      )}
 
         {masterLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -920,6 +923,21 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
             </div>
           </form>
         )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col px-1">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        {body}
       </DialogContent>
     </Dialog>
   );

@@ -22,12 +22,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import { FundFlowWithComputed } from "@/types/fund-flow";
 import { ProjectForm } from "./project-form";
-import { FundFlowForm } from "./fund-flow-form";
+import { FundFlowEditor } from "./fund-flow-editor";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  Pencil,
   Plus,
 } from "lucide-react";
 
@@ -101,11 +101,11 @@ export function FundFlowTable({
   filter,
 }: FundFlowTableProps) {
   const router = useRouter();
-  const [selectedProject, setSelectedProject] =
-    useState<FundFlowWithComputed | null>(null);
   const [selectedFundFlow, setSelectedFundFlow] =
     useState<FundFlowWithComputed | null>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   const typedRows = rows as FundFlowWithComputed[];
 
@@ -151,145 +151,160 @@ export function FundFlowTable({
         </Card>
       ) : (
         <Card className="overflow-hidden shadow-sm">
-          <div className="max-h-[70vh] overflow-auto">
-          <Table className="text-xs">
-            <TableHeader className="sticky top-0 z-10 bg-white">
+          <Table className="text-sm">
+            <TableHeader className="bg-white">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="whitespace-nowrap">Region</TableHead>
-                <TableHead className="whitespace-nowrap">Client</TableHead>
-                <TableHead className="whitespace-nowrap">Project</TableHead>
-                <TableHead className="whitespace-nowrap">Work Order</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Time Limit</TableHead>
-                <TableHead className="whitespace-nowrap">Stipulated</TableHead>
-                <TableHead className="whitespace-nowrap">Target</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Target Months</TableHead>
-                <TableHead className="whitespace-nowrap">TL/PM</TableHead>
-                <TableHead className="whitespace-nowrap">RE</TableHead>
-                <TableHead className="whitespace-nowrap">DE</TableHead>
-                <TableHead className="whitespace-nowrap">SE</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Misc Exp</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Staff Exp</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Total Cost</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Completed</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Remaining</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Total Fee</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Proposed/Due</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Legacy received</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Legacy remaining fee</TableHead>
-                <TableHead className="whitespace-nowrap">Status</TableHead>
-                <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
+                <TableHead>Region</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Project</TableHead>
+                <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead className="text-right">Completed Work</TableHead>
+                <TableHead className="text-right">Remaining Work</TableHead>
+                <TableHead className="text-right">Total Fee</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {typedRows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  onClick={() => setSelectedProject(row)}
-                  className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
-                >
-                  <TableCell className="whitespace-nowrap font-medium">
-                    {row.region.name}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{row.client.name}</TableCell>
-                  <TableCell className="max-w-xs truncate font-medium text-zinc-900">{row.name}</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDate(row.workOrderDate)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
-                    {formatMonths(row.timeLimitMonths)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDate(row.stipulatedCompletionDate)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {formatDate(row.targetCompletionDate)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right">
-                    {formatMonths(row.targetTimeLimitMonths)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {getStaffByRole(row, ProjectRole.TEAM_LEADER)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {getStaffByRole(row, ProjectRole.RESIDENTIAL_ENGINEER)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {getStaffByRole(row, ProjectRole.DESIGN_ENGINEER)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {getStaffByRole(row, ProjectRole.SITE_ENGINEER)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.miscExp)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.staffExp)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.totalProjectCost)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.completedWorkAmt)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.remainingWorkAmt)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.totalFee, 6)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.proposedDueBillAmount)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.fundFlow?.feeReceived)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.remainingFee, 6)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge
-                      variant="outline"
-                      className={statusVariantMap[row.status]}
-                    >
-                      {row.status.toLowerCase()}
-                    </Badge>
-                  </TableCell>
-                  <TableCell
-                    className="whitespace-nowrap text-right"
-                    onClick={(e) => e.stopPropagation()}
+              {typedRows.map((row) => {
+                const expanded = expandedRowId === row.id;
+                return (
+                  <>
+                  <TableRow
+                    key={row.id}
+                    onClick={() => setSelectedFundFlow(row)}
+                    className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
                   >
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedProject(row);
-                        }}
-                        title="Edit project"
+                    <TableCell className="font-medium">
+                      {row.region.name}
+                    </TableCell>
+                    <TableCell>{row.client.name}</TableCell>
+                    <TableCell className="max-w-[16rem] font-medium text-zinc-900">
+                      <div className="truncate" title={row.name}>{row.name}</div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono whitespace-nowrap">
+                      {formatMoney(row.fundFlow?.totalProjectCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono whitespace-nowrap">
+                      {formatMoney(row.fundFlow?.completedWorkAmt)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono whitespace-nowrap">
+                      {formatMoney(row.remainingWorkAmt)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono whitespace-nowrap">
+                      {formatMoney(row.totalFee, 6)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={statusVariantMap[row.status]}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedFundFlow(row);
-                        }}
-                        title="Edit fund flow"
-                      >
-                        ₹
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {row.status.toLowerCase()}
+                      </Badge>
+                    </TableCell>
+                    <TableCell
+                      className="text-right whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRowId(expanded ? null : row.id);
+                          }}
+                          title={expanded ? "Hide details" : "Show all details"}
+                          aria-expanded={expanded}
+                        >
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                          />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFundFlow(row);
+                          }}
+                        >
+                          View / Edit
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {expanded && (
+                    <TableRow key={`${row.id}-details`} className="bg-zinc-50/60 hover:bg-zinc-50/60">
+                      <TableCell colSpan={9} className="p-0">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
+                          <div>
+                            <p className="text-xs text-zinc-500">Work order date</p>
+                            <p className="font-medium">{formatDate(row.workOrderDate)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Time limit (months)</p>
+                            <p className="font-medium">{formatMonths(row.timeLimitMonths)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Stipulated completion</p>
+                            <p className="font-medium">{formatDate(row.stipulatedCompletionDate)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Target completion</p>
+                            <p className="font-medium">{formatDate(row.targetCompletionDate)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Target months</p>
+                            <p className="font-medium">{formatMonths(row.targetTimeLimitMonths)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Team leader</p>
+                            <p className="font-medium">{getStaffByRole(row, ProjectRole.TEAM_LEADER)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Residential engineer</p>
+                            <p className="font-medium">{getStaffByRole(row, ProjectRole.RESIDENTIAL_ENGINEER)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Design engineer</p>
+                            <p className="font-medium">{getStaffByRole(row, ProjectRole.DESIGN_ENGINEER)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Site engineer</p>
+                            <p className="font-medium">{getStaffByRole(row, ProjectRole.SITE_ENGINEER)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Misc expenses</p>
+                            <p className="font-mono">{formatMoney(row.fundFlow?.miscExp)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Staff expenses</p>
+                            <p className="font-mono">{formatMoney(row.fundFlow?.staffExp)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Proposed / due amount</p>
+                            <p className="font-mono">{formatMoney(row.fundFlow?.proposedDueBillAmount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Fee received (legacy — unverified)</p>
+                            <p className="font-mono">{formatMoney(row.fundFlow?.feeReceived)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-zinc-500">Remaining fee (legacy — unverified)</p>
+                            <p className="font-mono">{formatMoney(row.remainingFee, 6)}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </>
+                );
+              })}
             </TableBody>
           </Table>
-        </div>
       </Card>
       )}
 
@@ -322,14 +337,6 @@ export function FundFlowTable({
         </div>
       )}
 
-      {selectedProject && (
-        <ProjectForm
-          project={selectedProject}
-          mode="edit"
-          onClose={() => setSelectedProject(null)}
-        />
-      )}
-
       {createProjectOpen && (
         <ProjectForm
           mode="create"
@@ -338,7 +345,7 @@ export function FundFlowTable({
       )}
 
       {selectedFundFlow && (
-        <FundFlowForm
+        <FundFlowEditor
           project={selectedFundFlow}
           onClose={() => setSelectedFundFlow(null)}
         />

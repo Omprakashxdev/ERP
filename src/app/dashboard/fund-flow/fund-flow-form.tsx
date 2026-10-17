@@ -27,6 +27,8 @@ import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 interface FundFlowFormProps {
   project: FundFlowWithComputed;
   onClose: () => void;
+  /** Render content without the Dialog wrapper (embedded inside a parent dialog). */
+  embedded?: boolean;
 }
 
 function toMoneyString(value: unknown): string {
@@ -101,7 +103,7 @@ function formatDecimalAsCurrency(value: unknown): string {
   return `${negative ? "-" : ""}₹${restWithCommas},${lastThree}.${frac}`;
 }
 
-export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
+export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) {
   const router = useRouter();
   const [form, setForm] = useState({
     miscExp: toMoneyString(project.fundFlow?.miscExp),
@@ -328,15 +330,16 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
 
   const reconciliationAvailable = detailData?.reconciliationAvailable === true;
 
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+  const body = (
+    <>
+      {!embedded && (
         <DialogHeader className="border-b px-4 pb-3 pt-4">
           <DialogTitle>Edit fund flow</DialogTitle>
           <DialogDescription>
             Update financial numbers for {project.name}.
           </DialogDescription>
         </DialogHeader>
+      )}
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
@@ -596,6 +599,21 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
             </Button>
           </div>
         </form>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        {body}
       </DialogContent>
     </Dialog>
   );

@@ -196,7 +196,7 @@ export function MonthlyIncomeSummary() {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <div className="grid grid-cols-[repeat(25,minmax(72px,1fr))] gap-1 text-xs">
+          <div className="grid grid-cols-[repeat(25,minmax(96px,1fr))] gap-1 text-xs">
             {/* Header row */}
             {summary.map(({ label }) => (
               <div key={label} className="text-center text-zinc-500">
@@ -237,7 +237,7 @@ export function MonthlyIncomeSummary() {
               {grandTotal > 0
                 ? `₹${grandTotal.toLocaleString("en-IN", {
                     minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    maximumFractionDigits: 6,
                   })}`
                 : "—"}
             </div>

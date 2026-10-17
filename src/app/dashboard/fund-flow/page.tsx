@@ -83,8 +83,6 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
         </CardContent>
       </Card>
 
-      <MonthlyIncomeSummary />
-
       {fundFlowResult.success ? (
         <FundFlowTable
           rows={serialize(rows) as never}
@@ -108,6 +106,22 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
           </CardContent>
         </Card>
       )}
+
+      <details className="group">
+        <summary className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-base font-medium text-zinc-800 shadow-sm hover:bg-zinc-50">
+          <FileSpreadsheet className="h-5 w-5 text-zinc-500" />
+          Monthly Fund Flow Report — income, expenses, planned net &amp; running balance
+          <span className="ml-auto text-sm font-normal text-zinc-500 group-open:hidden">
+            Click to expand
+          </span>
+          <span className="ml-auto hidden text-sm font-normal text-zinc-500 group-open:inline">
+            Click to collapse
+          </span>
+        </summary>
+        <div className="mt-4">
+          <MonthlyIncomeSummary />
+        </div>
+      </details>
     </div>
   );
 }
