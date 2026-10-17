@@ -330,16 +330,19 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <DialogHeader className="border-b px-4 pb-3 pt-4">
           <DialogTitle>Edit fund flow</DialogTitle>
           <DialogDescription>
             Update financial numbers for {project.name}.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Workbook figures</h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="miscExp">Misc exp (₹)</Label>
               <Input
@@ -408,10 +411,13 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
               />
             </div>
           </div>
+          </div>
 
           <Separator />
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Calculated (read-only)</h4>
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div className="rounded-md bg-zinc-50 p-3">
               <p className="text-xs text-zinc-500">Remaining work</p>
               <p className="font-mono font-medium">
@@ -427,6 +433,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                 {formatDecimalAsCurrency(remainingFee)}
               </p>
             </div>
+          </div>
           </div>
 
           <Separator />
@@ -509,30 +516,23 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
               invoiced and settlement figures.
             </p>
 
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-[repeat(25,minmax(72px,1fr))] gap-1 text-xs">
-                {/* Header row */}
-                {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => (
-                  <div key={`h-${year}-${month}`} className="text-center text-zinc-500">
-                    {label}
-                  </div>
-                ))}
-                <div className="text-center font-medium text-zinc-700">Total</div>
-
-                {/* Input row */}
-                {MONTHLY_ALLOCATION_WINDOW.map(({ year, month }) => {
-                  const key = `${year}-${String(month).padStart(2, "0")}`;
-                  const isUnavailable = monthlyUnavailable[key] != null;
-                  return (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => {
+                const key = `${year}-${String(month).padStart(2, "0")}`;
+                const isUnavailable = monthlyUnavailable[key] != null;
+                return (
+                  <div key={`i-${year}-${month}`} className="space-y-0.5">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                      {label}
+                    </div>
                     <input
-                      key={`i-${year}-${month}`}
                       type="text"
                       inputMode="decimal"
                       disabled={monthlySaving || isUnavailable}
                       className={
                         isUnavailable
-                          ? "h-8 cursor-not-allowed rounded border border-zinc-200 bg-zinc-100 px-1 text-center text-zinc-400"
-                          : "h-8 rounded border border-zinc-200 px-1 text-right font-mono focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
+                          ? "h-8 w-full cursor-not-allowed rounded border border-zinc-200 bg-zinc-100 px-1 text-center text-xs text-zinc-400"
+                          : "h-8 w-full rounded border border-zinc-200 px-1 text-right font-mono text-xs focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
                       }
                       value={
                         isUnavailable
@@ -562,20 +562,24 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
                             }
                       }
                     />
-                  );
-                })}
-                <div className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700">
-                  {monthlyTotal != null
-                    ? formatDecimalAsCurrency(monthlyTotal)
-                    : "—"}
-                </div>
-              </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-2 text-xs font-medium text-zinc-700">
+              <span>Total</span>
+              <span className="font-mono">
+                {monthlyTotal != null
+                  ? formatDecimalAsCurrency(monthlyTotal)
+                  : "—"}
+              </span>
             </div>
           </div>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
+          </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 border-t bg-popover px-4 py-3">
             <Button
               type="button"
               variant="outline"
