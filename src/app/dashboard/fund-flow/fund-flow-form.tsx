@@ -157,7 +157,11 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
   const [monthlySaving, setMonthlySaving] = useState(false);
 
   // Monthly income plan (Phase 1) state
-  const [planBasis, setPlanBasis] = useState<PlanBasis>("TOTAL_FEE");
+  type PlanMethod =
+    | PlanBasis
+    | "REMAINING_FIRST"
+    | "RECEIVED_THEN_REMAINDER";
+  const [planMethod, setPlanMethod] = useState<PlanMethod>("TOTAL_FEE");
   const [planInstallments, setPlanInstallments] = useState("18");
   const [planStart, setPlanStart] = useState(
     `${MONTHLY_ALLOCATION_WINDOW[0].year}-${MONTHLY_ALLOCATION_WINDOW[0].month}`
@@ -291,9 +295,12 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
   function planInput() {
     const [startYear, startMonth] = planStart.split("-").map(Number);
+    const isSchedule =
+      planMethod === "REMAINING_FIRST" || planMethod === "RECEIVED_THEN_REMAINDER";
     return {
       projectId: project.id,
-      basis: planBasis,
+      basis: (isSchedule ? "TOTAL_FEE" : planMethod) as PlanBasis,
+      schedule: isSchedule ? planMethod : "EVEN",
       installments: Math.max(1, Math.min(24, Number(planInstallments) || 1)),
       startMonth,
       startYear,
@@ -687,22 +694,30 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="plan-basis">Spread which fee?</Label>
+                  <Label htmlFor="plan-basis">How should it be spread?</Label>
                   <select
                     id="plan-basis"
                     className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
-                    value={planBasis}
+                    value={planMethod}
                     onChange={(e) => {
-                      setPlanBasis(e.target.value as PlanBasis);
+                      setPlanMethod(e.target.value as PlanMethod);
                       setPlanPreview(null);
                     }}
                   >
-                    <option value="TOTAL_FEE">Total fee</option>
+                    <option value="TOTAL_FEE">
+                      Total fee — same amount every month
+                    </option>
                     <option value="REMAINING_FEE">
-                      Remaining fee (total fee − fee received)
+                      Remaining fee — same amount every month
                     </option>
                     <option value="LEGACY_FEE_RECEIVED">
-                      Fee already received
+                      Fee already received — same amount every month
+                    </option>
+                    <option value="REMAINING_FIRST">
+                      First month from remaining fee, rest from total fee
+                    </option>
+                    <option value="RECEIVED_THEN_REMAINDER">
+                      Fee received evenly, remainder in last month
                     </option>
                   </select>
                 </div>
@@ -767,11 +782,17 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                       <span className="font-mono font-medium">
                         {formatDecimalAsCurrency(planPreview.basisAmount)}
                       </span>
-                      {" — each month gets "}
-                      <span className="font-mono font-medium">
-                        {formatDecimalAsCurrency(planPreview.perMonth)}
-                      </span>
-                      {` (${planPreview.basisLabel.toLowerCase().includes("received") ? "received" : "fee"} ÷ ${planPreview.installments}).`}
+                      {planPreview.perMonth != null ? (
+                        <>
+                          {" — each month gets "}
+                          <span className="font-mono font-medium">
+                            {formatDecimalAsCurrency(planPreview.perMonth)}
+                          </span>
+                          {` (${planPreview.basisLabel.toLowerCase().includes("received") ? "received" : "fee"} ÷ ${planPreview.installments}).`}
+                        </>
+                      ) : (
+                        " — amounts vary per month, see the list below."
+                      )}
                     </p>
                     <div className="max-h-56 overflow-y-auto rounded border border-zinc-100">
                       <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1 p-2 text-sm">
@@ -793,6 +814,9 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                                   </span>
                                   <span className="font-mono text-xs text-amber-800">
                                     calculated {formatDecimalAsCurrency(item.plannedAmount)}
+                                  </span>
+                                  <span className="text-xs text-zinc-400">
+                                    ({item.calcNote})
                                   </span>
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-xs">
@@ -842,6 +866,11 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                                 }`}
                               >
                                 {item.note}
+                                {planPreview.schedule !== "EVEN" && (
+                                  <span className="block text-zinc-400">
+                                    {item.calcNote}
+                                  </span>
+                                )}
                               </span>
                             </div>
                           );

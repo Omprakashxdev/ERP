@@ -847,6 +847,15 @@ const monthlyPlanSchema = z.object({
   installments: z.number().int().min(1).max(24),
   startMonth: z.number().int().min(1).max(12),
   startYear: z.number().int().min(2000).max(2100),
+  /** Verified workbook schedule shapes. EVEN = same basis ÷ N every
+      month (existing behaviour, uses `basis`). REMAINING_FIRST =
+      month 1 uses remaining fee ÷ N, months 2..N use total fee ÷ N
+      (rows 6/8: Y6=$U6/18 then Z6:AP6=$R6/18). RECEIVED_THEN_REMAINDER =
+      months 1..N−1 use fee received ÷ (N−1), last month uses the
+      remainder total − received (row 9: V9:W9=$T9/2, X9=U9). */
+  schedule: z
+    .enum(["EVEN", "REMAINING_FIRST", "RECEIVED_THEN_REMAINDER"])
+    .optional(),
   /** Months ("YYYY-M") the user explicitly chose to replace with the
       calculated amount. Absent = keep every existing value. */
   replace: z.array(z.string().regex(/^\d{4}-\d{1,2}$/)).max(24).optional(),
@@ -869,10 +878,13 @@ export interface MonthlyPlanItem {
   existingAmount: string | null;
   status: MonthlyPlanStatus;
   note: string;
+  /** Plain-language calculation basis for this month, e.g. "total fee ÷ 18". */
+  calcNote: string;
 }
 
 export interface MonthlyPlanPreview {
   basis: PlanBasis;
+  schedule: "EVEN" | "REMAINING_FIRST" | "RECEIVED_THEN_REMAINDER";
   basisLabel: string;
   /** The fee figure used as the divisor source, or null if unavailable. */
   basisAmount: string | null;
@@ -921,38 +933,92 @@ async function computeMonthlyPlan(
     include: { monthlyData: true },
   });
 
-  // Resolve the fee basis from existing ERP fields.
+  const schedule = parsed.schedule ?? "EVEN";
+  const totalFee = new Decimal(project.totalFee.toString());
+  const feeReceived =
+    fundFlow != null ? new Decimal(fundFlow.feeReceived.toString()) : null;
+  const remainingFee = feeReceived != null ? totalFee.minus(feeReceived) : null;
+  const n = parsed.installments;
+
+  // Resolve the fee basis(es) from existing ERP fields.
   let basisAmount: Decimal | null = null;
   let unavailableReason: string | null = null;
-  if (parsed.basis === "TOTAL_FEE") {
-    basisAmount = new Decimal(project.totalFee.toString());
+  if (schedule === "EVEN") {
+    if (parsed.basis === "TOTAL_FEE") {
+      basisAmount = totalFee;
+    } else {
+      if (!fundFlow) {
+        unavailableReason =
+          "This project has no fund flow record yet — save the financial details first, or enter monthly amounts manually.";
+      } else if (parsed.basis === "REMAINING_FEE") {
+        basisAmount = remainingFee;
+      } else {
+        basisAmount = feeReceived;
+      }
+    }
   } else {
+    // Mixed schedules need the fund flow record (fee received).
     if (!fundFlow) {
       unavailableReason =
         "This project has no fund flow record yet — save the financial details first, or enter monthly amounts manually.";
-    } else if (parsed.basis === "REMAINING_FEE") {
-      basisAmount = new Decimal(project.totalFee.toString()).minus(
-        new Decimal(fundFlow.feeReceived.toString())
-      );
+    } else if (schedule === "REMAINING_FIRST") {
+      basisAmount = totalFee; // spread across remaining (first) + total
     } else {
-      basisAmount = new Decimal(fundFlow.feeReceived.toString());
+      // RECEIVED_THEN_REMAINDER — needs a nonzero received amount and ≥2 months.
+      if (n < 2) {
+        unavailableReason =
+          "This schedule needs at least 2 months — the fee already received is spread over the earlier months and the remainder goes in the last month.";
+      } else if (feeReceived == null || feeReceived.lte(0)) {
+        unavailableReason =
+          "No received fee is recorded for this project, so this schedule cannot be used. Choose another basis or enter amounts manually.";
+      }
+      basisAmount = unavailableReason ? null : totalFee;
     }
   }
 
   if (!unavailableReason && basisAmount != null && basisAmount.lte(0)) {
     unavailableReason =
-      parsed.basis === "LEGACY_FEE_RECEIVED"
+      parsed.basis === "LEGACY_FEE_RECEIVED" && schedule === "EVEN"
         ? "No received fee is recorded for this project, so a plan cannot be prepared from that figure. Choose another basis or enter amounts manually."
-        : parsed.basis === "REMAINING_FEE"
+        : parsed.basis === "REMAINING_FEE" && schedule === "EVEN"
           ? "The remaining fee is zero for this project — nothing left to distribute. Choose another basis or enter amounts manually."
           : "The total fee is zero for this project — nothing to distribute. Enter amounts manually.";
     basisAmount = null;
   }
 
+  // Per-index amount + plain-language basis note.
   const perMonth =
-    basisAmount != null
-      ? basisAmount.div(parsed.installments).toDecimalPlaces(6)
+    schedule === "EVEN" && basisAmount != null
+      ? basisAmount.div(n).toDecimalPlaces(6)
       : null;
+  const amountFor = (i: number): Decimal | null => {
+    if (unavailableReason || basisAmount == null) return null;
+    if (schedule === "EVEN") return perMonth;
+    if (schedule === "REMAINING_FIRST") {
+      return i === 0
+        ? remainingFee!.div(n).toDecimalPlaces(6)
+        : totalFee.div(n).toDecimalPlaces(6);
+    }
+    // RECEIVED_THEN_REMAINDER
+    return i < n - 1
+      ? feeReceived!.div(n - 1).toDecimalPlaces(6)
+      : totalFee.minus(feeReceived!).toDecimalPlaces(6);
+  };
+  const calcNoteFor = (i: number): string => {
+    if (schedule === "REMAINING_FIRST") {
+      return i === 0 ? `remaining fee ÷ ${n}` : `total fee ÷ ${n}`;
+    }
+    if (schedule === "RECEIVED_THEN_REMAINDER") {
+      return i < n - 1
+        ? `fee received ÷ ${n - 1}`
+        : "remainder (total − received)";
+    }
+    return parsed.basis === "TOTAL_FEE"
+      ? `total fee ÷ ${n}`
+      : parsed.basis === "REMAINING_FEE"
+        ? `remaining fee ÷ ${n}`
+        : `fee received ÷ ${n}`;
+  };
 
   const provenanceSet = fundFlow
     ? await fetchProvenanceSet(fundFlow.monthlyData.map((m) => m.id))
@@ -986,8 +1052,9 @@ async function computeMonthlyPlan(
         "An older record without verified history occupies this month — left untouched";
     } else if (existing) {
       const income = new Decimal(existing.income.toString());
+      const planned = amountFor(i);
       existingAmount = income.toString();
-      if (perMonth != null && income.equals(perMonth)) {
+      if (planned != null && income.equals(planned)) {
         status = "keep";
         note = "Already has this amount — kept unchanged";
       } else {
@@ -1000,14 +1067,16 @@ async function computeMonthlyPlan(
       }
     }
 
+    const plannedForItem = status === "outside" ? null : amountFor(i);
     items.push({
       month: m,
       year: y,
       label,
-      plannedAmount: status === "outside" ? null : perMonth?.toString() ?? null,
+      plannedAmount: plannedForItem?.toString() ?? null,
       existingAmount,
       status,
       note,
+      calcNote: calcNoteFor(i),
     });
 
     cursor = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
@@ -1041,7 +1110,13 @@ async function computeMonthlyPlan(
 
   return {
     basis: parsed.basis,
-    basisLabel: BASIS_LABELS[parsed.basis],
+    schedule,
+    basisLabel:
+      schedule === "REMAINING_FIRST"
+        ? "Total fee — first month from remaining fee, the rest from total fee"
+        : schedule === "RECEIVED_THEN_REMAINDER"
+          ? "Total fee — fee already received split evenly, remainder in the last month"
+          : BASIS_LABELS[parsed.basis],
     basisAmount: basisAmount?.toString() ?? null,
     installments: parsed.installments,
     perMonth: perMonth?.toString() ?? null,

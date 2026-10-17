@@ -249,6 +249,72 @@ describe("Monthly income plan (Phase 1)", () => {
     expect(res.data!.perMonth).toBe("2.52762");
   });
 
+  it("REMAINING_FIRST: month 1 uses remaining fee, rest use total fee (nonzero received)", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("100") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("10"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", schedule: "REMAINING_FIRST",
+      installments: 6, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    const items = res.data!.items;
+    // month 1: (100-10)/6 = 15; months 2-6: 100/6 = 16.666667 (round6)
+    expect(items[0].plannedAmount).toBe("15");
+    expect(items[0].calcNote).toContain("remaining");
+    for (const it of items.slice(1)) {
+      expect(it.plannedAmount).toBe("16.666667");
+      expect(it.calcNote).toContain("total");
+    }
+  });
+
+  it("REMAINING_FIRST with zero received matches row 6 (all months = total ÷ 18)", async () => {
+    setup(
+      { id: PID, name: "P1", totalFee: new Decimal("49.9994") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", schedule: "REMAINING_FIRST",
+      installments: 18, startMonth: 7, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    for (const it of res.data!.items) {
+      expect(it.plannedAmount).toBe("2.777744");
+    }
+  });
+
+  it("RECEIVED_THEN_REMAINDER reproduces row 9 exactly (T9/2, T9/2, remainder)", async () => {
+    setup(
+      { id: PID, name: "P3", totalFee: new Decimal("8.58") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("6.86"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", schedule: "RECEIVED_THEN_REMAINDER",
+      installments: 3, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    const items = res.data!.items;
+    // V9=T9/2=3.43, W9=T9/2=3.43, X9=U9=R-T=1.72
+    expect(items.map((i: any) => i.plannedAmount)).toEqual(["3.43", "3.43", "1.72"]);
+    expect(items.map((i: any) => [i.month, i.year])).toEqual([[4, 2026], [5, 2026], [6, 2026]]);
+    expect(items[2].calcNote).toContain("remainder");
+  });
+
+  it("RECEIVED_THEN_REMAINDER refused when no fee received recorded", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("8.58") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", schedule: "RECEIVED_THEN_REMAINDER",
+      installments: 3, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.unavailableReason).toContain("received");
+    expect(res.data!.items.every((i: any) => i.plannedAmount == null)).toBe(true);
+  });
+
   it("empty basis: totalFee = 0 -> unavailableReason, nothing created", async () => {
     setup(
       { id: PID, name: "P", totalFee: new Decimal("0") },
