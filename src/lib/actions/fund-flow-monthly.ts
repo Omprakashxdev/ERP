@@ -627,7 +627,10 @@ export interface PlannedNetMonth {
   month: number;
   year: number;
   label: string;
-  /** income − expense; null when no verified input exists for the month */
+  /** Excel Row 16 formulas exist only in V16:AJ16 (Apr 2026 – Jun 2027) */
+  formulaCovered: boolean;
+  /** income − expense; null when no verified input exists for the month,
+      or when the workbook has no Row 16 formula for the month */
   plannedNet: Decimal | null;
   /** verified Row 12 workbook allocations exist for this month */
   incomePresent: boolean;
@@ -656,8 +659,13 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
     let incomeTotal: Decimal | null = null;
     let expenseTotal: Decimal | null = null;
 
+    // Excel Row 16 formulas are populated only in V16:AJ16 — the first 15
+    // months of the window (Apr 2026 – Jun 2027). Later months (AK–AS) have
+    // no formula in the workbook, so no net is produced for them.
+    const ROW16_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
+
     const months: PlannedNetMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month, label }) => {
+      ({ year, month, label }, index) => {
         const inc = incomeMap.get(`${year}-${month}`);
         const exp = expenseMap.get(`${year}-${String(month).padStart(2, "0")}`);
 
@@ -680,8 +688,9 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
         // Excel =V12-V14 arithmetic: missing side treated as 0.
         // Only surfaced when at least one verified input exists — a month with
         // no verified data shows blank, not a fabricated zero.
+        const formulaCovered = index <= ROW16_LAST_COVERED_INDEX;
         const plannedNet =
-          incomePresent || expensePresent
+          formulaCovered && (incomePresent || expensePresent)
             ? (incomePresent
                 ? new Decimal(inc!.total.toString())
                 : new Decimal("0")
@@ -696,6 +705,7 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
           month,
           year,
           label,
+          formulaCovered,
           plannedNet,
           incomePresent,
           expensePresent,

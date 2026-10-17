@@ -303,6 +303,27 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
     expect(data.totalNet).toBeNull();
   });
 
+  it("computes net only inside the workbook formula range V16:AJ16 (T119)", async () => {
+    // Jun 2027 (AJ, index 14) is the last formula cell; Jul 2027 (AK, index 15)
+    // has no Row 16 formula in the workbook.
+    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
+      expRec("e-jun27", 6, 2027, "6.27"),
+      expRec("e-jul27", 7, 2027, "5.00"),
+    ] as any);
+    mockAuditLogEntries = [expProv("e-jun27"), expProv("e-jul27")];
+
+    const result = await getMonthlyPlannedNet();
+    const data = result.data as any;
+    const jun27 = monthAt(data, 14);
+    const jul27 = monthAt(data, 15);
+    expect(jun27.formulaCovered).toBe(true);
+    expect(jun27.plannedNet.toFixed(2)).toBe("-6.27"); // formula exists → computed
+    expect(jul27.formulaCovered).toBe(false);
+    expect(jul27.plannedNet).toBeNull(); // no formula → no value, even with input
+    // totalNet still spans the whole window (AU16 = AU12 − AU14)
+    expect(data.totalNet.toFixed(2)).toBe("-11.27");
+  });
+
   it("requires fundFlow read permission (T118)", async () => {
     vi.mocked(withPermission).mockImplementationOnce(async () => ({
       success: false,

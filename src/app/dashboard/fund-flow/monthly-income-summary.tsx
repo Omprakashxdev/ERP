@@ -33,6 +33,7 @@ interface PlannedNetMonth {
   month: number;
   year: number;
   label: string;
+  formulaCovered: boolean;
   plannedNet: { toString: () => string } | null;
   incomePresent: boolean;
   expensePresent: boolean;
@@ -272,7 +273,9 @@ export function MonthlyIncomeSummary() {
                   key={`${p.year}-${p.month}`}
                   className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
                   title={
-                    reasons.length > 0
+                    !p.formulaCovered
+                      ? "Workbook has no Row 16 formula for this month"
+                      : reasons.length > 0
                       ? `Incomplete: ${reasons.join("; ")}`
                       : "Planned net = monthly income − monthly expense"
                   }
