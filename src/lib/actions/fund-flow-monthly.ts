@@ -847,9 +847,17 @@ const monthlyPlanSchema = z.object({
   installments: z.number().int().min(1).max(24),
   startMonth: z.number().int().min(1).max(12),
   startYear: z.number().int().min(2000).max(2100),
+  /** Months ("YYYY-M") the user explicitly chose to replace with the
+      calculated amount. Absent = keep every existing value. */
+  replace: z.array(z.string().regex(/^\d{4}-\d{1,2}$/)).max(24).optional(),
 });
 
-export type MonthlyPlanStatus = "create" | "keep" | "blocked" | "outside";
+export type MonthlyPlanStatus =
+  | "create"
+  | "keep"
+  | "conflict"
+  | "blocked"
+  | "outside";
 
 export interface MonthlyPlanItem {
   month: number;
@@ -874,8 +882,12 @@ export interface MonthlyPlanPreview {
   items: MonthlyPlanItem[];
   createCount: number;
   keepCount: number;
+  conflictCount: number;
   blockedCount: number;
   outsideCount: number;
+  /** Saved allocations in window months beyond the workbook's Row 12–18
+      formula coverage (after Jul 2027 / AJ). Stored but not summarized. */
+  outsideCoverage: { month: number; year: number; label: string; amount: string }[];
   /** Present when the plan cannot be generated for this project. */
   unavailableReason: string | null;
 }
@@ -974,15 +986,17 @@ async function computeMonthlyPlan(
         "An older record without verified history occupies this month — left untouched";
     } else if (existing) {
       const income = new Decimal(existing.income.toString());
-      if (income.gt(0)) {
+      existingAmount = income.toString();
+      if (perMonth != null && income.equals(perMonth)) {
         status = "keep";
-        existingAmount = income.toString();
-        note = "Already has a value — kept unchanged";
+        note = "Already has this amount — kept unchanged";
       } else {
-        // Explicit zero income with verified provenance — treat as occupied.
-        status = "keep";
-        existingAmount = income.toString();
-        note = "Already entered as zero — kept unchanged";
+        // Different saved value — a conflict the user resolves explicitly.
+        status = "conflict";
+        note =
+          income.gt(0)
+            ? "Already has a different amount"
+            : "Already entered as zero";
       }
     }
 
@@ -1005,6 +1019,26 @@ async function computeMonthlyPlan(
     return acc ? acc.plus(v) : v;
   }, null);
 
+  // Saved allocations in window months beyond Row 12–18 formula coverage
+  // (coverage is V–AJ = the first 15 window months, Apr 2026 – Jul 2027).
+  const coverageKeySet = new Set(
+    MONTHLY_ALLOCATION_WINDOW.slice(0, 15).map(({ year, month }) => `${year}-${month}`)
+  );
+  const outsideCoverage = (fundFlow?.monthlyData ?? [])
+    .filter(
+      (m) =>
+        windowKeySet.has(`${m.year}-${m.month}`) &&
+        !coverageKeySet.has(`${m.year}-${m.month}`) &&
+        isSafeWorkbookRecord(m) &&
+        provenanceSet.has(m.id)
+    )
+    .map((m) => ({
+      month: m.month,
+      year: m.year,
+      label: labelFor(m.month, m.year),
+      amount: new Decimal(m.income.toString()).toString(),
+    }));
+
   return {
     basis: parsed.basis,
     basisLabel: BASIS_LABELS[parsed.basis],
@@ -1015,8 +1049,10 @@ async function computeMonthlyPlan(
     items,
     createCount: items.filter((i) => i.status === "create").length,
     keepCount: items.filter((i) => i.status === "keep").length,
+    conflictCount: items.filter((i) => i.status === "conflict").length,
     blockedCount: items.filter((i) => i.status === "blocked").length,
     outsideCount: items.filter((i) => i.status === "outside").length,
+    outsideCoverage,
     unavailableReason,
   };
 }
@@ -1032,7 +1068,7 @@ export async function previewMonthlyPlan(
 
 export async function applyMonthlyPlan(
   input: unknown
-): Promise<ActionResult<{ created: number; kept: number }>> {
+): Promise<ActionResult<{ created: number; kept: number; replaced: number }>> {
   return withPermission("fundFlow", "update", async (user) => {
     const parsed = monthlyPlanSchema.parse(input);
     await checkRateLimit(user.id);
@@ -1043,7 +1079,13 @@ export async function applyMonthlyPlan(
       throw new Error(preview.unavailableReason);
     }
     const toCreate = preview.items.filter((i) => i.status === "create");
-    if (toCreate.length === 0) {
+    const replaceSet = new Set(parsed.replace ?? []);
+    const toReplace = preview.items.filter(
+      (i) => i.status === "conflict" && replaceSet.has(`${i.year}-${i.month}`)
+    );
+    // Silently ignore replace keys that are not conflicts — nothing else
+    // may be overwritten.
+    if (toCreate.length === 0 && toReplace.length === 0) {
       throw new Error(
         "Nothing to save — every planned month already has a value or is outside the plan window."
       );
@@ -1062,6 +1104,7 @@ export async function applyMonthlyPlan(
     // Atomic: verify each target month is still empty inside the transaction,
     // create the record, then write its provenance audit entry — all or none.
     let created = 0;
+    let replaced = 0;
     await prisma.$transaction(async (tx) => {
       for (const item of toCreate) {
         const clash = await tx.fundFlowMonthly.findUnique({
@@ -1107,6 +1150,76 @@ export async function applyMonthlyPlan(
         });
         created++;
       }
+
+      for (const item of toReplace) {
+        const rec = await tx.fundFlowMonthly.findUnique({
+          where: {
+            fundFlowId_month_year: {
+              fundFlowId: fundFlow.id,
+              month: item.month,
+              year: item.year,
+            },
+          },
+        });
+        if (!rec) {
+          throw new Error(
+            `Month ${item.label} changed while you were reviewing — nothing was saved. Re-open the plan to see the latest values.`
+          );
+        }
+        if (!isSafeWorkbookRecord(rec)) {
+          throw new Error(
+            `Month ${item.label} is protected — left untouched. Nothing was saved.`
+          );
+        }
+        // Stale-update guard: saved amount must still equal what the user saw.
+        const current = new Decimal(rec.income.toString());
+        if (!current.equals(new Decimal(item.existingAmount!))) {
+          throw new Error(
+            `Month ${item.label} was changed to ${current.toString()} by someone else while you were reviewing — nothing was saved. Re-open the plan to see the latest values.`
+          );
+        }
+        const provCount = await tx.auditLog.count({
+          where: {
+            entity: "FundFlowMonthly",
+            entityId: rec.id,
+            action: "create",
+            metadata: {
+              path: ["source"],
+              equals: "ff-01k-workbook-allocation",
+            },
+          },
+        });
+        if (provCount === 0) {
+          throw new Error(
+            `Month ${item.label} has an ambiguous record without verified history — left untouched. Nothing was saved.`
+          );
+        }
+
+        const newAmount = new Decimal(item.plannedAmount!);
+        await tx.fundFlowMonthly.update({
+          where: { id: rec.id },
+          data: { income: newAmount },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: user.id,
+            action: "update",
+            entity: "FundFlowMonthly",
+            entityId: rec.id,
+            metadata: {
+              source: "ff-01k-workbook-allocation",
+              generatedBy: "monthly-income-plan",
+              oldValue: item.existingAmount,
+              newValue: item.plannedAmount,
+              planBasis: parsed.basis,
+              installments: parsed.installments,
+              startMonth: parsed.startMonth,
+              startYear: parsed.startYear,
+            },
+          },
+        });
+        replaced++;
+      }
     });
 
     await audit(user.id, "create", "FundFlow", fundFlow.id, {
@@ -1115,8 +1228,9 @@ export async function applyMonthlyPlan(
       basis: parsed.basis,
       installments: parsed.installments,
       monthsCreated: created,
+      monthsReplaced: replaced,
     });
 
-    return { created, kept: preview.keepCount };
+    return { created, kept: preview.keepCount + (preview.conflictCount - replaced), replaced };
   });
 }
