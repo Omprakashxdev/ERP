@@ -1,0 +1,160 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Decimal } from "@prisma/client/runtime/library";
+import {
+  previewMonthlyPlan,
+  applyMonthlyPlan,
+} from "../actions/fund-flow-monthly";
+import { prisma } from "@/lib/prisma";
+import { withPermission } from "../actions/wrapper";
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    project: { findUnique: vi.fn() },
+    fundFlow: { findUnique: vi.fn() },
+    fundFlowMonthly: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    auditLog: { findMany: vi.fn(), create: vi.fn() },
+    $transaction: vi.fn(),
+  },
+}));
+
+vi.mock("../actions/wrapper", () => ({
+  withPermission: vi.fn(),
+  checkRateLimit: vi.fn().mockResolvedValue(undefined),
+  audit: vi.fn().mockResolvedValue(undefined),
+  sanitizeForAudit: vi.fn(async (v: any) => v),
+}));
+
+const prismaMock = prisma as any;
+const PID = "c5s1d1g8e2f3h4i5j6k7l8m9";
+
+function setup(project: any, fundFlow: any, auditEntries: any[] = []) {
+  prismaMock.project.findUnique.mockResolvedValue(project);
+  prismaMock.fundFlow.findUnique.mockResolvedValue(fundFlow);
+  prismaMock.auditLog.findMany.mockResolvedValue(auditEntries);
+  prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+}
+
+describe("Monthly income plan (Phase 1)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(withPermission).mockImplementation(async (_r: any, _a: any, fn: any) => {
+      try {
+        return { success: true, data: await fn({ id: "user-1", role: "ADMIN" }) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Action failed" };
+      }
+    });
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+  });
+
+  it("preview: 49.9994 / 18 starting Jul 2026 -> 2.777744 each (row 6)", async () => {
+    setup(
+      { id: PID, name: "P1", totalFee: new Decimal("49.9994") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 18, startMonth: 7, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    const data = res.data!;
+    expect(data.perMonth).toBe("2.777744");
+    expect(data.createCount).toBe(18);
+    expect(data.plannedTotal).toBe("49.999392"); // 18 * 2.777744, within ±0.01 of 49.9994
+    for (const item of data.items) {
+      expect(item.status).toBe("create");
+      expect(item.plannedAmount).toBe("2.777744");
+    }
+    // months should be Jul 2026 .. Dec 2027
+    expect(data.items[0]).toMatchObject({ month: 7, year: 2026 });
+    expect(data.items[17]).toMatchObject({ month: 12, year: 2027 });
+  });
+
+  it("preview: remaining-fee basis uses totalFee - feeReceived (row 8)", async () => {
+    setup(
+      { id: PID, name: "P2", totalFee: new Decimal("10.11048") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "REMAINING_FEE", installments: 4, startMonth: 9, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.perMonth).toBe("2.52762");
+    expect(res.data!.createCount).toBe(4);
+    expect(res.data!.items.map((i: any) => [i.month, i.year])).toEqual([
+      [9, 2026], [10, 2026], [11, 2026], [12, 2026],
+    ]);
+  });
+
+  it("preview: fee-received basis (row 9: T9/2 = 3.43)", async () => {
+    setup(
+      { id: PID, name: "P3", totalFee: new Decimal("8.58") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("6.86"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "LEGACY_FEE_RECEIVED", installments: 2, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.perMonth).toBe("3.43");
+  });
+
+  it("apply: creates exactly the empty months, never overwrites (atomic via $transaction)", async () => {
+    const monthlyData = [
+      { id: "m-old", fundFlowId: "ff1", month: 7, year: 2026, income: new Decimal("5.5"), expense: new Decimal(0), net: new Decimal(0), cumulative: new Decimal(0) },
+    ];
+    setup(
+      { id: PID, name: "P1", totalFee: new Decimal("49.9994") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData }
+    );
+    prismaMock.auditLog.findMany.mockResolvedValue([
+      { entityId: "m-old", entity: "FundFlowMonthly", action: "create", metadata: { source: "ff-01k-workbook-allocation" } },
+    ]);
+    prismaMock.fundFlowMonthly.create.mockImplementation(async ({ data }: any) => ({ id: "new-" + data.month + "-" + data.year, ...data }));
+
+    const res = await applyMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 18, startMonth: 7, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    // Jul 2026 occupied -> kept; remaining 17 created
+    expect(res.data!.created).toBe(17);
+    expect(prismaMock.fundFlowMonthly.create).toHaveBeenCalledTimes(17);
+    // month 7/2026 was NOT overwritten
+    const calls = prismaMock.fundFlowMonthly.create.mock.calls.map((c: any) => c[0].data);
+    expect(calls.find((c: any) => c.month === 7 && c.year === 2026)).toBeUndefined();
+    // audit provenance written for each created record
+    expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(17);
+    expect(prismaMock.$transaction).toHaveBeenCalled();
+  });
+
+  it("rejects >6dp via server-side Decimal check is irrelevant here; plan stores round6", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("10.11048") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 4, startMonth: 9, startYear: 2026,
+    });
+    expect(res.data!.perMonth).toBe("2.52762");
+  });
+
+  it("empty basis: totalFee = 0 -> unavailableReason, nothing created", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("0") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 4, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.unavailableReason).toContain("total fee is zero");
+    const res2 = await applyMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 4, startMonth: 4, startYear: 2026,
+    });
+    expect(res2.success).toBe(false);
+    expect(prismaMock.fundFlowMonthly.create).not.toHaveBeenCalled();
+  });
+});

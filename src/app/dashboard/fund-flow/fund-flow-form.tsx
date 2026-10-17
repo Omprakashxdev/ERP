@@ -17,6 +17,10 @@ import { upsertFundFlow, getFundFlowByProjectId } from "@/lib/actions/fund-flow"
 import {
   getMonthlyAllocations,
   upsertMonthlyAllocation,
+  previewMonthlyPlan,
+  applyMonthlyPlan,
+  MonthlyPlanPreview,
+  PlanBasis,
 } from "@/lib/actions/fund-flow-monthly";
 import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
 import { FundFlowWithComputed } from "@/types/fund-flow";
@@ -132,6 +136,16 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
   >({});
   const [monthlyTotal, setMonthlyTotal] = useState<string | null>(null);
   const [monthlySaving, setMonthlySaving] = useState(false);
+
+  // Monthly income plan (Phase 1) state
+  const [planBasis, setPlanBasis] = useState<PlanBasis>("TOTAL_FEE");
+  const [planInstallments, setPlanInstallments] = useState("18");
+  const [planStart, setPlanStart] = useState(
+    `${MONTHLY_ALLOCATION_WINDOW[0].year}-${MONTHLY_ALLOCATION_WINDOW[0].month}`
+  );
+  const [planPreview, setPlanPreview] = useState<MonthlyPlanPreview | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planSaving, setPlanSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,6 +265,60 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
       }
     } finally {
       setMonthlyLoading(false);
+    }
+  }
+
+  function planInput() {
+    const [startYear, startMonth] = planStart.split("-").map(Number);
+    return {
+      projectId: project.id,
+      basis: planBasis,
+      installments: Math.max(1, Math.min(24, Number(planInstallments) || 1)),
+      startMonth,
+      startYear,
+    };
+  }
+
+  async function handlePreviewPlan() {
+    setPlanLoading(true);
+    setPlanPreview(null);
+    setError("");
+    try {
+      const result = await previewMonthlyPlan(planInput());
+      if (!result.success) {
+        setError(result.error ?? "Could not prepare the plan.");
+        return;
+      }
+      setPlanPreview(result.data ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not prepare the plan.");
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
+  async function handleConfirmPlan() {
+    setPlanSaving(true);
+    setError("");
+    try {
+      const result = await applyMonthlyPlan(planInput());
+      if (!result.success) {
+        setError(result.error ?? "Could not save the plan.");
+        toast.error(result.error ?? "Could not save the plan.");
+        return;
+      }
+      const created = result.data?.created ?? 0;
+      toast.success(
+        `Monthly plan saved — ${created} month${created === 1 ? "" : "s"} filled in.`
+      );
+      setPlanPreview(null);
+      await loadMonthlyAllocations();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save the plan.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setPlanSaving(false);
     }
   }
 
@@ -509,16 +577,181 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
           <div className="space-y-3">
             <h4 className="text-sm font-medium">
-              Monthly allocations (Apr 2026 – Mar 2028)
+              Monthly Income Plan (Apr 2026 – Mar 2028)
               {monthlyLoading && (
                 <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
               )}
             </h4>
             <p className="text-xs text-zinc-500">
+              Spread a fee evenly over a number of months — the same style used
+              in the customer workbook. You review the amounts before anything
+              is saved.
+            </p>
+
+            {/* Plan inputs */}
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="plan-basis">Spread which fee?</Label>
+                  <select
+                    id="plan-basis"
+                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
+                    value={planBasis}
+                    onChange={(e) => {
+                      setPlanBasis(e.target.value as PlanBasis);
+                      setPlanPreview(null);
+                    }}
+                  >
+                    <option value="TOTAL_FEE">Total fee</option>
+                    <option value="REMAINING_FEE">
+                      Remaining fee (total fee − fee received)
+                    </option>
+                    <option value="LEGACY_FEE_RECEIVED">
+                      Fee already received
+                    </option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="plan-months">Number of months</Label>
+                  <Input
+                    id="plan-months"
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={planInstallments}
+                    onChange={(e) => {
+                      setPlanInstallments(e.target.value);
+                      setPlanPreview(null);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="plan-start">Start month</Label>
+                  <select
+                    id="plan-start"
+                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
+                    value={planStart}
+                    onChange={(e) => {
+                      setPlanStart(e.target.value);
+                      setPlanPreview(null);
+                    }}
+                  >
+                    {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => (
+                      <option key={`${year}-${month}`} value={`${year}-${month}`}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="lg"
+                onClick={handlePreviewPlan}
+                disabled={planLoading || monthlyLoading}
+              >
+                {planLoading && (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                )}
+                Prepare monthly plan
+              </Button>
+            </div>
+
+            {/* Plan preview */}
+            {planPreview && (
+              <div className="rounded-md border border-zinc-200 bg-white p-3 space-y-3">
+                {planPreview.unavailableReason ? (
+                  <p className="text-sm text-amber-700">
+                    {planPreview.unavailableReason}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-zinc-700">
+                      {planPreview.basisLabel}:{" "}
+                      <span className="font-mono font-medium">
+                        {formatDecimalAsCurrency(planPreview.basisAmount)}
+                      </span>
+                      {" — each month gets "}
+                      <span className="font-mono font-medium">
+                        {formatDecimalAsCurrency(planPreview.perMonth)}
+                      </span>
+                      {` (${planPreview.basisLabel.toLowerCase().includes("received") ? "received" : "fee"} ÷ ${planPreview.installments}).`}
+                    </p>
+                    <div className="max-h-56 overflow-y-auto rounded border border-zinc-100">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1 p-2 text-sm">
+                        {planPreview.items.map((item) => (
+                          <div key={`${item.year}-${item.month}`} className="col-span-3 grid grid-cols-subgrid items-baseline">
+                            <span className="font-medium text-zinc-700">
+                              {item.label}
+                            </span>
+                            <span className="text-right font-mono">
+                              {item.plannedAmount != null
+                                ? formatDecimalAsCurrency(item.plannedAmount)
+                                : "—"}
+                            </span>
+                            <span
+                              className={`w-52 text-right text-xs ${
+                                item.status === "create"
+                                  ? "text-emerald-700"
+                                  : item.status === "keep"
+                                    ? "text-zinc-500"
+                                    : "text-amber-700"
+                              }`}
+                            >
+                              {item.note}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {planPreview.createCount} month
+                      {planPreview.createCount === 1 ? "" : "s"} will be filled
+                      {planPreview.keepCount > 0 &&
+                        `, ${planPreview.keepCount} kept as already entered`}
+                      {planPreview.blockedCount > 0 &&
+                        `, ${planPreview.blockedCount} left untouched (older record)`}
+                      {planPreview.outsideCount > 0 &&
+                        `, ${planPreview.outsideCount} outside the plan window`}
+                      .
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="lg"
+                        onClick={handleConfirmPlan}
+                        disabled={planSaving || planPreview.createCount === 0}
+                      >
+                        {planSaving && (
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        )}
+                        Confirm &amp; save
+                      </Button>
+                      <Button
+                        type="button"
+                        size="lg"
+                        variant="outline"
+                        onClick={() => setPlanPreview(null)}
+                        disabled={planSaving}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-500">
               Recorded monthly amounts from customer workbook. Kept separate from
               invoiced and settlement figures.
             </p>
 
+            <div className="space-y-2">
+              <h5 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Advanced — edit individual months
+              </h5>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
               {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => {
                 const key = `${year}-${String(month).padStart(2, "0")}`;
@@ -576,6 +809,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                   ? formatDecimalAsCurrency(monthlyTotal)
                   : "—"}
               </span>
+            </div>
             </div>
           </div>
 

@@ -828,3 +828,295 @@ export async function getMonthlyRunningBalance(): Promise<ActionResult<RunningBa
     return { months };
   });
 }
+
+// ─── Monthly Income Plan (Phase 1 — workbook-verified installment rules) ────
+//
+// Verified workbook rule shapes (Fund Flow sheet, rows 6/8/9):
+//   monthly amount = fee basis ÷ N installments, consecutive months.
+//   Verified bases: R = Total Fee (Y6:AP6 uses $R6/18), U = Remaining Fee
+//   (=R−T, e.g. Y6 uses $U6/18, AA8 uses $U8/4), T = legacy Fee Received
+//   (V9:W9 uses $T9/2). The ERP reproduces the rule *shape*; the user
+//   chooses the basis, count and start month — the workbook supplies no
+//   universal per-project rule, so nothing is auto-derived for new projects.
+
+export type PlanBasis = "TOTAL_FEE" | "REMAINING_FEE" | "LEGACY_FEE_RECEIVED";
+
+const monthlyPlanSchema = z.object({
+  projectId: z.string().cuid(),
+  basis: z.enum(["TOTAL_FEE", "REMAINING_FEE", "LEGACY_FEE_RECEIVED"]),
+  installments: z.number().int().min(1).max(24),
+  startMonth: z.number().int().min(1).max(12),
+  startYear: z.number().int().min(2000).max(2100),
+});
+
+export type MonthlyPlanStatus = "create" | "keep" | "blocked" | "outside";
+
+export interface MonthlyPlanItem {
+  month: number;
+  year: number;
+  label: string;
+  /** Planned amount as a 6dp string, or null if outside the window. */
+  plannedAmount: string | null;
+  /** Existing verified allocation (6dp string) if the month is occupied. */
+  existingAmount: string | null;
+  status: MonthlyPlanStatus;
+  note: string;
+}
+
+export interface MonthlyPlanPreview {
+  basis: PlanBasis;
+  basisLabel: string;
+  /** The fee figure used as the divisor source, or null if unavailable. */
+  basisAmount: string | null;
+  installments: number;
+  perMonth: string | null;
+  plannedTotal: string | null;
+  items: MonthlyPlanItem[];
+  createCount: number;
+  keepCount: number;
+  blockedCount: number;
+  outsideCount: number;
+  /** Present when the plan cannot be generated for this project. */
+  unavailableReason: string | null;
+}
+
+const BASIS_LABELS: Record<PlanBasis, string> = {
+  TOTAL_FEE: "Total fee",
+  REMAINING_FEE: "Remaining fee (total fee minus fee already received)",
+  LEGACY_FEE_RECEIVED: "Fee already received (legacy figure — unverified)",
+};
+
+function labelFor(month: number, year: number): string {
+  return new Date(year, month - 1, 1).toLocaleString("en-IN", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Compute the plan preview — shared by the read-only preview and the
+    atomic confirm so the client can never supply its own amounts. */
+async function computeMonthlyPlan(
+  parsed: z.infer<typeof monthlyPlanSchema>
+): Promise<MonthlyPlanPreview> {
+  const project = await prisma.project.findUnique({
+    where: { id: parsed.projectId },
+    select: { id: true, name: true, totalFee: true },
+  });
+  if (!project) throw new Error("Project not found.");
+
+  const fundFlow = await prisma.fundFlow.findUnique({
+    where: { projectId: parsed.projectId },
+    include: { monthlyData: true },
+  });
+
+  // Resolve the fee basis from existing ERP fields.
+  let basisAmount: Decimal | null = null;
+  let unavailableReason: string | null = null;
+  if (parsed.basis === "TOTAL_FEE") {
+    basisAmount = new Decimal(project.totalFee.toString());
+  } else {
+    if (!fundFlow) {
+      unavailableReason =
+        "This project has no fund flow record yet — save the financial details first, or enter monthly amounts manually.";
+    } else if (parsed.basis === "REMAINING_FEE") {
+      basisAmount = new Decimal(project.totalFee.toString()).minus(
+        new Decimal(fundFlow.feeReceived.toString())
+      );
+    } else {
+      basisAmount = new Decimal(fundFlow.feeReceived.toString());
+    }
+  }
+
+  if (!unavailableReason && basisAmount != null && basisAmount.lte(0)) {
+    unavailableReason =
+      parsed.basis === "LEGACY_FEE_RECEIVED"
+        ? "No received fee is recorded for this project, so a plan cannot be prepared from that figure. Choose another basis or enter amounts manually."
+        : parsed.basis === "REMAINING_FEE"
+          ? "The remaining fee is zero for this project — nothing left to distribute. Choose another basis or enter amounts manually."
+          : "The total fee is zero for this project — nothing to distribute. Enter amounts manually.";
+    basisAmount = null;
+  }
+
+  const perMonth =
+    basisAmount != null
+      ? basisAmount.div(parsed.installments).toDecimalPlaces(6)
+      : null;
+
+  const provenanceSet = fundFlow
+    ? await fetchProvenanceSet(fundFlow.monthlyData.map((m) => m.id))
+    : new Set<string>();
+  const byKey = new Map(
+    (fundFlow?.monthlyData ?? []).map((m) => [`${m.year}-${m.month}`, m])
+  );
+
+  const items: MonthlyPlanItem[] = [];
+  let cursor = { y: parsed.startYear, m: parsed.startMonth };
+  for (let i = 0; i < parsed.installments; i++) {
+    const { y, m } = cursor;
+    const key = `${y}-${m}`;
+    const label = labelFor(m, y);
+    const existing = byKey.get(key);
+
+    let status: MonthlyPlanStatus = "create";
+    let note = "Will be created";
+    let existingAmount: string | null = null;
+
+    if (!windowKeySet.has(key)) {
+      status = "outside";
+      note = "Outside the plan window (Apr 2026 – Mar 2028) — not created";
+    } else if (existing && !isSafeWorkbookRecord(existing)) {
+      status = "blocked";
+      note =
+        "An existing record with a different meaning occupies this month — left untouched";
+    } else if (existing && !provenanceSet.has(existing.id)) {
+      status = "blocked";
+      note =
+        "An older record without verified history occupies this month — left untouched";
+    } else if (existing) {
+      const income = new Decimal(existing.income.toString());
+      if (income.gt(0)) {
+        status = "keep";
+        existingAmount = income.toString();
+        note = "Already has a value — kept unchanged";
+      } else {
+        // Explicit zero income with verified provenance — treat as occupied.
+        status = "keep";
+        existingAmount = income.toString();
+        note = "Already entered as zero — kept unchanged";
+      }
+    }
+
+    items.push({
+      month: m,
+      year: y,
+      label,
+      plannedAmount: status === "outside" ? null : perMonth?.toString() ?? null,
+      existingAmount,
+      status,
+      note,
+    });
+
+    cursor = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
+  }
+
+  const plannedTotal = items.reduce<Decimal | null>((acc, item) => {
+    if (item.status !== "create" || item.plannedAmount == null) return acc;
+    const v = new Decimal(item.plannedAmount);
+    return acc ? acc.plus(v) : v;
+  }, null);
+
+  return {
+    basis: parsed.basis,
+    basisLabel: BASIS_LABELS[parsed.basis],
+    basisAmount: basisAmount?.toString() ?? null,
+    installments: parsed.installments,
+    perMonth: perMonth?.toString() ?? null,
+    plannedTotal: plannedTotal?.toString() ?? null,
+    items,
+    createCount: items.filter((i) => i.status === "create").length,
+    keepCount: items.filter((i) => i.status === "keep").length,
+    blockedCount: items.filter((i) => i.status === "blocked").length,
+    outsideCount: items.filter((i) => i.status === "outside").length,
+    unavailableReason,
+  };
+}
+
+export async function previewMonthlyPlan(
+  input: unknown
+): Promise<ActionResult<MonthlyPlanPreview>> {
+  return withPermission("fundFlow", "read", async () => {
+    const parsed = monthlyPlanSchema.parse(input);
+    return computeMonthlyPlan(parsed);
+  });
+}
+
+export async function applyMonthlyPlan(
+  input: unknown
+): Promise<ActionResult<{ created: number; kept: number }>> {
+  return withPermission("fundFlow", "update", async (user) => {
+    const parsed = monthlyPlanSchema.parse(input);
+    await checkRateLimit(user.id);
+
+    // Recompute server-side — the preview is advisory only.
+    const preview = await computeMonthlyPlan(parsed);
+    if (preview.unavailableReason) {
+      throw new Error(preview.unavailableReason);
+    }
+    const toCreate = preview.items.filter((i) => i.status === "create");
+    if (toCreate.length === 0) {
+      throw new Error(
+        "Nothing to save — every planned month already has a value or is outside the plan window."
+      );
+    }
+
+    const fundFlow = await prisma.fundFlow.findUnique({
+      where: { projectId: parsed.projectId },
+      select: { id: true },
+    });
+    if (!fundFlow) {
+      throw new Error(
+        "Save the project's financial details first — monthly allocations are stored on the fund flow record."
+      );
+    }
+
+    // Atomic: verify each target month is still empty inside the transaction,
+    // create the record, then write its provenance audit entry — all or none.
+    let created = 0;
+    await prisma.$transaction(async (tx) => {
+      for (const item of toCreate) {
+        const clash = await tx.fundFlowMonthly.findUnique({
+          where: {
+            fundFlowId_month_year: {
+              fundFlowId: fundFlow.id,
+              month: item.month,
+              year: item.year,
+            },
+          },
+        });
+        if (clash) {
+          throw new Error(
+            `Month ${labelFor(item.month, item.year)} was filled by someone else while you were reviewing — nothing was saved. Re-open the plan to see the latest values.`
+          );
+        }
+        const rec = await tx.fundFlowMonthly.create({
+          data: {
+            fundFlowId: fundFlow.id,
+            month: item.month,
+            year: item.year,
+            income: new Decimal(item.plannedAmount!),
+            expense: new Decimal("0.00"),
+            net: new Decimal("0.00"),
+            cumulative: new Decimal("0.00"),
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: user.id,
+            action: "create",
+            entity: "FundFlowMonthly",
+            entityId: rec.id,
+            metadata: {
+              source: "ff-01k-workbook-allocation",
+              generatedBy: "monthly-income-plan",
+              planBasis: parsed.basis,
+              installments: parsed.installments,
+              startMonth: parsed.startMonth,
+              startYear: parsed.startYear,
+            },
+          },
+        });
+        created++;
+      }
+    });
+
+    await audit(user.id, "create", "FundFlow", fundFlow.id, {
+      source: "monthly-income-plan",
+      projectId: parsed.projectId,
+      basis: parsed.basis,
+      installments: parsed.installments,
+      monthsCreated: created,
+    });
+
+    return { created, kept: preview.keepCount };
+  });
+}
