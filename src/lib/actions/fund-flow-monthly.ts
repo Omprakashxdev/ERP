@@ -733,3 +733,90 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
     };
   });
 }
+
+// ─── Planned Running Balance (FF-01O: Excel Row 18) ─────────────
+// V18: =V12-V14                  — first covered month, opening baseline 0
+// W18–AJ18: =<prev>+<inc>-<exp>  — carry-forward through Jun 2027
+// AK18–AT18: no formulas. AU18: no formula — no grand total exists.
+// The implied opening balance of 0 is the workbook's calculation baseline,
+// NOT a verified bank balance. Computed on read; never persisted.
+
+export interface RunningBalanceMonth {
+  month: number;
+  year: number;
+  label: string;
+  /** Excel Row 18 formulas exist only in V18:AJ18 (Apr 2026 – Jun 2027) */
+  formulaCovered: boolean;
+  /** carried balance for the month; null before the first verified input
+      or outside the workbook formula range */
+  runningBalance: Decimal | null;
+  /** covered months up to and including this one that lack a verified
+      input or had ambiguous records excluded (missing treated as 0) */
+  gapMonths: number;
+  /** true when the carried balance reflects incomplete source data */
+  incomplete: boolean;
+}
+
+export interface RunningBalanceResult {
+  months: RunningBalanceMonth[];
+  // No AU18: the workbook defines no grand total for the running balance.
+}
+
+export async function getMonthlyRunningBalance(): Promise<ActionResult<RunningBalanceResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const [incomeMap, expenseMap] = await Promise.all([
+      aggregateIncomeByMonth(),
+      loadExpenseMap(),
+    ]);
+
+    const ROW18_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
+
+    let running = new Decimal("0"); // workbook baseline: implied zero opening
+    let seenVerifiedInput = false;
+    let gapMonths = 0;
+
+    const months: RunningBalanceMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
+      ({ year, month, label }, index) => {
+        if (index > ROW18_LAST_COVERED_INDEX) {
+          return {
+            month,
+            year,
+            label,
+            formulaCovered: false,
+            runningBalance: null,
+            gapMonths: 0,
+            incomplete: false,
+          };
+        }
+
+        const inc = incomeMap.get(`${year}-${month}`);
+        const exp = expenseMap.get(`${year}-${String(month).padStart(2, "0")}`);
+
+        const incomePresent = (inc?.projectCount ?? 0) > 0;
+        const expensePresent = exp?.verified === true;
+        const excludedCount =
+          (inc?.unavailableCount ?? 0) + (exp && !exp.verified ? 1 : 0);
+
+        // Excel treats blank inputs as 0 in the running sum.
+        if (incomePresent) running = running.plus(inc!.total);
+        if (expensePresent) running = running.minus(exp!.amount);
+        if (incomePresent || expensePresent) seenVerifiedInput = true;
+        if (!incomePresent || !expensePresent || excludedCount > 0) gapMonths += 1;
+
+        return {
+          month,
+          year,
+          label,
+          formulaCovered: true,
+          runningBalance: seenVerifiedInput
+            ? new Decimal(running.toString())
+            : null,
+          gapMonths,
+          incomplete: gapMonths > 0,
+        };
+      }
+    );
+
+    return { months };
+  });
+}

@@ -9,6 +9,7 @@ import {
   getMonthlyExpenses,
   upsertMonthlyExpense,
   getMonthlyPlannedNet,
+  getMonthlyRunningBalance,
 } from "@/lib/actions/fund-flow-monthly";
 
 interface IncomeMonth {
@@ -41,6 +42,16 @@ interface PlannedNetMonth {
   incomplete: boolean;
 }
 
+interface RunningBalanceMonth {
+  month: number;
+  year: number;
+  label: string;
+  formulaCovered: boolean;
+  runningBalance: { toString: () => string } | null;
+  gapMonths: number;
+  incomplete: boolean;
+}
+
 /** Convert a Decimal-like value to an input-safe string without Number() precision loss. */
 function decimalToInputString(value: unknown): string {
   if (value == null) return "";
@@ -61,16 +72,19 @@ export function MonthlyIncomeSummary() {
   const [planned, setPlanned] = useState<PlannedNetMonth[]>([]);
   const [plannedTotal, setPlannedTotal] = useState<string | null>(null);
   const [plannedIncomplete, setPlannedIncomplete] = useState(false);
+  const [running, setRunning] = useState<RunningBalanceMonth[]>([]);
   const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const [incomeResult, expenseResult, netResult] = await Promise.all([
-        getMonthlyIncomeSummary(),
-        getMonthlyExpenses(),
-        getMonthlyPlannedNet(),
-      ]);
+      const [incomeResult, expenseResult, netResult, balResult] =
+        await Promise.all([
+          getMonthlyIncomeSummary(),
+          getMonthlyExpenses(),
+          getMonthlyPlannedNet(),
+          getMonthlyRunningBalance(),
+        ]);
       if (incomeResult.success && incomeResult.data) {
         setSummary(incomeResult.data);
       }
@@ -91,6 +105,9 @@ export function MonthlyIncomeSummary() {
         setPlanned(data.months);
         setPlannedTotal(decimalToInputString(data.totalNet) || null);
         setPlannedIncomplete(data.totalIncomplete);
+      }
+      if (balResult.success && balResult.data) {
+        setRunning((balResult.data as { months: RunningBalanceMonth[] }).months);
       }
     } finally {
       setLoading(false);
@@ -141,7 +158,7 @@ export function MonthlyIncomeSummary() {
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium">
-            Monthly Income, Expense &amp; Planned Net (Rows 12, 14 &amp; 16)
+            Monthly Income, Expense &amp; Planned Balances (Rows 12–18)
             <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
           </CardTitle>
         </CardHeader>
@@ -161,13 +178,15 @@ export function MonthlyIncomeSummary() {
     <Card className="shadow-sm">
       <CardHeader>
         <CardTitle className="text-sm font-medium">
-          Monthly Income, Expense &amp; Planned Net (Rows 12, 14 &amp; 16)
+          Monthly Income, Expense &amp; Planned Balances (Rows 12–18)
         </CardTitle>
         <p className="text-xs text-zinc-500">
           Income: verified workbook allocations summed across projects. Expenses:
           worksheet-level manually entered monthly plan (units as entered — not
-          assumed). Planned Net = income − expenses; a plan figure, not verified
-          cash flow or bank balance. Blank = unentered, distinct from zero.{" "}
+          assumed). Planned Net = income − expenses; Planned Running Balance
+          carries the prior month forward from an implied zero baseline. These
+          are plan figures — not verified cash flow or bank balances. Blank =
+          unentered, distinct from zero.{" "}
           <span className="text-amber-600">*</span> marks months where inputs are
           missing or ambiguous records were excluded — not fully reconciled.
         </p>
@@ -299,6 +318,38 @@ export function MonthlyIncomeSummary() {
               {plannedIncomplete && plannedTotal != null && (
                 <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
               )}
+            </div>
+
+            {/* Row 18 — Planned Running Balance (carry-forward, display only).
+                Workbook has no AU18 total; the Total column shows "—". */}
+            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
+              Planned Running Balance (Row 18 — carries prior month + net)
+            </div>
+            {running.map((r) => (
+              <div
+                key={`${r.year}-${r.month}`}
+                className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
+                title={
+                  !r.formulaCovered
+                    ? "Workbook has no Row 18 formula for this month"
+                    : r.incomplete
+                    ? `Incomplete: balance carries ${r.gapMonths} month(s) with missing or excluded inputs — a plan figure, not a verified bank balance`
+                    : "Planned running balance — a plan figure, not a verified bank balance"
+                }
+              >
+                {r.runningBalance != null
+                  ? decimalToInputString(r.runningBalance)
+                  : "—"}
+                {r.incomplete && r.runningBalance != null && (
+                  <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+                )}
+              </div>
+            ))}
+            <div
+              className="flex h-8 items-center justify-end px-1 font-mono text-zinc-400"
+              title="No workbook formula (AU18 is empty) — running balance has no grand total"
+            >
+              —
             </div>
           </div>
         </div>
