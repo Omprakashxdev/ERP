@@ -4,7 +4,7 @@ import {
   ProjectRole,
   ProjectStatus,
 } from "@prisma/client";
-import { cleanedString, money, months, optionalCuid } from "./shared";
+import { cleanedString, money, moneyHighPrecision, months, optionalCuid } from "./shared";
 
 export const projectAssignmentSchema = z.object({
   staffId: z.string().cuid(),
@@ -44,7 +44,7 @@ export const projectCreateSchema = z.object({
   stipulatedCompletionDate: z.coerce.date().optional().nullable(),
   targetCompletionDate: z.coerce.date().optional().nullable(),
   estimatedCost: money.default(new Prisma.Decimal("0.00")),
-  totalFee: money.default(new Prisma.Decimal("0.00")),
+  totalFee: moneyHighPrecision.default(new Prisma.Decimal("0.00")),
   status: z.nativeEnum(ProjectStatus).default(ProjectStatus.ACTIVE),
   workType: z.string(),
   serviceType: z.string(),

@@ -54,15 +54,16 @@ interface RunningBalanceMonth {
   incomplete: boolean;
 }
 
-/** Convert a Decimal-like value to an input-safe string without Number() precision loss. */
-function decimalToInputString(value: unknown): string {
+/** Convert a Decimal-like value to an input-safe string without Number() precision loss.
+    maxFrac defaults to 6 to preserve DECIMAL(23,6) fee/allocation precision. */
+function decimalToInputString(value: unknown, maxFrac = 6): string {
   if (value == null) return "";
   const s = typeof value === "string" ? value : String(value);
   if (s === "" || s === "null" || s === "undefined") return "";
   if (!s.includes(".")) return `${s}.00`;
   const [intPart, fracPart] = s.split(".");
   if (fracPart.length === 1) return `${intPart}.${fracPart}0`;
-  if (fracPart.length > 2) return `${intPart}.${fracPart.slice(0, 2)}`;
+  if (fracPart.length > maxFrac) return `${intPart}.${fracPart.slice(0, maxFrac)}`;
   return s;
 }
 
@@ -225,10 +226,7 @@ export function MonthlyIncomeSummary() {
                 }
               >
                 {totalIncome != null
-                  ? `₹${Number(totalIncome.toString()).toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`
+                  ? `₹${decimalToInputString(totalIncome)}`
                   : "—"}
                 {formulaCovered && unavailableCount > 0 && (
                   <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
@@ -263,13 +261,13 @@ export function MonthlyIncomeSummary() {
                   <input
                     type="text"
                     inputMode="decimal"
-                    defaultValue={decimalToInputString(e.amount)}
+                    defaultValue={decimalToInputString(e.amount, 2)}
                     disabled={e.unavailable === true || saving}
                     placeholder="—"
                     className="h-7 w-full rounded border border-zinc-200 bg-white px-1 text-right font-mono text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-400 focus:border-zinc-400 focus:outline-none"
                     onBlur={(ev) => {
                       const v = ev.target.value.trim();
-                      if (v === decimalToInputString(e.amount)) return;
+                      if (v === decimalToInputString(e.amount, 2)) return;
                       void saveExpense(e.month, e.year, v, e.updatedAt);
                     }}
                   />

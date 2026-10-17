@@ -839,9 +839,12 @@ async function autoCreateProjectFromImport(name: string, row: Record<string, str
   const stipulatedCompletionDate = addMonths(workOrderDate, timeLimitMonths);
   const targetCompletionDate = addMonths(workOrderDate, targetTimeLimitMonths);
 
-  const rawFee = row["project_totalFee"] ?? row["totalFee"] ?? row["proposedDueBillAmount"] ?? "0";
-  const feeNum = parseFloat(rawFee);
-  const totalFee = new Decimal(isNaN(feeNum) ? 0 : feeNum);
+  const rawFee = String(
+    row["project_totalFee"] ?? row["totalFee"] ?? row["proposedDueBillAmount"] ?? "0"
+  ).trim();
+  const totalFee = /^-?\d+(\.\d+)?$/.test(rawFee)
+    ? new Decimal(rawFee)
+    : new Decimal("0");
 
   const rawCost = row["totalProjectCost"] ?? row["project_estimatedCost"] ?? "0";
   const costNum = parseFloat(rawCost);

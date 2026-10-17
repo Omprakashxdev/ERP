@@ -29,6 +29,32 @@ export const positiveMoney = money.refine(
   "Amount must be non-negative"
 );
 
+/**
+ * High-precision money for Excel Fund Flow fee/allocation fields
+ * (Project.totalFee, FundFlowMonthly.income — DECIMAL(23,6)).
+ * Accepts up to 6 fractional digits; rejects more explicitly rather than
+ * relying on Postgres to silently round. String-parsed to avoid the
+ * precision loss of Number().toFixed().
+ */
+export const moneyHighPrecision = z
+  .union([z.string(), z.number()])
+  .transform((value) => (typeof value === "string" ? sanitizeInput(value) : String(value)))
+  .superRefine((value, ctx) => {
+    const s = value.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(s)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid amount" });
+      return;
+    }
+    const frac = (s.split(".")[1] ?? "").replace(/0+$/, "");
+    if (frac.length > 6) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Amount must have up to 6 decimal places",
+      });
+    }
+  })
+  .transform((value) => new Prisma.Decimal(value.trim()));
+
 export const months = z
   .union([z.string(), z.number()])
   .transform(toNumber)

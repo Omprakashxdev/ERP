@@ -45,19 +45,44 @@ function formatMoney(value: unknown): string {
   })}`;
 }
 
-/** Convert a Decimal-like value to an input-safe string without Number() precision loss. */
-function decimalToInputString(value: unknown): string {
+/** Convert a Decimal-like value to an input-safe string without Number() precision loss.
+    maxFrac defaults to 6 to preserve DECIMAL(23,6) fee/allocation precision. */
+function decimalToInputString(value: unknown, maxFrac = 6): string {
   if (value == null) return "";
   const s = typeof value === "string" ? value : String(value);
   if (s === "" || s === "null" || s === "undefined") return "";
   if (!s.includes(".")) return `${s}.00`;
   const [intPart, fracPart] = s.split(".");
   if (fracPart.length === 1) return `${intPart}.${fracPart}0`;
-  if (fracPart.length > 2) return `${intPart}.${fracPart.slice(0, 2)}`;
+  if (fracPart.length > maxFrac) return `${intPart}.${fracPart.slice(0, maxFrac)}`;
   return s;
 }
 
-/** Format a decimal-string as Indian-locale currency without Number() precision loss. */
+/** Subtract two non-negative decimal strings, string-arithmetic only. */
+function subtractDecimals(a: string, b: string): string {
+  const parse = (v: string) => {
+    const s = /^-?\d+(\.\d+)?$/.test(v) ? v : "0";
+    const neg = s.startsWith("-");
+    const [i, f = ""] = (neg ? s.slice(1) : s).split(".");
+    return { neg, i, f };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  const fracLen = Math.max(pa.f.length, pb.f.length);
+  const ten = BigInt(10);
+  const fracMask = ten ** BigInt(fracLen);
+  const ai = BigInt(pa.i) * fracMask + BigInt(pa.f.padEnd(fracLen, "0") || "0");
+  const bi = BigInt(pb.i) * fracMask + BigInt(pb.f.padEnd(fracLen, "0") || "0");
+  const diff = (pa.neg ? -ai : ai) - (pb.neg ? -bi : bi);
+  const negOut = diff < BigInt(0);
+  const abs = negOut ? -diff : diff;
+  const intPart = (abs / fracMask).toString();
+  const fracPart = (abs % fracMask).toString().padStart(fracLen, "0");
+  return `${negOut ? "-" : ""}${intPart}${fracLen > 0 ? "." + fracPart : ""}`;
+}
+
+/** Format a decimal-string as Indian-locale currency without Number() precision loss.
+    Preserves up to 6 fractional digits (DECIMAL(23,6) allocation values). */
 function formatDecimalAsCurrency(value: unknown): string {
   if (value == null || value === "") return "—";
   const s = typeof value === "string" ? value : String(value);
@@ -65,7 +90,7 @@ function formatDecimalAsCurrency(value: unknown): string {
   const negative = s.startsWith("-");
   const absS = negative ? s.slice(1) : s;
   const [intStr, fracStr = "00"] = absS.split(".");
-  const frac = (fracStr + "00").slice(0, 2);
+  const frac = fracStr.length <= 2 ? (fracStr + "00").slice(0, 2) : fracStr.slice(0, 6);
   const digits = intStr.replace(/^0+/, "") || "0";
   if (digits.length <= 3) {
     return `${negative ? "-" : ""}₹${digits}.${frac}`;
@@ -177,9 +202,12 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
   }, [form.totalProjectCost, form.completedWorkAmt]);
 
   const remainingFee = useMemo(() => {
-    const total = Number(project.totalFee) || 0;
-    const received = Number(form.feeReceived) || 0;
-    return total - received;
+    // String-based decimal subtraction — totalFee is DECIMAL(23,6);
+    // Number() loses precision beyond 15 significant digits.
+    const total = String(project.totalFee ?? "0");
+    const rawReceived = form.feeReceived.trim() || "0";
+    const received = /^-?\d+(\.\d+)?$/.test(rawReceived) ? rawReceived : "0";
+    return subtractDecimals(total, received);
   }, [project.totalFee, form.feeReceived]);
 
   function updateField(key: keyof typeof form, value: string) {
@@ -396,10 +424,7 @@ export function FundFlowForm({ project, onClose }: FundFlowFormProps) {
             <div className="rounded-md bg-zinc-50 p-3">
               <p className="text-xs text-zinc-500">Legacy remaining fee — unverified</p>
               <p className="font-mono font-medium">
-                ₹{remainingFee.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {formatDecimalAsCurrency(remainingFee)}
               </p>
             </div>
           </div>

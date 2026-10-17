@@ -237,13 +237,18 @@ export async function upsertMonthlyAllocation(
       return { id: existing?.id ?? "" };
     }
 
-    // Validate amount is a valid decimal
+    // Validate amount is a valid decimal with at most 6 fractional digits
+    // (income column is DECIMAL(23,6)); Postgres would silently round
+    // beyond that, so reject explicitly instead.
     let amountDecimal: Decimal;
     try {
       amountDecimal = new Decimal(parsed.amount);
       if (!amountDecimal.isFinite()) throw new Error();
     } catch {
       throw new Error("Invalid monetary amount.");
+    }
+    if (amountDecimal.decimalPlaces() > 6) {
+      throw new Error("Amount must have up to 6 decimal places.");
     }
 
     if (existing) {
@@ -546,6 +551,11 @@ export async function upsertMonthlyExpense(
       if (!amountDecimal.isFinite()) throw new Error();
     } catch {
       throw new Error("Invalid monetary amount.");
+    }
+    // Expense column remains DECIMAL(19,2); reject >2dp explicitly rather
+    // than letting Postgres silently round.
+    if (amountDecimal.decimalPlaces() > 2) {
+      throw new Error("Amount must have up to 2 decimal places.");
     }
 
     if (existing) {

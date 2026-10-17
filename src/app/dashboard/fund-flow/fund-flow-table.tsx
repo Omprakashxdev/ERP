@@ -59,13 +59,23 @@ function formatDate(value: Date | string | null | undefined): string {
   });
 }
 
-function formatMoney(value: Decimal | string | number | null | undefined): string {
+function formatMoney(
+  value: Decimal | string | number | null | undefined,
+  maxDecimals = 2
+): string {
   if (value === null || value === undefined) return "—";
-  const num = typeof value === "string" ? Number(value) : Number(value);
-  return `₹${num.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const s = String(value);
+  // String-based fractional formatting to preserve Decimal(23,6) values
+  // without Number() precision loss on large magnitudes.
+  const negative = s.startsWith("-");
+  const [intStr, fracStr = ""] = (negative ? s.slice(1) : s).split(".");
+  const frac = fracStr.length <= 2 ? fracStr.padEnd(2, "0") : fracStr.slice(0, maxDecimals);
+  const intDigits = intStr.replace(/^0+/, "") || "0";
+  const grouped =
+    intDigits.length <= 3
+      ? intDigits
+      : `${intDigits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",")},${intDigits.slice(-3)}`;
+  return `${negative ? "-" : ""}₹${grouped}.${frac}`;
 }
 
 function formatMonths(value: Decimal | string | number | null | undefined): string {
@@ -225,7 +235,7 @@ export function FundFlowTable({
                     {formatMoney(row.remainingWorkAmt)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.totalFee)}
+                    {formatMoney(row.totalFee, 6)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono">
                     {formatMoney(row.fundFlow?.proposedDueBillAmount)}
@@ -234,7 +244,7 @@ export function FundFlowTable({
                     {formatMoney(row.fundFlow?.feeReceived)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono">
-                    {formatMoney(row.remainingFee)}
+                    {formatMoney(row.remainingFee, 6)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <Badge

@@ -618,7 +618,7 @@ model Project {
   stipulatedCompletionDate DateTime?
   targetCompletionDate     DateTime?
   estimatedCost            Decimal       @db.Decimal(19, 2) @default("0.00")
-  totalFee                 Decimal       @db.Decimal(19, 2) @default("0.00")
+  totalFee                 Decimal       @db.Decimal(23, 6) @default("0.00")
   status                   ProjectStatus @default(ACTIVE)
   workType                 String
   serviceType              String
@@ -1212,7 +1212,7 @@ model FundFlowMonthly {
   fundFlowId String
   month     Int      // 1-12
   year      Int
-  income    Decimal  @db.Decimal(19, 2) @default("0.00")
+  income    Decimal  @db.Decimal(23, 6) @default("0.00")
   expense   Decimal  @db.Decimal(19, 2) @default("0.00")
   net       Decimal  @db.Decimal(19, 2) @default("0.00")
   cumulative Decimal @db.Decimal(19, 2) @default("0.00")

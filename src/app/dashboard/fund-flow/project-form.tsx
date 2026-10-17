@@ -74,6 +74,32 @@ function toMoneyString(value: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2) : "";
 }
 
+/** Decimal-string-preserving formatter for DECIMAL(23,6) fields (totalFee). */
+function toHighPrecisionMoneyString(value: unknown): string {
+  if (value == null) return "";
+  const s = String(value);
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return "";
+  const [intPart, fracPart = ""] = s.split(".");
+  return fracPart.length > 0 ? `${intPart}.${fracPart}` : `${intPart}.00`;
+}
+
+/** Display a DECIMAL(23,6) fee string with Indian grouping, preserving up to 6
+    fractional digits without Number() precision loss. */
+function formatHighPrecisionMoney(value: string): string {
+  const s = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return "0.00";
+  const negative = s.startsWith("-");
+  const [intStr, fracStr = ""] = (negative ? s.slice(1) : s).split(".");
+  const frac =
+    fracStr.length <= 2 ? fracStr.padEnd(2, "0") : fracStr.slice(0, 6);
+  const digits = intStr.replace(/^0+/, "") || "0";
+  const grouped =
+    digits.length <= 3
+      ? digits
+      : `${digits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",")},${digits.slice(-3)}`;
+  return `${negative ? "-" : ""}${grouped}.${frac}`;
+}
+
 function toMonthsString(value: unknown): string {
   if (value == null) return "";
   const n = Number(value);
@@ -120,7 +146,7 @@ function getInitialForm(project?: FundFlowWithComputed) {
     stipulatedCompletionDate: toInputDate(project.stipulatedCompletionDate),
     targetCompletionDate: toInputDate(project.targetCompletionDate),
     estimatedCost: toMoneyString(project.estimatedCost),
-    totalFee: toMoneyString(project.totalFee),
+    totalFee: toHighPrecisionMoneyString(project.totalFee),
     status: project.status,
     workType: project.workType,
     serviceType: project.serviceType,
@@ -627,7 +653,7 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                     <Input
                       id="totalFee"
                       type="number"
-                      step="0.01"
+                      step="0.000001"
                       value={form.totalFee}
                       onChange={(e) => updateField("totalFee", e.target.value)}
                     />
@@ -862,7 +888,7 @@ export function ProjectForm({ project, mode, onClose }: ProjectFormProps) {
                         <div className="text-zinc-500">
                           Project Total Fee:{" "}
                           <span className="font-mono font-medium text-zinc-800">
-                            ₹{parseFloat(form.totalFee || "0").toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            ₹{formatHighPrecisionMoney(form.totalFee || "0")}
                           </span>
                         </div>
                       </div>
