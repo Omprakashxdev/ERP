@@ -19,6 +19,7 @@ const assetBaseSchema = z.object({
   assigneeStaffId: optionalCuid,
   assignedQuantity: positiveMoney.optional().nullable(),
   responsiblePerson: cleanedString(120).optional().nullable(),
+  responsiblePersonId: cleanedString(50).optional().nullable(),
 
   status: z.nativeEnum(AssetStatus).default(AssetStatus.AVAILABLE),
   remarks: cleanedString(500).optional().nullable(),

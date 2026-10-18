@@ -234,6 +234,7 @@ model Staff {
   assetMovementsFrom     AssetMovement[]        @relation("AssetMovementFrom")
   assetMovementsTo       AssetMovement[]        @relation("AssetMovementTo")
   heldAssets             Asset[]                @relation("AssetCurrentHolder")
+  responsibleAssets      Asset[]                @relation("AssetResponsiblePerson")
   forwardsReceived      ForwardRecord[]        @relation("ForwardToStaff")
   employeeDetail         EmployeeDetail?
   attendance             Attendance[]
@@ -519,7 +520,8 @@ model Asset {
   assigneeType      String?     // "PERSON" or "OFFICE"
   assignee          String?     // Person name or Office name
   assignedQuantity  Decimal?    @db.Decimal(10, 2)
-  responsiblePerson String?
+  responsiblePerson String?    // readable name — kept for display/back-compat
+  responsiblePersonId String?   // stable staff identity (Phase P3)
 
   currentHolderId   String?
   status            AssetStatus @default(AVAILABLE)
@@ -530,6 +532,7 @@ model Asset {
 
   movements         AssetMovement[]
   currentHolder     Staff?      @relation("AssetCurrentHolder", fields: [currentHolderId], references: [id], onDelete: SetNull)
+  responsibleStaff  Staff?      @relation("AssetResponsiblePerson", fields: [responsiblePersonId], references: [id], onDelete: SetNull)
 
   @@index([category])
   @@index([status])

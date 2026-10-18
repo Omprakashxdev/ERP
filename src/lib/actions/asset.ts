@@ -102,6 +102,19 @@ export async function createAsset(
       status = AssetStatus.ASSIGNED;
     }
 
+    // Stable responsible-person identity: when the form sends a staff id,
+    // verify it and keep the readable name in sync. A bare name is kept
+    // as text only — never guessed into an id.
+    let responsiblePersonName = parsed.responsiblePerson;
+    if (parsed.responsiblePersonId) {
+      const responsible = await prisma.staff.findUnique({
+        where: { id: parsed.responsiblePersonId },
+        select: { name: true },
+      });
+      if (!responsible) throw new Error("Selected responsible person not found");
+      responsiblePersonName = responsible.name;
+    }
+
     const { assigneeStaffId: _aid, ...rest } = parsed;
     const asset = await prisma.asset.create({
       data: {
@@ -118,6 +131,7 @@ export async function createAsset(
             : parsed.assignee),
         status,
         currentHolderId,
+        responsiblePerson: responsiblePersonName,
         itemCode: generateItemCode(),
         securityCode,
       },
@@ -186,6 +200,15 @@ export async function updateAsset(
       (Number(data.assignedQuantity ?? 0) > 0 || data.assignee)
     ) {
       status = AssetStatus.ASSIGNED;
+    }
+
+    if (data.responsiblePersonId) {
+      const responsible = await prisma.staff.findUnique({
+        where: { id: data.responsiblePersonId },
+        select: { name: true },
+      });
+      if (!responsible) throw new Error("Selected responsible person not found");
+      data.responsiblePerson = responsible.name;
     }
 
     const { assigneeStaffId: _assigneeStaffId, ...rest } = data;

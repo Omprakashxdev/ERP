@@ -128,3 +128,44 @@ describe("Asset integrity (Phase 4D)", () => {
     expect(bad.error).toContain("staff member");
   });
 });
+
+it("stores stable responsible-person id and keeps the readable name in sync", async () => {
+  const { createAsset } = await import("../actions/asset");
+  vi.mocked(withPermission).mockImplementation(async (_r: any, _a: any, fn: any) => {
+    const data = await fn({ id: "u1", role: "ADMIN", email: "a@x.com" });
+    return { success: true, data };
+  });
+  prismaMock.staff.findUnique.mockResolvedValue({ id: STAFF_ID, name: "Foram Shah" });
+  prismaMock.asset.count.mockResolvedValue(0);
+  prismaMock.asset.create.mockResolvedValue({ id: ASSET_ID });
+  const res = await createAsset({
+    name: "Fan",
+    category: "Electronics",
+    quantity: 1,
+    responsiblePersonId: STAFF_ID,
+    quantity: 1,
+  } as any);
+  expect(res.success).toBe(true);
+  const data = prismaMock.asset.create.mock.calls[0][0].data;
+  expect(data.responsiblePersonId).toBe(STAFF_ID);
+  expect(data.responsiblePerson).toBe("Foram Shah"); // resolved server-side
+});
+
+it("rejects a responsible-person id that matches no staff member", async () => {
+  const { createAsset } = await import("../actions/asset");
+  vi.mocked(withPermission).mockImplementation(async (_r: any, _a: any, fn: any) => {
+    const data = await fn({ id: "u1", role: "ADMIN", email: "a@x.com" });
+    return { success: true, data };
+  });
+  prismaMock.asset.count.mockResolvedValue(0);
+  prismaMock.staff.findUnique.mockResolvedValue(null);
+  await expect(
+    createAsset({
+      name: "Fan",
+      category: "Electronics",
+      quantity: 1,
+      responsiblePersonId: "bogus-staff",
+      quantity: 1,
+    } as any)
+  ).rejects.toThrow("responsible person");
+});

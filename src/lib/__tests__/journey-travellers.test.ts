@@ -38,7 +38,7 @@ describe("JourneyLog travellers (P2 stable staff identity)", () => {
     prismaMock.vehicle.findUnique.mockResolvedValue(VEHICLE);
     prismaMock.journeyLog.create.mockResolvedValue({ id: "cjour00000000000000000001" });
     prismaMock.journeyLog.update.mockResolvedValue({ id: "cjour00000000000000000001" });
-    prismaMock.journeyLog.findUnique.mockResolvedValue({ id: "cjour00000000000000000001", startKm: 100, endKm: 150 });
+    prismaMock.journeyLog.findUnique.mockResolvedValue({ id: "cjour00000000000000000001", startKm: { toString: () => "100" }, endKm: { toString: () => "150" } });
     prismaMock.journeyLogTraveller.findMany.mockResolvedValue([]);
   });
 
@@ -46,9 +46,10 @@ describe("JourneyLog travellers (P2 stable staff identity)", () => {
     const { createJourneyLog } = await import("../actions/vehicle-log-book");
     await createJourneyLog({
       ...BASE,
+      approvalStatus: "PENDING",
       personsTravelling: "Foram Shah, Neha Mehta",
       travellerStaffIds: ["csaaaaaaa", "csbbbbbbb"],
-    });
+    } as any);
     const data = prismaMock.journeyLog.create.mock.calls[0][0].data;
     expect(data.travellers.create.map((t: any) => t.staffId)).toEqual([
       "csaaaaaaa",
@@ -67,7 +68,7 @@ describe("JourneyLog travellers (P2 stable staff identity)", () => {
     await updateJourneyLog({
       id: "cjour00000000000000000001",
       travellerStaffIds: ["cs-keep", "cs-new"],
-    });
+    } as any);
     expect(prismaMock.journeyLogTraveller.deleteMany).toHaveBeenCalledWith({
       where: { journeyLogId: "cjour00000000000000000001", staffId: { in: ["cs-old"] } },
     });
@@ -78,7 +79,7 @@ describe("JourneyLog travellers (P2 stable staff identity)", () => {
 
   it("omitting travellerStaffIds leaves existing travellers untouched", async () => {
     const { updateJourneyLog } = await import("../actions/vehicle-log-book");
-    await updateJourneyLog({ id: "cjour00000000000000000001", endKm: 160 });
+    await updateJourneyLog({ id: "cjour00000000000000000001", endKm: 160 } as any);
     expect(prismaMock.journeyLogTraveller.findMany).not.toHaveBeenCalled();
     expect(prismaMock.journeyLogTraveller.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.journeyLogTraveller.createMany).not.toHaveBeenCalled();

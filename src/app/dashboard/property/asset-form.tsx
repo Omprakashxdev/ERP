@@ -65,6 +65,7 @@ function getInitialForm(asset?: Asset) {
       assigneeStaffId: "",
       assignedQuantity: "",
       responsiblePerson: "",
+      responsiblePersonId: "",
       status: AssetStatus.AVAILABLE,
       remarks: "",
     };
@@ -83,6 +84,7 @@ function getInitialForm(asset?: Asset) {
     assigneeStaffId: (asset as any).currentHolderId ?? "",
     assignedQuantity: toQuantityString(asset.assignedQuantity),
     responsiblePerson: asset.responsiblePerson ?? "",
+    responsiblePersonId: (asset as any).responsiblePersonId ?? "",
     status: asset.status,
     remarks: asset.remarks ?? "",
   };
@@ -139,6 +141,7 @@ export function AssetForm({
         form.assigneeType === "PERSON" ? form.assigneeStaffId || null : null,
       assignedQuantity: form.assignedQuantity || null,
       responsiblePerson: emptyToNull(form.responsiblePerson),
+      responsiblePersonId: emptyToNull(form.responsiblePersonId),
       status: form.status,
       remarks: emptyToNull(form.remarks),
     };
@@ -427,8 +430,12 @@ export function AssetForm({
                 <Label htmlFor="responsiblePerson">Responsible person</Label>
                 {staff.length > 0 ? (
                   <Select
-                    value={form.responsiblePerson}
-                    onValueChange={(v) => updateField("responsiblePerson", v ?? "")}
+                    value={form.responsiblePersonId || form.responsiblePerson}
+                    onValueChange={(v) => {
+                      const picked = staff.find((st) => st.id === v);
+                      updateField("responsiblePersonId", picked ? v : "");
+                      updateField("responsiblePerson", picked ? picked.name : (v ?? ""));
+                    }}
                   >
                     <SelectTrigger id="responsiblePerson">
                       <SelectValue placeholder="Select responsible person" />
@@ -436,7 +443,7 @@ export function AssetForm({
                     <SelectContent>
                       <SelectItem value="">None</SelectItem>
                       {staff.map((s) => (
-                        <SelectItem key={s.id} value={s.name}>
+                        <SelectItem key={s.id} value={s.id}>
                           {s.name}
                         </SelectItem>
                       ))}
