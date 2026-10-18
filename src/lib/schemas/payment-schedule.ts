@@ -32,6 +32,11 @@ export const paymentScheduleCreateSchema = z
       .default(PaymentScheduleStatus.PENDING),
     billCopyPath: cleanedString(500).optional().nullable(),
     remarks: cleanedString(500).optional().nullable(),
+    /** Create a linked To-Do follow-up task for the due date (not stored
+        on the PaymentSchedule row — handled by the action). */
+    createFollowUpTask: z.boolean().optional(),
+    /** Staff member responsible for the follow-up task. */
+    followUpAssigneeId: cleanedString(50).optional().nullable(),
   })
   .refine(
     (data) => {
@@ -49,6 +54,30 @@ export const paymentScheduleCreateSchema = z
       message: "Due date cannot be before the payment schedule date",
       path: ["dueDate"],
     }
+  )
+  .refine(
+    (data) => {
+      if (data.createFollowUpTask && !data.dueDate) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "A due date is required to create a follow-up task",
+      path: ["createFollowUpTask"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.createFollowUpTask && !data.followUpAssigneeId) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Choose the employee responsible for the follow-up task",
+      path: ["followUpAssigneeId"],
+    }
   );
 
 export const paymentScheduleUpdateSchema = z.object({
@@ -62,6 +91,8 @@ export const paymentScheduleUpdateSchema = z.object({
   status: z.nativeEnum(PaymentScheduleStatus).optional(),
   billCopyPath: cleanedString(500).optional().nullable(),
   remarks: cleanedString(500).optional().nullable(),
+  createFollowUpTask: z.boolean().optional(),
+  followUpAssigneeId: cleanedString(50).optional().nullable(),
 }).refine(
   (data) => {
     if (data.date && data.dueDate) {
@@ -76,6 +107,28 @@ export const paymentScheduleUpdateSchema = z.object({
   {
     message: "Due date cannot be before the payment schedule date",
     path: ["dueDate"],
+  }
+).refine(
+  (data) => {
+    if (data.createFollowUpTask && !data.dueDate) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "A due date is required to create a follow-up task",
+    path: ["createFollowUpTask"],
+  }
+).refine(
+  (data) => {
+    if (data.createFollowUpTask && !data.followUpAssigneeId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Choose the employee responsible for the follow-up task",
+    path: ["followUpAssigneeId"],
   }
 );
 

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getPaymentSchedules } from "@/lib/actions/payment-schedule";
+import { getStaff } from "@/lib/actions/staff";
 import { serialize } from "@/lib/utils";
 import { PaymentSchedulesTable } from "./payment-schedules-table";
 import { PaymentSchedulesFilters } from "./payment-schedules-filters";
@@ -54,11 +55,19 @@ export default async function PaymentSchedulesPage({
     dueDateTo: parseDate(params.dueDateTo),
   };
 
-  const [paymentSchedulesResult, masters] = await Promise.all([
+  const [paymentSchedulesResult, masters, staffResult] = await Promise.all([
     getPaymentSchedules(filter, page, pageSize),
     fetchAllMasters(),
+    getStaff(),
   ]);
   const masterData = masters as unknown as MasterData;
+  const staffList =
+    staffResult.success && Array.isArray(staffResult.data)
+      ? (staffResult.data as { id: string; name: string }[]).map((s) => ({
+          id: s.id,
+          name: s.name,
+        }))
+      : [];
 
   const rows = paymentSchedulesResult.success
     ? (paymentSchedulesResult.data?.rows ?? [])
@@ -97,6 +106,7 @@ export default async function PaymentSchedulesPage({
           totalPages={totalPages}
           filter={filter}
           masters={masterData}
+          staff={staffList}
         />
       ) : (
         <Card className="shadow-sm">

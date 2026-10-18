@@ -357,3 +357,85 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
   }
 }
 
+
+// ─── Payment Schedule Linking ───
+
+const PAYMENT_SCHEDULE_SOURCE = "PAYMENT_SCHEDULE";
+
+interface PaymentScheduleLinkData {
+  scheduleId: string;
+  paymentType?: string | null;
+  category: string;
+  detail?: string | null;
+  amount?: string | null;
+  dueDate: Date;
+  assignedToId: string;
+  assignedById?: string | null;
+}
+
+/**
+ * Creates the single follow-up task for a payment schedule.
+ * At most one task per schedule — deduplicated on sourceModule +
+ * sourceEntityId only (title changes must not create duplicates).
+ * Returns the task id (existing or new), or null if none created.
+ */
+export async function createPaymentScheduleLinkedTask(
+  data: PaymentScheduleLinkData
+): Promise<string | null> {
+  const existing = await prisma.task.findFirst({
+    where: {
+      sourceModule: PAYMENT_SCHEDULE_SOURCE,
+      sourceEntityId: data.scheduleId,
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const what =
+    data.paymentType ??
+    data.category.toLowerCase().replace(/_/g, " ");
+  const task = await prisma.task.create({
+    data: {
+      title: `Payment due — ${what}`,
+      description: [
+        `Scheduled payment of ${data.amount ?? "the recorded amount"} (${what}).`,
+        data.detail ? `Detail: ${data.detail}` : null,
+        "Check and follow up this scheduled payment before its due date.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      dueDate: data.dueDate,
+      sourceModule: PAYMENT_SCHEDULE_SOURCE,
+      sourceEntityId: data.scheduleId,
+      projectId: null,
+      assignedToId: data.assignedToId,
+      assignedById: data.assignedById ?? null,
+      priority: "HIGH",
+    },
+  });
+  return task.id;
+}
+
+/**
+ * Keeps the linked task's due date in sync when the schedule's due
+ * date changes. Updates ONLY dueDate — task status, description,
+ * progress and assignment are never touched.
+ */
+export async function syncPaymentScheduleTaskDueDate(
+  scheduleId: string,
+  dueDate: Date
+): Promise<string | null> {
+  const task = await prisma.task.findFirst({
+    where: {
+      sourceModule: PAYMENT_SCHEDULE_SOURCE,
+      sourceEntityId: scheduleId,
+    },
+    select: { id: true },
+  });
+  if (!task) return null;
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { dueDate },
+  });
+  return task.id;
+}

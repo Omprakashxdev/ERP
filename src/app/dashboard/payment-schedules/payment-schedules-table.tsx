@@ -36,6 +36,7 @@ interface PaymentSchedulesTableProps {
   totalPages: number;
   filter: PaymentScheduleFilterInput;
   masters?: MasterData;
+  staff?: { id: string; name: string }[];
 }
 
 const statusVariantMap: Record<PaymentScheduleStatus, string> = {
@@ -89,6 +90,7 @@ export function PaymentSchedulesTable({
   totalPages,
   filter,
   masters,
+  staff,
 }: PaymentSchedulesTableProps) {
   const router = useRouter();
   const [selectedSchedule, setSelectedSchedule] =
@@ -263,6 +265,7 @@ export function PaymentSchedulesTable({
           paymentSchedule={selectedSchedule}
           mode="edit"
           masters={masters}
+          staff={staff}
           onClose={() => setSelectedSchedule(null)}
         />
       )}
@@ -271,6 +274,7 @@ export function PaymentSchedulesTable({
         <PaymentScheduleForm
           mode="create"
           masters={masters}
+          staff={staff}
           onClose={() => setCreateScheduleOpen(false)}
         />
       )}

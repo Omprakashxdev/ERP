@@ -78,7 +78,10 @@ export function TaskTable({
   const [editTask, setEditTask] = useState<TaskRow | null>(null);
   const [statusTask, setStatusTask] = useState<TaskRow | null>(null);
   const totalPages = Math.ceil(total / pageSize);
-  const now = new Date();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
   const canEdit = (status: string) => status !== "COMPLETED" && status !== "CANCELLED";
   const canChangeStatus = (status: string) =>
@@ -116,11 +119,12 @@ export function TaskTable({
             </TableHeader>
             <TableBody>
               {tasks.map((task) => {
-                const isOverdue =
-                  task.dueDate &&
-                  new Date(task.dueDate) < now &&
-                  task.status !== "COMPLETED" &&
-                  task.status !== "CANCELLED";
+                const isDone =
+                  task.status === "COMPLETED" || task.status === "CANCELLED";
+                const due = task.dueDate ? new Date(task.dueDate) : null;
+                const isOverdue = !!due && due < startOfToday && !isDone;
+                const isDueToday =
+                  !!due && due >= startOfToday && due < startOfTomorrow && !isDone;
 
                 return (
                   <TableRow
@@ -166,8 +170,20 @@ export function TaskTable({
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {task.dueDate ? (
-                        <span className={isOverdue ? "text-red-600 font-medium" : "text-zinc-500"}>
-                          {new Date(task.dueDate).toLocaleDateString("en-IN")}
+                        <span className="inline-flex flex-col gap-0.5">
+                          <span className={isOverdue ? "text-red-600 font-medium" : "text-zinc-500"}>
+                            {new Date(task.dueDate).toLocaleDateString("en-IN")}
+                          </span>
+                          {isOverdue && (
+                            <span className="text-[10px] font-semibold text-red-600">
+                              Overdue
+                            </span>
+                          )}
+                          {isDueToday && (
+                            <span className="text-[10px] font-semibold text-amber-600">
+                              Due today
+                            </span>
+                          )}
                         </span>
                       ) : (
                         "—"
@@ -179,7 +195,9 @@ export function TaskTable({
                     <TableCell className="whitespace-nowrap">
                       {task.sourceModule ? (
                         <span className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
-                          {task.sourceModule}
+                          {task.sourceModule === "PAYMENT_SCHEDULE"
+                            ? "Payment schedule"
+                            : task.sourceModule.toLowerCase().replace(/_/g, " ")}
                         </span>
                       ) : (
                         <span className="text-zinc-400">Manual</span>

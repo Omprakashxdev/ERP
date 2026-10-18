@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   PaymentSchedule,
@@ -28,6 +28,7 @@ import {
 import {
   createPaymentSchedule,
   updatePaymentSchedule,
+  getPaymentScheduleLinkedTask,
 } from "@/lib/actions/payment-schedule";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import type { MasterData } from "@/lib/master-data";
@@ -39,6 +40,8 @@ interface PaymentScheduleFormProps {
   paymentSchedule?: PaymentSchedule;
   mode: "create" | "edit";
   masters?: MasterData;
+  /** Active employees for the follow-up task assignment dropdown. */
+  staff?: { id: string; name: string }[];
   onClose: () => void;
 }
 
@@ -92,6 +95,7 @@ export function PaymentScheduleForm({
   paymentSchedule,
   mode,
   masters,
+  staff,
   onClose,
 }: PaymentScheduleFormProps) {
   const router = useRouter();
@@ -100,6 +104,23 @@ export function PaymentScheduleForm({
   const [form, setForm] = useState(() => getInitialForm(paymentSchedule));
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+
+  // Follow-up task option
+  const [createTask, setCreateTask] = useState(false);
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [linkedTask, setLinkedTask] = useState<{
+    title: string;
+    status: string;
+    dueDate: Date | null;
+    assigneeName: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isEdit || !paymentSchedule?.id) return;
+    getPaymentScheduleLinkedTask(paymentSchedule.id).then((r) => {
+      if (r.success && r.data) setLinkedTask(r.data);
+    });
+  }, [isEdit, paymentSchedule?.id]);
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -119,6 +140,8 @@ export function PaymentScheduleForm({
       status: form.status,
       billCopyPath: emptyToNull(form.billCopyPath),
       remarks: emptyToNull(form.remarks),
+      createFollowUpTask: createTask,
+      followUpAssigneeId: taskAssigneeId || null,
     };
 
     if (isEdit) {
@@ -310,6 +333,70 @@ export function PaymentScheduleForm({
                   placeholder="Status notes or follow-up remarks…"
                   className="min-h-16"
                 />
+              </div>
+
+              {/* Follow-up task (To-Do list) */}
+              <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 sm:col-span-2">
+                <p className="text-sm font-medium text-zinc-700">
+                  Reminder in the To-Do list
+                </p>
+                {linkedTask ? (
+                  <p className="text-sm text-zinc-600">
+                    A follow-up task exists —{" "}
+                    <span className="font-medium">{linkedTask.title}</span>,{" "}
+                    assigned to {linkedTask.assigneeName}
+                    {linkedTask.dueDate
+                      ? `, due ${new Date(linkedTask.dueDate).toLocaleDateString("en-IN")}`
+                      : ""}
+                    . View it in the Tasks module.
+                  </p>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={createTask}
+                        onChange={(e) => setCreateTask(e.target.checked)}
+                      />
+                      Create a follow-up task for the due date
+                    </label>
+                    {createTask && (
+                      <div className="space-y-1.5">
+                        {!form.dueDate ? (
+                          <p className="text-xs text-amber-700">
+                            Enter a due date above first — the task needs it.
+                          </p>
+                        ) : !staff || staff.length === 0 ? (
+                          <p className="text-xs text-amber-700">
+                            No employees available for assignment.
+                          </p>
+                        ) : (
+                          <>
+                            <Label htmlFor="task-assignee">
+                              Responsible employee
+                            </Label>
+                            <Select
+                              value={taskAssigneeId}
+                              onValueChange={(v) => setTaskAssigneeId(v ?? "")}
+                            >
+                              <SelectTrigger id="task-assignee">
+                                <SelectValue placeholder="Select employee" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {staff.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
