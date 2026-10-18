@@ -143,7 +143,6 @@ it("stores stable responsible-person id and keeps the readable name in sync", as
     category: "Electronics",
     quantity: 1,
     responsiblePersonId: STAFF_ID,
-    quantity: 1,
   } as any);
   expect(res.success).toBe(true);
   const data = prismaMock.asset.create.mock.calls[0][0].data;
@@ -165,7 +164,6 @@ it("rejects a responsible-person id that matches no staff member", async () => {
       category: "Electronics",
       quantity: 1,
       responsiblePersonId: "bogus-staff",
-      quantity: 1,
     } as any)
   ).rejects.toThrow("responsible person");
 });
