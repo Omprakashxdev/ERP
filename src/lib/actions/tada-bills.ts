@@ -96,20 +96,30 @@ export async function updateTadaClaim(
     const { id, ...data } = parsed as { id: string } & Record<string, unknown>;
     await checkRateLimit(user.id);
 
+    const existing = await prisma.tadaClaim.findUnique({ where: { id } });
+    if (!existing) throw new Error("TADA claim not found");
+
     if (data.travelExpense || data.accommodationExp || data.foodExpense ||
         data.localConveyance || data.otherExpense) {
-      const existing = await prisma.tadaClaim.findUnique({ where: { id } });
-      if (existing) {
-        const travel = data.travelExpense as Prisma.Decimal ?? existing.travelExpense;
-        const accom = data.accommodationExp as Prisma.Decimal ?? existing.accommodationExp;
-        const food = data.foodExpense as Prisma.Decimal ?? existing.foodExpense;
-        const local = data.localConveyance as Prisma.Decimal ?? existing.localConveyance;
-        const other = data.otherExpense as Prisma.Decimal ?? existing.otherExpense;
-        data.totalClaimAmount = new Prisma.Decimal(
-          (Number(travel) + Number(accom) + Number(food) +
-            Number(local) + Number(other)).toFixed(2)
-        );
-      }
+      const travel = data.travelExpense as Prisma.Decimal ?? existing.travelExpense;
+      const accom = data.accommodationExp as Prisma.Decimal ?? existing.accommodationExp;
+      const food = data.foodExpense as Prisma.Decimal ?? existing.foodExpense;
+      const local = data.localConveyance as Prisma.Decimal ?? existing.localConveyance;
+      const other = data.otherExpense as Prisma.Decimal ?? existing.otherExpense;
+      data.totalClaimAmount = new Prisma.Decimal(
+        (Number(travel) + Number(accom) + Number(food) +
+          Number(local) + Number(other)).toFixed(2)
+      );
+    }
+
+    // Returned claims (manager reject or accounts query) go back to the
+    // queue when the employee corrects and saves them — matching the
+    // workbook's "Return to Employee" loop.
+    if (
+      existing.status === "MANAGER_REJECTED" ||
+      existing.status === "ACCOUNTS_QUERY"
+    ) {
+      data.status = "SUBMITTED";
     }
 
     const claim = await prisma.tadaClaim.update({
@@ -176,20 +186,80 @@ export async function getTadaClaimById(
   });
 }
 
+// Workbook flowchart: Employee -> Submit -> Manager review ->
+// Accounts verification -> Payment approval -> Paid.
+// Every action is allowed only from its required current status —
+// a claim can never skip a stage (e.g. a SUBMITTED claim cannot be
+// marked PAID).
+const TADA_STAGE_GATE: Record<string, TadaClaimStatus> = {
+  manager_approve: TadaClaimStatus.SUBMITTED,
+  manager_reject: TadaClaimStatus.SUBMITTED,
+  accounts_verify: TadaClaimStatus.MANAGER_APPROVED,
+  accounts_query: TadaClaimStatus.MANAGER_APPROVED,
+  finance_approve: TadaClaimStatus.ACCOUNTS_VERIFIED,
+  mark_paid: TadaClaimStatus.FINANCE_APPROVED,
+};
+
 export async function processTadaApproval(
   input: TadaApprovalInput
 ): Promise<ActionResult<{ id: string; status: string }>> {
   try {
     const { requireAuth } = await import("@/lib/authz");
     const user = await requireAuth();
-    if (user.role !== "ADMIN") {
+
+    const parsed = tadaApprovalSchema.parse(input);
+    const expectedStatus = TADA_STAGE_GATE[parsed.action];
+
+    const existing = await prisma.tadaClaim.findUnique({
+      where: { id: parsed.id },
+      select: {
+        status: true,
+        staff: { select: { reportingManagerId: true } },
+      },
+    });
+    if (!existing) return { success: false, error: "TADA claim not found" };
+
+    const isManagerAction =
+      parsed.action === "manager_approve" || parsed.action === "manager_reject";
+
+    // Authorization — manager stage: reporting manager (via the staff
+    // record's email bridge), MANAGERs or ADMINs. Accounts / finance /
+    // payment stages stay ADMIN-only (no dedicated accounts role exists).
+    let authorized = user.role === "ADMIN";
+    if (!authorized && isManagerAction) {
+      if (user.role === "MANAGER") {
+        authorized = true;
+      } else {
+        const actingStaff = user.email
+          ? await prisma.staff.findFirst({
+              where: { email: { equals: user.email, mode: "insensitive" } },
+              select: { id: true },
+            })
+          : null;
+        authorized =
+          !!actingStaff &&
+          actingStaff.id === existing.staff.reportingManagerId;
+      }
+    }
+    if (!authorized) {
       return {
         success: false,
-        error: "Only administrators can approve or reject TADA bill requests.",
+        error:
+          "You are not authorized to perform this approval stage " +
+          "on this claim.",
       };
     }
 
-    const parsed = tadaApprovalSchema.parse(input);
+    // Stage gate — status must match the action's required current state.
+    if (existing.status !== expectedStatus) {
+      return {
+        success: false,
+        error:
+          `This claim is currently ${existing.status.replace(/_/g, " ")} ` +
+          `and cannot be processed with this action. Claims must move ` +
+          `through each approval stage in order.`,
+      };
+    }
 
     const now = new Date();
     let status: TadaClaimStatus = TadaClaimStatus.DRAFT;

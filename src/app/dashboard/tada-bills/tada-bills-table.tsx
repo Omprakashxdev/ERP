@@ -90,10 +90,13 @@ export function TadaClaimTable({
   }
 
   const canEdit = (status: string) => status === "DRAFT" || status === "MANAGER_REJECTED" || status === "ACCOUNTS_QUERY";
+  // Mirror the server stage rules: ADMIN may act at every stage;
+  // MANAGER sees only the manager-review stage (SUBMITTED claims).
   const canApprove = (status: string) =>
-    userRole === "ADMIN" &&
-    (status === "SUBMITTED" || status === "MANAGER_APPROVED" ||
-    status === "ACCOUNTS_VERIFIED" || status === "FINANCE_APPROVED");
+    (userRole === "ADMIN" &&
+      (status === "SUBMITTED" || status === "MANAGER_APPROVED" ||
+        status === "ACCOUNTS_VERIFIED" || status === "FINANCE_APPROVED")) ||
+    (userRole === "MANAGER" && status === "SUBMITTED");
 
   return (
     <div className="space-y-3">
