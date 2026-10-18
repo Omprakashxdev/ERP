@@ -108,6 +108,26 @@ export const journeyLogUpdateSchema = journeyLogCreateSchema
   .extend({ id: z.string().cuid() })
   .omit({ vehicleId: true });
 
+/** Both readings present → End KM must never be below Start KM.
+    Never invent readings; reject contradictory input. */
+export function journeyLogKmRefine(data: {
+  startKm?: unknown;
+  endKm?: unknown;
+}): boolean {
+  if (data.startKm == null || data.endKm == null) return true;
+  return Number(data.endKm) >= Number(data.startKm);
+}
+
+export const journeyLogCreateSchemaValidated = journeyLogCreateSchema.refine(
+  journeyLogKmRefine,
+  { message: "End KM cannot be less than Start KM", path: ["endKm"] }
+);
+
+export const journeyLogUpdateSchemaValidated = journeyLogUpdateSchema.refine(
+  (data) => journeyLogKmRefine(data),
+  { message: "End KM cannot be less than Start KM", path: ["endKm"] }
+);
+
 export const journeyLogFilterSchema = z.object({
   search: z.string().optional(),
   vehicleId: z.string().cuid().optional(),

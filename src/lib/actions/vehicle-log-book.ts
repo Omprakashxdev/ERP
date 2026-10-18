@@ -7,8 +7,8 @@ import {
   vehicleCreateSchema,
   vehicleUpdateSchema,
   vehicleFilterSchema,
-  journeyLogCreateSchema,
-  journeyLogUpdateSchema,
+  journeyLogCreateSchemaValidated,
+  journeyLogUpdateSchemaValidated,
   journeyLogFilterSchema,
   VehicleCreateInput,
   VehicleUpdateInput,
@@ -235,7 +235,7 @@ export async function createJourneyLog(
   input: JourneyLogCreateInput
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "create", async (user) => {
-    const parsed = journeyLogCreateSchema.parse(input);
+    const parsed = journeyLogCreateSchemaValidated.parse(input);
     const { photos, ...data } = parsed;
     await checkRateLimit(user.id);
 
@@ -268,7 +268,7 @@ export async function updateJourneyLog(
   input: JourneyLogUpdateInput
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "update", async (user) => {
-    const parsed = journeyLogUpdateSchema.parse(input);
+    const parsed = journeyLogUpdateSchemaValidated.parse(input);
     const { id, photos, ...data } = parsed;
     await checkRateLimit(user.id);
 
@@ -280,6 +280,9 @@ export async function updateJourneyLog(
 
     const startKm = data.startKm ?? existing.startKm;
     const endKm = data.endKm ?? existing.endKm;
+    if (startKm != null && endKm != null && Number(endKm) < Number(startKm)) {
+      throw new Error("End KM cannot be less than Start KM");
+    }
     const providedTotal = data.totalKm;
     const totalKm = computeKmTotal(startKm, endKm, providedTotal).toDecimalPlaces(2);
 
@@ -417,5 +420,18 @@ export async function rejectJourneyLog(
 
     revalidatePath("/dashboard/vehicle-log-book");
     return { id: journeyLog.id };
+  });
+}
+
+/** Active project names for the journey purpose picker (WIP list). */
+export async function getProjectNameSuggestions(): Promise<ActionResult<string[]>> {
+  return withPermission("vehicleLogBook", "read", async () => {
+    const rows = await prisma.project.findMany({
+      where: { status: "ACTIVE" },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 200,
+    });
+    return rows.map((r) => r.name);
   });
 }

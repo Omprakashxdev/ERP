@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   JourneyLog,
@@ -27,6 +27,7 @@ import {
 import {
   createJourneyLog,
   updateJourneyLog,
+  getProjectNameSuggestions,
 } from "@/lib/actions/vehicle-log-book";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Loader2, X } from "lucide-react";
@@ -163,6 +164,13 @@ export function JourneyLogForm({
   const [newPhoto, setNewPhoto] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+  const [projectNames, setProjectNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    getProjectNameSuggestions().then((res) => {
+      if (res.success) setProjectNames(res.data ?? []);
+    });
+  }, []);
 
   const computedTotalKm = useMemo(() => {
     const start = Number(form.startKm);
@@ -243,6 +251,17 @@ export function JourneyLogForm({
     setError(null);
 
     try {
+      const start = Number(form.startKm);
+      const end = Number(form.endKm);
+      if (
+        form.startKm !== "" &&
+        form.endKm !== "" &&
+        Number.isFinite(start) &&
+        Number.isFinite(end) &&
+        end < start
+      ) {
+        throw new Error("End KM cannot be less than Start KM");
+      }
       const payload = buildPayload();
       const result = isEdit
         ? await updateJourneyLog(
@@ -670,12 +689,40 @@ export function JourneyLogForm({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="personsTravelling">Persons travelling</Label>
+                <Label htmlFor="personsTravellingSelect">Persons travelling (Staff Master)</Label>
+                <Select
+                  value=""
+                  onValueChange={(v) => {
+                    const name = staff.find((st) => st.id === v)?.name;
+                    if (!name) return;
+                    const names = form.personsTravelling
+                      .split(",")
+                      .map((n) => n.trim())
+                      .filter(Boolean);
+                    if (!names.includes(name)) {
+                      updateField(
+                        "personsTravelling",
+                        [...names, name].join(", ")
+                      );
+                    }
+                  }}
+                >
+                  <SelectTrigger id="personsTravellingSelect" className="w-full">
+                    <SelectValue placeholder="Add a staff member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff.map((st) => (
+                      <SelectItem key={st.id} value={st.id}>
+                        {st.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Input
                   id="personsTravelling"
                   value={form.personsTravelling}
                   onChange={(e) => updateField("personsTravelling", e.target.value)}
-                  placeholder="Names of people travelling (comma separated)"
+                  placeholder="Travelling persons (comma separated)"
                 />
               </div>
 
@@ -702,10 +749,16 @@ export function JourneyLogForm({
                 <Label htmlFor="purpose">Purpose of travel</Label>
                 <Input
                   id="purpose"
+                  list="journey-project-names"
                   value={form.purpose}
                   onChange={(e) => updateField("purpose", e.target.value)}
-                  placeholder="e.g. Site visit, Client meeting"
+                  placeholder="e.g. Site visit, Client meeting, WIP / New Business"
                 />
+                <datalist id="journey-project-names">
+                  {projectNames.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
