@@ -230,6 +230,59 @@ async function checkDueBills(thresholdDays: number): Promise<GeneratedNotificati
   return notifications;
 }
 
+async function checkTaskDueDates(thresholdDays: number): Promise<GeneratedNotification[]> {
+  const notifications: GeneratedNotification[] = [];
+  const now = new Date();
+  const threshold = new Date(now.getTime() + thresholdDays * 24 * 60 * 60 * 1000);
+
+  // Open tasks with a due date inside the window or already past it.
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: { in: ["OPEN", "IN_PROGRESS", "ON_HOLD", "PENDING_REVIEW"] },
+      dueDate: { lte: threshold },
+    },
+  });
+
+  for (const task of tasks) {
+    const staff = task.assignedToId
+      ? await prisma.staff.findUnique({
+          where: { id: task.assignedToId },
+          select: { email: true },
+        })
+      : null;
+    const email = staff?.email;
+    if (!email) continue;
+    const user = await prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: "insensitive" },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!user) continue;
+    const overdue = task.dueDate! < now;
+    const days = Math.abs(daysUntil(task.dueDate!));
+    notifications.push({
+      userId: user.id,
+      type: NotificationType.DUE_DATE_REMINDER,
+      priority: overdue
+        ? NotificationPriority.HIGH
+        : NotificationPriority.MEDIUM,
+      title: overdue
+        ? `Task overdue by ${days} days`
+        : `Task due in ${days} days`,
+      message:
+        `"${task.title}" is ${overdue ? `${days} days overdue` : `due in ${days} days`}` +
+        ` (due ${task.dueDate!.toLocaleDateString("en-IN")}).`,
+      module: "tasks",
+      entityId: task.id,
+      entityName: task.title,
+    });
+  }
+
+  return notifications;
+}
+
 export async function runNotificationChecks(): Promise<{
   generated: number;
   errors: string[];
@@ -242,12 +295,14 @@ export async function runNotificationChecks(): Promise<{
     const replyNotifs = await checkInOutRegisterReplies(15);
     const vehicleNotifs = await checkVehicleDocExpiry(30);
     const dueBillNotifs = await checkDueBills(7);
+    const taskNotifs = await checkTaskDueDates(7);
 
     const allNotifs = [
       ...paymentNotifs,
       ...replyNotifs,
       ...vehicleNotifs,
       ...dueBillNotifs,
+      ...taskNotifs,
     ];
 
     for (const notif of allNotifs) {

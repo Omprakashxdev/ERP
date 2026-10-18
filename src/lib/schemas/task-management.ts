@@ -16,6 +16,9 @@ export const taskCreateSchema = z.object({
   percentageCompletion: z.number().int().min(0).max(100).optional(),
   sourceModule: cleanedString(50).optional().nullable(),
   sourceEntityId: z.string().cuid().optional().nullable(),
+  // Additional staff marked on the task — the primary assignedToId
+  // remains the accountable owner for status/approval.
+  coAssigneeStaffIds: z.array(z.string().cuid()).optional(),
 });
 
 export const taskUpdateSchema = taskCreateSchema

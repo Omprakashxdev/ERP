@@ -229,6 +229,7 @@ model Staff {
   actionSuggestedEntries InOutRegister[]        @relation("ActionSuggestedStaff")
   tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
   tasksAssigned          Task[]                 @relation("TaskAssignedTo")
+  taskCoAssignments      TaskCoAssignee[]
   journeyLogApprovals    JourneyLog[]           @relation("JourneyLogApprovedBy")
   journeyLogTravels      JourneyLogTraveller[]
   assetMovementsFrom     AssetMovement[]        @relation("AssetMovementFrom")
@@ -1055,6 +1056,7 @@ model Task {
   assignedBy      User?         @relation("TaskAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
   project         Project?      @relation("TaskProject", fields: [projectId], references: [id], onDelete: SetNull)
   attachments     TaskAttachment[]
+  coAssignees     TaskCoAssignee[]
 
   @@index([assignedToId])
   @@index([assignedById])
@@ -1070,6 +1072,20 @@ model Task {
 // Workbook "To Do Task" attachment column — files live outside public/.
 // Restrict (not Cascade): a task holding attachment records cannot be
 // deleted at the database level, so employee work is never silently lost.
+model TaskCoAssignee {
+  id         String   @id @default(cuid())
+  taskId     String
+  staffId    String
+  createdAt  DateTime @default(now())
+
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  staff      Staff    @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, staffId])
+  @@index([taskId])
+  @@index([staffId])
+}
+
 model TaskAttachment {
   id           String   @id @default(cuid())
   taskId       String

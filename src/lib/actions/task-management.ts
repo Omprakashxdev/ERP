@@ -26,12 +26,20 @@ export async function createTask(
     const parsed = taskCreateSchema.parse(input);
     await checkRateLimit(user.id);
 
+    const { coAssigneeStaffIds, ...fields } = parsed;
     const task = await prisma.task.create({
       data: {
-        ...parsed,
+        ...fields,
         assignedById: user.id,
         dueDate: parsed.dueDate ?? null,
         projectId: parsed.projectId ?? null,
+        coAssignees: coAssigneeStaffIds?.length
+          ? {
+              create: coAssigneeStaffIds
+                .filter((id) => id !== parsed.assignedToId)
+                .map((staffId) => ({ staffId })),
+            }
+          : undefined,
       },
     });
 
@@ -81,6 +89,33 @@ export async function updateTask(
             throw new Error("A reason is required when sending a task back for changes.");
           data.reworkCount = existing.reworkCount + 1;
         }
+      }
+    }
+
+    // Co-assignee sync — only the diff changes; rows untouched unless
+    // the field is explicitly provided. Primary assignee is never
+    // duplicated into co-assignees.
+    const coIds = data.coAssigneeStaffIds as string[] | undefined;
+    if (coIds !== undefined) {
+      delete data.coAssigneeStaffIds;
+      const current = await prisma.taskCoAssignee.findMany({
+        where: { taskId: id },
+        select: { staffId: true },
+      });
+      const cur = new Set(current.map((c) => c.staffId));
+      const primaryId = data.assignedToId as string | undefined;
+      const next = new Set(coIds.filter((sid) => sid !== primaryId));
+      const toRemove = [...cur].filter((sid) => !next.has(sid));
+      const toAdd = [...next].filter((sid) => !cur.has(sid));
+      if (toRemove.length) {
+        await prisma.taskCoAssignee.deleteMany({
+          where: { taskId: id, staffId: { in: toRemove } },
+        });
+      }
+      if (toAdd.length) {
+        await prisma.taskCoAssignee.createMany({
+          data: toAdd.map((staffId) => ({ taskId: id, staffId })),
+        });
       }
     }
 
@@ -181,6 +216,7 @@ export async function getTasks(
           assignedTo: { select: { id: true, name: true, designation: true } },
           assignedBy: { select: { id: true, name: true } },
           project: { select: { id: true, name: true } },
+          coAssignees: { include: { staff: { select: { id: true, name: true } } } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -203,6 +239,7 @@ export async function getTaskById(
         assignedTo: true,
         assignedBy: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
+        coAssignees: { include: { staff: true } },
       },
     });
   });

@@ -34,6 +34,7 @@ interface TaskRow {
   assignedTo: { id: string; name: string; designation: string | null };
   assignedBy: { id: string; name: string } | null;
   project: { id: string; name: string } | null;
+  coAssignees: { staffId: string; staff: { id: string; name: string } | null }[];
   createdAt: Date;
 }
 
@@ -151,6 +152,16 @@ export function TaskTable({
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {task.assignedTo.name}
+                      {task.coAssignees.length > 0 && (
+                        <span
+                          className="ml-1 text-[10px] text-zinc-400"
+                          title={task.coAssignees
+                            .map((c) => c.staff?.name ?? c.staffId)
+                            .join(", ")}
+                        >
+                          +{task.coAssignees.length}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span

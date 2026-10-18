@@ -66,6 +66,8 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
+  const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>([]);
+  const [newCoAssigneeId, setNewCoAssigneeId] = useState("");
   const [reviewerId, setReviewerId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
@@ -83,6 +85,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
         title,
         description: description || undefined,
         assignedToId,
+        coAssigneeStaffIds: coAssigneeIds.length > 0 ? coAssigneeIds : undefined,
         reviewerId: reviewerId || undefined,
         projectId: projectId || undefined,
         priority: priority as never,
@@ -175,6 +178,63 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Also Assign To (optional)</Label>
+            <div className="flex items-center gap-2">
+              <Select value={newCoAssigneeId} onValueChange={(v) => setNewCoAssigneeId(v ?? "")}>
+                <SelectTrigger className="w-full" size="sm">
+                  <SelectValue placeholder="Add a team member">
+                    {(value: string) =>
+                      staff.find((s) => s.id === value)?.name ?? "Add a team member"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {staff
+                    .filter((s) => s.id !== assignedToId && !coAssigneeIds.includes(s.id))
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!newCoAssigneeId || coAssigneeIds.includes(newCoAssigneeId)) return;
+                  setCoAssigneeIds((prev) => [...prev, newCoAssigneeId]);
+                  setNewCoAssigneeId("");
+                }}
+              >
+                Add
+              </Button>
+            </div>
+            {coAssigneeIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {coAssigneeIds.map((sid) => (
+                  <span
+                    key={sid}
+                    className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
+                  >
+                    {staff.find((s) => s.id === sid)?.name ?? sid}
+                    <button
+                      type="button"
+                      className="text-zinc-400 hover:text-zinc-700"
+                      onClick={() =>
+                        setCoAssigneeIds((prev) => prev.filter((x) => x !== sid))
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {projects && projects.length > 0 && (
@@ -285,6 +345,7 @@ interface TaskEditData {
   status: string;
   department: string | null;
   percentageCompletion: number | null;
+  coAssignees?: { staffId: string; staff?: { id: string; name: string } | null }[];
 }
 
 export function TaskEditForm({
@@ -306,6 +367,8 @@ export function TaskEditForm({
     title: task.title,
     description: task.description ?? "",
     assignedToId: task.assignedToId,
+    coAssigneeIds: task.coAssignees?.map((c) => c.staffId) ?? [],
+    newCoAssigneeId: "",
     reviewerId: task.reviewerId ?? "",
     projectId: task.projectId ?? "",
     priority: task.priority,
@@ -330,6 +393,7 @@ export function TaskEditForm({
         title: form.title,
         description: form.description || undefined,
         assignedToId: form.assignedToId,
+        coAssigneeStaffIds: form.coAssigneeIds,
         reviewerId: form.reviewerId || undefined,
         projectId: form.projectId || undefined,
         priority: form.priority as never,
@@ -428,6 +492,79 @@ export function TaskEditForm({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Also Assigned To</Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={form.newCoAssigneeId}
+                  onValueChange={(v) => updateField("newCoAssigneeId", v ?? "")}
+                >
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue placeholder="Add a team member">
+                      {(value: string) =>
+                        staff.find((s) => s.id === value)?.name ?? "Add a team member"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff
+                      .filter(
+                        (s) =>
+                          s.id !== form.assignedToId && !form.coAssigneeIds.includes(s.id)
+                      )
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (
+                      !form.newCoAssigneeId ||
+                      form.coAssigneeIds.includes(form.newCoAssigneeId)
+                    )
+                      return;
+                    updateField("coAssigneeIds", [
+                      ...form.coAssigneeIds,
+                      form.newCoAssigneeId,
+                    ]);
+                    updateField("newCoAssigneeId", "");
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+              {form.coAssigneeIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {form.coAssigneeIds.map((sid) => (
+                    <span
+                      key={sid}
+                      className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
+                    >
+                      {staff.find((s) => s.id === sid)?.name ?? sid}
+                      <button
+                        type="button"
+                        className="text-zinc-400 hover:text-zinc-700"
+                        onClick={() =>
+                          updateField(
+                            "coAssigneeIds",
+                            form.coAssigneeIds.filter((x) => x !== sid)
+                          )
+                        }
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {projects && projects.length > 0 && (
