@@ -94,6 +94,7 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
       taxReceiptPath: "",
       fastagBalance: "",
       personsTravelling: "",
+      travellerStaffIds: [] as string[],
       driverName: "",
       driverAllowanceDetails: "",
       purpose: "",
@@ -138,6 +139,8 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
     taxReceiptPath: journeyLog.taxReceiptPath ?? "",
     fastagBalance: toMoneyString((journeyLog as any).fastagBalance),
     personsTravelling: journeyLog.personsTravelling ?? "",
+    travellerStaffIds:
+      (journeyLog as any).travellers?.map((t: any) => t.staffId) ?? [],
     driverName: journeyLog.driverName ?? "",
     driverAllowanceDetails: (journeyLog as any).driverAllowanceDetails ?? "",
     purpose: journeyLog.purpose ?? "",
@@ -226,6 +229,7 @@ export function JourneyLogForm({
       taxReceiptPath: emptyToNull(form.taxReceiptPath),
       fastagBalance: form.fastagBalance || null,
       personsTravelling: emptyToNull(form.personsTravelling),
+      travellerStaffIds: form.travellerStaffIds,
       driverName: emptyToNull(form.driverName),
       driverAllowanceDetails: emptyToNull(form.driverAllowanceDetails),
       purpose: emptyToNull(form.purpose),
@@ -705,6 +709,12 @@ export function JourneyLogForm({
                         [...names, name].join(", ")
                       );
                     }
+                    if (!form.travellerStaffIds.includes(v)) {
+                      updateField(
+                        "travellerStaffIds",
+                        [...form.travellerStaffIds, v] as any
+                      );
+                    }
                   }}
                 >
                   <SelectTrigger id="personsTravellingSelect" className="w-full">
@@ -724,6 +734,33 @@ export function JourneyLogForm({
                   onChange={(e) => updateField("personsTravelling", e.target.value)}
                   placeholder="Travelling persons (comma separated)"
                 />
+                {form.travellerStaffIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(form.travellerStaffIds as string[]).map((sid: string) => {
+                      const st = staff.find((x) => x.id === sid);
+                      return (
+                        <span
+                          key={sid}
+                          className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
+                        >
+                          {st?.name ?? sid}
+                          <button
+                            type="button"
+                            className="text-zinc-400 hover:text-zinc-700"
+                            onClick={() =>
+                              updateField(
+                                "travellerStaffIds",
+                                (form.travellerStaffIds as string[]).filter((x: string) => x !== sid) as any
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

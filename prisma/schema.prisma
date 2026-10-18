@@ -230,6 +230,7 @@ model Staff {
   tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
   tasksAssigned          Task[]                 @relation("TaskAssignedTo")
   journeyLogApprovals    JourneyLog[]           @relation("JourneyLogApprovedBy")
+  journeyLogTravels      JourneyLogTraveller[]
   assetMovementsFrom     AssetMovement[]        @relation("AssetMovementFrom")
   assetMovementsTo       AssetMovement[]        @relation("AssetMovementTo")
   heldAssets             Asset[]                @relation("AssetCurrentHolder")
@@ -467,12 +468,27 @@ model JourneyLog {
 
   vehicle            Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   photos             JourneyLogPhoto[]
+  travellers         JourneyLogTraveller[]
   approvedBy         Staff?                @relation("JourneyLogApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
   @@index([journeyDate])
   @@index([approvalStatus])
   @@index([approvedById])
+}
+
+model JourneyLogTraveller {
+  id           String     @id @default(cuid())
+  journeyLogId String
+  staffId      String
+  createdAt    DateTime   @default(now())
+
+  journeyLog   JourneyLog @relation(fields: [journeyLogId], references: [id], onDelete: Cascade)
+  staff        Staff      @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@unique([journeyLogId, staffId])
+  @@index([journeyLogId])
+  @@index([staffId])
 }
 
 model JourneyLogPhoto {

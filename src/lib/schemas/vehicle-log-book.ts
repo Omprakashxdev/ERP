@@ -89,6 +89,7 @@ export const journeyLogCreateSchema = z.object({
   fastagBalance: money.optional().nullable(),
 
   personsTravelling: cleanedString(500).optional().nullable(),
+  travellerStaffIds: z.array(z.string()).optional(),
   driverName: cleanedString(120).optional().nullable(),
   driverAllowanceDetails: cleanedString(500).optional().nullable(),
   purpose: cleanedString(500).optional().nullable(),

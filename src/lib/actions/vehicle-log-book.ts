@@ -236,7 +236,7 @@ export async function createJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "create", async (user) => {
     const parsed = journeyLogCreateSchemaValidated.parse(input);
-    const { photos, ...data } = parsed;
+    const { photos, travellerStaffIds, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const totalKm = computeKmTotal(
@@ -251,6 +251,9 @@ export async function createJourneyLog(
         totalKm,
         photos: photos
           ? { create: photos.map((path) => ({ path })) }
+          : undefined,
+        travellers: travellerStaffIds?.length
+          ? { create: travellerStaffIds.map((staffId) => ({ staffId })) }
           : undefined,
       },
     });
@@ -269,7 +272,7 @@ export async function updateJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "update", async (user) => {
     const parsed = journeyLogUpdateSchemaValidated.parse(input);
-    const { id, photos, ...data } = parsed;
+    const { id, photos, travellerStaffIds, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const existing = await prisma.journeyLog.findUnique({
@@ -289,6 +292,29 @@ export async function updateJourneyLog(
     await prisma.journeyLogPhoto.deleteMany({
       where: { journeyLogId: id },
     });
+
+    // Traveller staff ids are a join relation — sync only the diff so
+    // existing traveller rows are preserved unless explicitly changed.
+    if (travellerStaffIds !== undefined) {
+      const current = await prisma.journeyLogTraveller.findMany({
+        where: { journeyLogId: id },
+        select: { staffId: true },
+      });
+      const currentIds = new Set(current.map((c) => c.staffId));
+      const nextIds = new Set(travellerStaffIds);
+      const toRemove = [...currentIds].filter((id) => !nextIds.has(id));
+      const toAdd = [...nextIds].filter((id) => !currentIds.has(id));
+      if (toRemove.length) {
+        await prisma.journeyLogTraveller.deleteMany({
+          where: { journeyLogId: id, staffId: { in: toRemove } },
+        });
+      }
+      if (toAdd.length) {
+        await prisma.journeyLogTraveller.createMany({
+          data: toAdd.map((staffId) => ({ journeyLogId: id, staffId })),
+        });
+      }
+    }
 
     const journeyLog = await prisma.journeyLog.update({
       where: { id },
@@ -340,6 +366,7 @@ export async function getJourneyLogs(
         include: {
           vehicle: true,
           photos: true,
+          travellers: { include: { staff: { select: { id: true, name: true } } } },
           approvedBy: {
             select: { id: true, name: true, designation: true },
           },
@@ -369,6 +396,7 @@ export async function getJourneyLogById(
       include: {
         vehicle: true,
         photos: true,
+        travellers: { include: { staff: { select: { id: true, name: true } } } },
         approvedBy: {
           select: { id: true, name: true, designation: true },
         },
