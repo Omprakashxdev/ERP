@@ -21,7 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createTask, updateTask } from "@/lib/actions/task-management";
+import {
+  createTask,
+  updateTask,
+  performTaskTransition,
+} from "@/lib/actions/task-management";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
@@ -519,105 +523,145 @@ export function TaskEditForm({
 }
 
 export function TaskStatusActions({
-  taskId,
-  status,
+  task,
+  currentStaffId,
+  currentUserId,
+  role,
   onClose,
 }: {
-  taskId: string;
-  status: string;
+  task: {
+    id: string;
+    status: string;
+    assignedToId: string;
+    assignedById: string | null;
+    reviewerId: string | null;
+    percentageCompletion: number;
+  };
+  currentStaffId: string | null;
+  currentUserId: string;
+  role: string;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
   const [reworkReason, setReworkReason] = useState("");
+  const [showProgress, setShowProgress] = useState(false);
+  const [progress, setProgress] = useState(task.percentageCompletion ?? 0);
+  const [progressNote, setProgressNote] = useState("");
 
-  async function handleStatusChange(
-    newStatus: "IN_PROGRESS" | "ON_HOLD" | "PENDING_REVIEW" | "COMPLETED" | "CANCELLED"
-  ) {
+  const isAssignee = currentStaffId != null && task.assignedToId === currentStaffId;
+  const isReviewer = currentStaffId != null && task.reviewerId === currentStaffId;
+  const isAssigner = task.assignedById === currentUserId;
+  const isAdmin = role === "ADMIN";
+  const canManage = isAdmin || role === "MANAGER";
+  const isSelfWork = isAssignee && !isAdmin;
+
+  async function run(action: Parameters<typeof performTaskTransition>[0]["action"], extra?: Record<string, unknown>) {
     setSubmitting(true);
     setError(null);
-
-    const payload: Record<string, unknown> = {
-      id: taskId,
-      status: newStatus,
-    };
-
-    if (newStatus === "PENDING_REVIEW") {
-      payload.reworkReason = reworkReason || undefined;
-    }
-
-    const res = await updateTask(payload as never);
-
-    setSubmitting(false);
-
-    if (!res.success) {
-      setError(res.error ?? "Failed to update status");
-      toast.error(res.error ?? "Failed to update status");
-      return;
-    }
-
-    toast.success("Task status updated");
-    router.refresh();
-    onClose();
-  }
-
-  async function handleRework() {
-    setSubmitting(true);
-    setError(null);
-
-    const res = await updateTask({
-      id: taskId,
-      status: "IN_PROGRESS",
-      reworkReason: reworkReason || undefined,
+    const res = await performTaskTransition({
+      id: task.id,
+      action,
+      ...extra,
     } as never);
-
     setSubmitting(false);
-
     if (!res.success) {
-      setError(res.error ?? "Failed to send back for rework");
-      toast.error(res.error ?? "Failed to send back for rework");
+      setError(res.error ?? "Action failed");
+      toast.error(res.error ?? "Action failed");
       return;
     }
-
-    toast.success("Task sent back for rework");
+    toast.success("Task updated");
     router.refresh();
     onClose();
   }
 
-  const actions: { label: string; action: () => void; variant: "default" | "outline" | "destructive" }[] = [];
+  const status = task.status;
+  const actions: { label: string; run: () => void; variant: "default" | "outline" | "destructive" }[] = [];
 
   if (status === "OPEN") {
-    actions.push({ label: "Start (In Progress)", action: () => handleStatusChange("IN_PROGRESS"), variant: "default" });
-    actions.push({ label: "Cancel", action: () => handleStatusChange("CANCELLED"), variant: "destructive" });
+    if (isAssignee || canManage)
+      actions.push({ label: "Accept task", run: () => run("accept"), variant: "default" });
+    if (canManage || isAssigner)
+      actions.push({ label: "Cancel task", run: () => run("cancel"), variant: "destructive" });
   } else if (status === "IN_PROGRESS") {
-    actions.push({ label: "On Hold", action: () => handleStatusChange("ON_HOLD"), variant: "outline" });
-    actions.push({ label: "Submit for Review", action: () => handleStatusChange("PENDING_REVIEW"), variant: "default" });
-    actions.push({ label: "Cancel", action: () => handleStatusChange("CANCELLED"), variant: "destructive" });
+    if (isAssignee || canManage) {
+      actions.push({ label: "Update progress", run: () => setShowProgress(true), variant: "outline" });
+      actions.push({ label: "Submit for review", run: () => run("submitForReview"), variant: "default" });
+      actions.push({ label: "Put on hold", run: () => run("hold"), variant: "outline" });
+    }
+    if (canManage || isAssigner)
+      actions.push({ label: "Cancel task", run: () => run("cancel"), variant: "destructive" });
   } else if (status === "ON_HOLD") {
-    actions.push({ label: "Resume (In Progress)", action: () => handleStatusChange("IN_PROGRESS"), variant: "default" });
-    actions.push({ label: "Cancel", action: () => handleStatusChange("CANCELLED"), variant: "destructive" });
+    if (isAssignee || canManage)
+      actions.push({ label: "Resume task", run: () => run("resume"), variant: "default" });
+    if (canManage || isAssigner)
+      actions.push({ label: "Cancel task", run: () => run("cancel"), variant: "destructive" });
   } else if (status === "PENDING_REVIEW") {
-    actions.push({ label: "Approve (Complete)", action: () => handleStatusChange("COMPLETED"), variant: "default" });
-    actions.push({ label: "Reject (Rework)", action: handleRework, variant: "destructive" });
+    if ((isReviewer || isAdmin) && !isSelfWork) {
+      actions.push({ label: "Approve", run: () => run("approve"), variant: "default" });
+      actions.push({
+        label: "Request changes",
+        run: () => {
+          if (!reworkReason.trim()) {
+            setError("Please explain what needs changing.");
+            return;
+          }
+          run("requestRework", { reworkReason: reworkReason.trim() });
+        },
+        variant: "destructive",
+      });
+    }
   }
-
-  if (actions.length === 0) return null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Task Actions</DialogTitle>
+          <DialogTitle>Task actions</DialogTitle>
           <DialogDescription>
-            Current status: <span className="font-medium">{status.replace(/_/g, " ")}</span>
+            Current status:{" "}
+            <span className="font-medium">{status.replace(/_/g, " ").toLowerCase()}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          {status === "PENDING_REVIEW" && (
+          {showProgress && (
+            <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+              <Label className="text-xs">Progress — {progress}%</Label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={progress}
+                onChange={(e) => setProgress(Number(e.target.value))}
+                className="w-full"
+              />
+              <Label className="text-xs">Note (optional)</Label>
+              <Input
+                value={progressNote}
+                onChange={(e) => setProgressNote(e.target.value)}
+                placeholder="What was done?"
+              />
+              <Button
+                size="sm"
+                disabled={submitting}
+                onClick={() =>
+                  run("updateProgress", {
+                    percentageCompletion: progress,
+                    note: progressNote.trim() || undefined,
+                  })
+                }
+              >
+                Save progress
+              </Button>
+            </div>
+          )}
+
+          {status === "PENDING_REVIEW" && (isReviewer || isAdmin) && !isSelfWork && (
             <div className="space-y-1">
-              <Label className="text-xs">Rework Reason (if rejecting)</Label>
+              <Label className="text-xs">Reason for changes (required to send back)</Label>
               <Textarea
                 value={reworkReason}
                 onChange={(e) => setReworkReason(e.target.value)}
@@ -627,22 +671,29 @@ export function TaskStatusActions({
             </div>
           )}
 
-          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Task status change")} askingAi={askingAi} aiResponse={aiResponse} />
+          {actions.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              No actions are available for you on this task.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {actions.map((a) => (
+                <Button
+                  key={a.label}
+                  variant={a.variant}
+                  size="sm"
+                  className="h-9"
+                  disabled={submitting}
+                  onClick={a.run}
+                >
+                  {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  {a.label}
+                </Button>
+              ))}
+            </div>
+          )}
 
-          <div className="flex flex-wrap gap-2">
-            {actions.map((a) => (
-              <Button
-                key={a.label}
-                variant={a.variant}
-                size="sm"
-                disabled={submitting}
-                onClick={a.action}
-              >
-                {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                {a.label}
-              </Button>
-            ))}
-          </div>
+          <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Task status change")} askingAi={askingAi} aiResponse={aiResponse} />
         </div>
       </DialogContent>
     </Dialog>

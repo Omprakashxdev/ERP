@@ -79,6 +79,16 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           pageSize={pageSize}
           staff={serialize(staff) as never}
           projects={serialize(projects) as never}
+          currentStaffId={
+            (staff as { id: string; email?: string | null }[]).find(
+              (s) =>
+                s.email != null &&
+                session.user.email != null &&
+                s.email.toLowerCase() === session.user.email.toLowerCase()
+            )?.id ?? null
+          }
+          currentUserId={session.user.id}
+          role={session.user.role}
         />
       </Suspense>
     </div>

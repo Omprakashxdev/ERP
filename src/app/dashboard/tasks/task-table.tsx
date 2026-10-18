@@ -20,6 +20,7 @@ interface TaskRow {
   status: string;
   priority: string;
   assignedToId: string;
+  assignedById: string | null;
   reviewerId: string | null;
   projectId: string | null;
   dueDate: Date | null;
@@ -67,6 +68,9 @@ export function TaskTable({
   pageSize,
   staff,
   projects,
+  currentStaffId,
+  currentUserId,
+  role,
 }: {
   tasks: TaskRow[];
   total: number;
@@ -74,6 +78,10 @@ export function TaskTable({
   pageSize: number;
   staff?: { id: string; name: string }[];
   projects?: { id: string; name: string }[];
+  /** Signed-in user's staff record id — gates assignee/reviewer actions. */
+  currentStaffId?: string | null;
+  currentUserId?: string;
+  role?: string;
 }) {
   const [editTask, setEditTask] = useState<TaskRow | null>(null);
   const [statusTask, setStatusTask] = useState<TaskRow | null>(null);
@@ -294,8 +302,10 @@ export function TaskTable({
 
       {statusTask && (
         <TaskStatusActions
-          taskId={statusTask.id}
-          status={statusTask.status}
+          task={statusTask}
+          currentStaffId={currentStaffId ?? null}
+          currentUserId={currentUserId ?? ""}
+          role={role ?? "STAFF"}
           onClose={() => setStatusTask(null)}
         />
       )}
