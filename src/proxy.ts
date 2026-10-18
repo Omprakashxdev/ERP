@@ -26,6 +26,12 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg)).*)"],
+  matcher: [
+    // Everything except framework assets and site images.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg)).*)",
+    // Uploaded module documents always require a session — including
+    // image extensions the pattern above would otherwise skip.
+    "/uploads/:path*",
+  ],
 };
 
