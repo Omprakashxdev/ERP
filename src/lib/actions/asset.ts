@@ -77,12 +77,20 @@ export async function createAsset(
       (await generateSecurityCode(parsed.category, parsed.name, parsed.make));
 
     let currentHolderId: string | null = null;
-    if (parsed.assigneeType === "PERSON" && parsed.assignee) {
-      const staffMember = await prisma.staff.findFirst({
-        where: { name: { equals: parsed.assignee, mode: "insensitive" } },
-      });
-      if (staffMember) {
+    if (parsed.assigneeType === "PERSON") {
+      // Prefer the explicit staff id sent by the form; fall back to an
+      // exact name match only when no id was provided.
+      if (parsed.assigneeStaffId) {
+        const staffMember = await prisma.staff.findUnique({
+          where: { id: parsed.assigneeStaffId },
+        });
+        if (!staffMember) throw new Error("Selected staff member not found");
         currentHolderId = staffMember.id;
+      } else if (parsed.assignee) {
+        const staffMember = await prisma.staff.findFirst({
+          where: { name: { equals: parsed.assignee, mode: "insensitive" } },
+        });
+        if (staffMember) currentHolderId = staffMember.id;
       }
     }
 
@@ -94,9 +102,20 @@ export async function createAsset(
       status = AssetStatus.ASSIGNED;
     }
 
+    const { assigneeStaffId: _aid, ...rest } = parsed;
     const asset = await prisma.asset.create({
       data: {
-        ...parsed,
+        ...rest,
+        assignee:
+          parsed.assignee ??
+          (currentHolderId
+            ? (
+                await prisma.staff.findUnique({
+                  where: { id: currentHolderId },
+                  select: { name: true },
+                })
+              )?.name ?? null
+            : parsed.assignee),
         status,
         currentHolderId,
         itemCode: generateItemCode(),
@@ -121,12 +140,38 @@ export async function updateAsset(
     const { id, ...data } = parsed;
     await checkRateLimit(user.id);
 
+    const existing = await prisma.asset.findUnique({ where: { id } });
+    if (!existing) throw new Error("Asset not found");
+
+    // Merged quantity integrity — assigned can never exceed the total,
+    // even when only one of the two fields is sent.
+    const mergedQty = Number(data.quantity ?? existing.quantity);
+    const mergedAssigned = Number(data.assignedQuantity ?? existing.assignedQuantity ?? 0);
+    if (mergedQty < 0) {
+      throw new Error("Quantity cannot be negative");
+    }
+    if (mergedAssigned < 0) {
+      throw new Error("Assigned quantity cannot be negative");
+    }
+    if (mergedAssigned > mergedQty) {
+      throw new Error("Assigned quantity cannot exceed total quantity");
+    }
+
     let currentHolderId: string | null | undefined = undefined;
-    if (data.assigneeType === "PERSON" && data.assignee) {
-      const staffMember = await prisma.staff.findFirst({
-        where: { name: { equals: data.assignee, mode: "insensitive" } },
-      });
-      currentHolderId = staffMember ? staffMember.id : null;
+    if (data.assigneeType === "PERSON") {
+      if (data.assigneeStaffId) {
+        const staffMember = await prisma.staff.findUnique({
+          where: { id: data.assigneeStaffId },
+        });
+        if (!staffMember) throw new Error("Selected staff member not found");
+        currentHolderId = staffMember.id;
+        data.assignee = staffMember.name;
+      } else if (data.assignee) {
+        const staffMember = await prisma.staff.findFirst({
+          where: { name: { equals: data.assignee, mode: "insensitive" } },
+        });
+        currentHolderId = staffMember ? staffMember.id : null;
+      }
     } else if (
       data.assigneeType === "OFFICE" ||
       data.assignee === null ||
@@ -143,8 +188,9 @@ export async function updateAsset(
       status = AssetStatus.ASSIGNED;
     }
 
+    const { assigneeStaffId: _assigneeStaffId, ...rest } = data;
     const updatePayload: Record<string, unknown> = {
-      ...data,
+      ...rest,
       ...(status !== undefined ? { status } : {}),
       ...(currentHolderId !== undefined ? { currentHolderId } : {}),
     };
@@ -169,6 +215,16 @@ export async function deleteAsset(
   return withPermission("assets", "delete", async (user) => {
     await checkRateLimit(user.id);
 
+    const movementCount = await prisma.assetMovement.count({
+      where: { assetId: id },
+    });
+    if (movementCount > 0) {
+      throw new Error(
+        `This asset has ${movementCount} recorded movement(s). ` +
+          `Deleting it would erase its transfer history — mark it as ` +
+          `retired or inactive instead.`
+      );
+    }
     const asset = await prisma.asset.delete({ where: { id } });
 
     await audit(user.id, "delete", "Asset", asset.id, {});

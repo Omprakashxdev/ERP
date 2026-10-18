@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { AssetStatus } from "@prisma/client";
-import { cleanedString, money, cuid, optionalCuid } from "./shared";
+import { cleanedString, money, positiveMoney, cuid, optionalCuid } from "./shared";
 
 const assetBaseSchema = z.object({
   name: cleanedString(200),
@@ -9,13 +9,15 @@ const assetBaseSchema = z.object({
   make: cleanedString(100).optional().nullable(),
   model: cleanedString(100).optional().nullable(),
   yearOfPurchase: z.coerce.number().int().min(1900).max(new Date().getFullYear()).optional().nullable(),
-  quantity: money.default(new Prisma.Decimal("1.00")),
+  quantity: positiveMoney.default(new Prisma.Decimal("1.00")),
   securityCode: cleanedString(100).optional().nullable(),
   billWarrantyPath: cleanedString(500).optional().nullable(),
 
   assigneeType: z.enum(["PERSON", "OFFICE"]).optional().nullable(),
   assignee: cleanedString(120).optional().nullable(),
-  assignedQuantity: money.optional().nullable(),
+  // Stable staff identity — preferred over name matching when provided.
+  assigneeStaffId: optionalCuid,
+  assignedQuantity: positiveMoney.optional().nullable(),
   responsiblePerson: cleanedString(120).optional().nullable(),
 
   status: z.nativeEnum(AssetStatus).default(AssetStatus.AVAILABLE),

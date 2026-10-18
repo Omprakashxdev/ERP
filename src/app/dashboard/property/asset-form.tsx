@@ -62,6 +62,7 @@ function getInitialForm(asset?: Asset) {
       billWarrantyPath: "",
       assigneeType: "" as "PERSON" | "OFFICE" | "",
       assignee: "",
+      assigneeStaffId: "",
       assignedQuantity: "",
       responsiblePerson: "",
       status: AssetStatus.AVAILABLE,
@@ -79,6 +80,7 @@ function getInitialForm(asset?: Asset) {
     billWarrantyPath: asset.billWarrantyPath ?? "",
     assigneeType: (asset.assigneeType as "PERSON" | "OFFICE") ?? "",
     assignee: asset.assignee ?? "",
+    assigneeStaffId: (asset as any).currentHolderId ?? "",
     assignedQuantity: toQuantityString(asset.assignedQuantity),
     responsiblePerson: asset.responsiblePerson ?? "",
     status: asset.status,
@@ -129,7 +131,12 @@ export function AssetForm({
       securityCode: emptyToNull(form.securityCode),
       billWarrantyPath: emptyToNull(form.billWarrantyPath),
       assigneeType: form.assigneeType || null,
-      assignee: emptyToNull(form.assignee),
+      assignee:
+        form.assigneeType === "PERSON" && form.assigneeStaffId
+          ? staff.find((st) => st.id === form.assigneeStaffId)?.name ?? form.assignee
+          : emptyToNull(form.assignee),
+      assigneeStaffId:
+        form.assigneeType === "PERSON" ? form.assigneeStaffId || null : null,
       assignedQuantity: form.assignedQuantity || null,
       responsiblePerson: emptyToNull(form.responsiblePerson),
       status: form.status,
@@ -325,6 +332,7 @@ export function AssetForm({
                 <Input
                   id="quantity"
                   type="number"
+                  min={0}
                   step="0.01"
                   value={form.quantity}
                   onChange={(e) => updateField("quantity", e.target.value)}
@@ -374,15 +382,20 @@ export function AssetForm({
                 <Label htmlFor="assignee">Assignee name</Label>
                 {form.assigneeType === "PERSON" && staff.length > 0 ? (
                   <Select
-                    value={form.assignee}
-                    onValueChange={(v) => updateField("assignee", v ?? "")}
+                    value={form.assigneeStaffId}
+                    onValueChange={(v) => updateField("assigneeStaffId", v ?? "")}
                   >
                     <SelectTrigger id="assignee">
-                      <SelectValue placeholder="Select staff member" />
+                      <SelectValue placeholder="Select staff member">
+                        {(v: string) =>
+                          staff.find((st) => st.id === v)?.name ??
+                          "Select staff member"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {staff.map((s) => (
-                        <SelectItem key={s.id} value={s.name}>
+                        <SelectItem key={s.id} value={s.id}>
                           {s.name}
                         </SelectItem>
                       ))}
@@ -403,6 +416,7 @@ export function AssetForm({
                 <Input
                   id="assignedQuantity"
                   type="number"
+                  min={0}
                   step="0.01"
                   value={form.assignedQuantity}
                   onChange={(e) => updateField("assignedQuantity", e.target.value)}
