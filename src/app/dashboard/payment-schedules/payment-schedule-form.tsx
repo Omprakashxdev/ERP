@@ -381,7 +381,12 @@ export function PaymentScheduleForm({
                               onValueChange={(v) => setTaskAssigneeId(v ?? "")}
                             >
                               <SelectTrigger id="task-assignee">
-                                <SelectValue placeholder="Select employee" />
+                                <SelectValue placeholder="Select employee">
+                                  {(value: string) =>
+                                    staff.find((s) => s.id === value)?.name ??
+                                    "Select employee"
+                                  }
+                                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {staff.map((s) => (

@@ -129,7 +129,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
 
     const result = await getMonthlyPlannedNet();
     const m = monthAt(result.data as any, 0);
-    expect(m.plannedNet.toFixed(2)).toBe("-27.18"); // 3.43 − 30.61
+    expect(Number(m.plannedNet).toFixed(2)).toBe("-27.18"); // 3.43 − 30.61
     expect(m.incomePresent).toBe(true);
     expect(m.expensePresent).toBe(true);
     expect(m.incomplete).toBe(false);
@@ -143,7 +143,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
 
     const result = await getMonthlyPlannedNet();
     const m = monthAt(result.data as any, 1);
-    expect(m.plannedNet.toFixed(2)).toBe("10.00");
+    expect(Number(m.plannedNet).toFixed(2)).toBe("10.00");
     expect(m.incomplete).toBe(true);
   });
 
@@ -155,7 +155,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
 
     const result = await getMonthlyPlannedNet();
     const m = monthAt(result.data as any, 2);
-    expect(m.plannedNet.toFixed(2)).toBe("-30.31");
+    expect(Number(m.plannedNet).toFixed(2)).toBe("-30.31");
     expect(m.incomplete).toBe(true);
   });
 
@@ -183,7 +183,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
     expect(m.excludedCount).toBe(1);
     expect(m.incomplete).toBe(true);
     // net = 0 − 30.61 with income treated as missing
-    expect(m.plannedNet.toFixed(2)).toBe("-30.61");
+    expect(Number(m.plannedNet).toFixed(2)).toBe("-30.61");
   });
 
   it("ambiguous expense record excluded → treated as missing (T112)", async () => {
@@ -199,7 +199,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
     const m = monthAt(result.data as any, 0);
     expect(m.expensePresent).toBe(false);
     expect(m.excludedCount).toBe(1);
-    expect(m.plannedNet.toFixed(2)).toBe("3.43"); // 3.43 − 0
+    expect(Number(m.plannedNet).toFixed(2)).toBe("3.43"); // 3.43 − 0
     expect(m.incomplete).toBe(true);
   });
 
@@ -215,7 +215,7 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
     const result = await getMonthlyPlannedNet();
     const m = monthAt(result.data as any, 0);
     expect(m.expensePresent).toBe(true);
-    expect(m.plannedNet.toFixed(2)).toBe("5.00");
+    expect(Number(m.plannedNet).toFixed(2)).toBe("5.00");
     expect(m.incomplete).toBe(false);
   });
 
@@ -317,11 +317,11 @@ describe("Planned Net (FF-01N, Excel Row 16 = Row 12 − Row 14)", () => {
     const jun27 = monthAt(data, 14);
     const jul27 = monthAt(data, 15);
     expect(jun27.formulaCovered).toBe(true);
-    expect(jun27.plannedNet.toFixed(2)).toBe("-6.27"); // formula exists → computed
+    expect(Number(jun27.plannedNet).toFixed(2)).toBe("-6.27"); // formula exists → computed
     expect(jul27.formulaCovered).toBe(false);
     expect(jul27.plannedNet).toBeNull(); // no formula → no value, even with input
     // totalNet still spans the whole window (AU16 = AU12 − AU14)
-    expect(data.totalNet.toFixed(2)).toBe("-11.27");
+    expect(Number(data.totalNet).toFixed(2)).toBe("-11.27");
   });
 
   it("requires fundFlow read permission (T118)", async () => {

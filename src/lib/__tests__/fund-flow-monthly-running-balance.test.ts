@@ -138,7 +138,7 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const m = monthAt(result.data as any, 0);
-    expect(m.runningBalance.toFixed(2)).toBe("-27.18");
+    expect(Number(m.runningBalance).toFixed(2)).toBe("-27.18");
     expect(m.incomplete).toBe(false);
     expect(m.gapMonths).toBe(0);
   });
@@ -168,9 +168,9 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const data = result.data as any;
-    expect(monthAt(data, 0).runningBalance.toFixed(2)).toBe("-27.18");
-    expect(monthAt(data, 1).runningBalance.toFixed(2)).toBe("-54.11");
-    expect(monthAt(data, 2).runningBalance.toFixed(2)).toBe("-82.70");
+    expect(Number(monthAt(data, 0).runningBalance).toFixed(2)).toBe("-27.18");
+    expect(Number(monthAt(data, 1).runningBalance).toFixed(2)).toBe("-54.11");
+    expect(Number(monthAt(data, 2).runningBalance).toFixed(2)).toBe("-82.70");
   });
 
   it("no balance beyond formula range even with inputs (T125)", async () => {
@@ -182,7 +182,7 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const data = result.data as any;
-    expect(monthAt(data, 14).runningBalance.toFixed(2)).toBe("-6.27");
+    expect(Number(monthAt(data, 14).runningBalance).toFixed(2)).toBe("-6.27");
     expect(monthAt(data, 15).runningBalance).toBeNull();
     expect(monthAt(data, 15).formulaCovered).toBe(false);
   });
@@ -205,14 +205,14 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const data = result.data as any;
-    expect(monthAt(data, 0).runningBalance.toFixed(2)).toBe("7.00");
+    expect(Number(monthAt(data, 0).runningBalance).toFixed(2)).toBe("7.00");
     expect(monthAt(data, 0).incomplete).toBe(false);
     // May: balance = 7 + 10 − 0 = 17, but flagged incomplete (missing expense)
-    expect(monthAt(data, 1).runningBalance.toFixed(2)).toBe("17.00");
+    expect(Number(monthAt(data, 1).runningBalance).toFixed(2)).toBe("17.00");
     expect(monthAt(data, 1).incomplete).toBe(true);
     expect(monthAt(data, 1).gapMonths).toBe(1);
     // Later covered months carry the balance AND the incomplete flag
-    expect(monthAt(data, 2).runningBalance.toFixed(2)).toBe("17.00");
+    expect(Number(monthAt(data, 2).runningBalance).toFixed(2)).toBe("17.00");
     expect(monthAt(data, 2).incomplete).toBe(true);
   });
 
@@ -227,7 +227,7 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const m = monthAt(result.data as any, 0);
-    expect(m.runningBalance.toFixed(2)).toBe("-30.61"); // income treated as 0
+    expect(Number(m.runningBalance).toFixed(2)).toBe("-30.61"); // income treated as 0
     expect(m.incomplete).toBe(true);
     expect(m.gapMonths).toBe(1);
   });
@@ -243,7 +243,7 @@ describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
 
     const result = await getMonthlyRunningBalance();
     const m = monthAt(result.data as any, 0);
-    expect(m.runningBalance.toFixed(2)).toBe("5.00");
+    expect(Number(m.runningBalance).toFixed(2)).toBe("5.00");
     expect(m.incomplete).toBe(false);
   });
 

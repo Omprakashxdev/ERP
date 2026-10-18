@@ -454,7 +454,11 @@ export function UserManagementPanel() {
                   <Label className="text-xs">Region</Label>
                   <Select value={cuRegionId} onValueChange={(v) => setCuRegionId(v ?? "")}>
                     <SelectTrigger className="w-full" size="sm">
-                      <SelectValue placeholder="Select region" />
+                      <SelectValue placeholder="Select region">
+                        {(value: string) =>
+                          regions.find((r) => r.id === value)?.name ?? "Select region"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {regions.map((r) => (
@@ -467,7 +471,13 @@ export function UserManagementPanel() {
                   <Label className="text-xs">Reporting Manager</Label>
                   <Select value={cuManagerId} onValueChange={(v) => setCuManagerId(v ?? "")}>
                     <SelectTrigger className="w-full" size="sm">
-                      <SelectValue placeholder="Select manager" />
+                      <SelectValue placeholder="Select manager">
+                        {(value: string) => {
+                          const s = staff.find((x) => x.id === value);
+                          if (!s) return "Select manager";
+                          return s.designation ? `${s.name} (${s.designation})` : s.name;
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {staff.map((s) => (

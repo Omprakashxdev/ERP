@@ -120,7 +120,7 @@ describe("Worksheet-level monthly expenses (FF-01M, Excel Row 14)", () => {
       const result = await getMonthlyExpenses();
       const data = result.data as any;
       expect(data.expenses[0].amount).not.toBeNull();
-      expect(data.expenses[0].amount.toFixed(2)).toBe("0.00");
+      expect(Number(data.expenses[0].amount).toFixed(2)).toBe("0.00");
       expect(data.expenses[1].amount).toBeNull();
       expect(data.expenses[0].unavailable).not.toBe(true);
     });
@@ -169,11 +169,11 @@ describe("Worksheet-level monthly expenses (FF-01M, Excel Row 14)", () => {
       ];
       const result = await getMonthlyExpenses();
       const data = result.data as any;
-      expect(data.expenses[0].amount.toFixed(2)).toBe("10.00");
+      expect(Number(data.expenses[0].amount).toFixed(2)).toBe("10.00");
       expect(data.expenses[1].unavailable).toBe(true);
       expect(data.expenses[1].amount).toBeNull();
       expect(data.expenses[2].unavailable).toBe(true);
-      expect(data.total.toFixed(2)).toBe("10.00");
+      expect(Number(data.total).toFixed(2)).toBe("10.00");
     });
 
     it("requires fundFlow read permission (T94)", async () => {

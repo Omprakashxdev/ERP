@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
@@ -169,7 +169,7 @@ export function FundFlowTable({
               {typedRows.map((row) => {
                 const expanded = expandedRowId === row.id;
                 return (
-                  <>
+                  <Fragment key={row.id}>
                   <TableRow
                     key={row.id}
                     onClick={() => setSelectedFundFlow(row)}
@@ -300,7 +300,7 @@ export function FundFlowTable({
                       </TableCell>
                     </TableRow>
                   )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

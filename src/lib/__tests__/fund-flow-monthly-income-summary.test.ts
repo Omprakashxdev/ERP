@@ -229,7 +229,7 @@ describe("Monthly Income Summary (FF-01L)", () => {
 
       const jun27 = data.find((d: any) => d.month === 6 && d.year === 2027);
       expect(jun27.formulaCovered).toBe(true);
-      expect(jun27.totalIncome!.toFixed(2)).toBe("100.00");
+      expect(Number(jun27.totalIncome!).toFixed(2)).toBe("100.00");
 
       const aug27 = data.find((d: any) => d.month === 8 && d.year === 2027);
       expect(aug27.formulaCovered).toBe(false);

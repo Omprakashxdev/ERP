@@ -29,7 +29,8 @@ const windowKeySet = new Set(
 export interface MonthlyAllocation {
   month: number;
   year: number;
-  amount: Decimal | null;
+  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  amount: string | null;
   /** true if a record exists but its meaning is ambiguous (no audit provenance) */
   unavailable?: boolean;
   unavailableReason?: string;
@@ -37,7 +38,8 @@ export interface MonthlyAllocation {
 
 export interface MonthlyAllocationResult {
   allocations: MonthlyAllocation[];
-  total: Decimal | null;
+  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  total: string | null;
 }
 
 export interface MonthlyIncomeSummary {
@@ -48,7 +50,8 @@ export interface MonthlyIncomeSummary {
       Months beyond that range contain no workbook formula — allocations there
       are preserved in the data but produce no Row 12 value. */
   formulaCovered: boolean;
-  totalIncome: Decimal | null;
+  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  totalIncome: string | null;
   /** Number of projects with valid allocations for this month */
   projectCount: number;
   /** Number of projects with ambiguous/unavailable allocations for this month */
@@ -157,7 +160,7 @@ export async function getMonthlyAllocations(
       allocationMap.set(key, {
         month: m.month,
         year: m.year,
-        amount: new Decimal(m.income.toString()),
+        amount: m.income.toString(),
       });
     }
 
@@ -170,10 +173,10 @@ export async function getMonthlyAllocations(
 
     const total = allocations.reduce<Decimal | null>((acc, a) => {
       if (a.amount == null) return acc;
-      return acc ? acc.plus(a.amount) : new Decimal(a.amount.toString());
+      return acc ? acc.plus(a.amount) : new Decimal(a.amount);
     }, null);
 
-    return { allocations, total };
+    return { allocations, total: total != null ? total.toString() : null };
   });
 }
 
@@ -370,7 +373,9 @@ export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyInc
           label,
           formulaCovered,
           totalIncome:
-            formulaCovered && agg && agg.projectCount > 0 ? agg.total : null,
+            formulaCovered && agg && agg.projectCount > 0
+              ? agg.total.toString()
+              : null,
           projectCount: agg?.projectCount ?? 0,
           unavailableCount: agg?.unavailableCount ?? 0,
         };
@@ -389,7 +394,8 @@ export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyInc
 export interface MonthlyExpense {
   month: number;
   year: number;
-  amount: Decimal | null;
+  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  amount: string | null;
   /** ISO timestamp of the stored record — optimistic concurrency token */
   updatedAt: string | null;
   /** true if a record exists but lacks FF-01M create provenance */
@@ -399,8 +405,8 @@ export interface MonthlyExpense {
 
 export interface MonthlyExpenseResult {
   expenses: MonthlyExpense[];
-  /** Decimal sum of entered amounts only (Excel AU14 SUM parity) */
-  total: Decimal | null;
+  /** Serialized decimal sum of entered amounts only (Excel AU14 SUM parity) */
+  total: string | null;
 }
 
 const expenseSchema = z.object({
@@ -470,7 +476,7 @@ export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseR
       expenseMap.set(key, {
         month: m,
         year: y,
-        amount: r.amount,
+        amount: r.amount.toString(),
         updatedAt: r.updatedAt.toISOString(),
       });
     }
@@ -491,10 +497,10 @@ export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseR
 
     const total = expenses.reduce<Decimal | null>((acc, e) => {
       if (e.amount == null) return acc;
-      return acc ? acc.plus(e.amount) : new Decimal(e.amount.toString());
+      return acc ? acc.plus(e.amount) : new Decimal(e.amount);
     }, null);
 
-    return { expenses, total };
+    return { expenses, total: total != null ? total.toString() : null };
   });
 }
 
@@ -633,8 +639,9 @@ export interface PlannedNetMonth {
   /** Excel Row 16 formulas exist only in V16:AJ16 (Apr 2026 – Jun 2027) */
   formulaCovered: boolean;
   /** income − expense; null when no verified input exists for the month,
-      or when the workbook has no Row 16 formula for the month */
-  plannedNet: Decimal | null;
+      or when the workbook has no Row 16 formula for the month.
+      Serialized decimal string — class instances cannot cross the RSC boundary. */
+  plannedNet: string | null;
   /** verified Row 12 workbook allocations exist for this month */
   incomePresent: boolean;
   /** a verified Row 14 expense entry exists for this month */
@@ -647,8 +654,9 @@ export interface PlannedNetMonth {
 
 export interface PlannedNetResult {
   months: PlannedNetMonth[];
-  /** AU16 parity: total income − total expenses over the window */
-  totalNet: Decimal | null;
+  /** AU16 parity: total income − total expenses over the window.
+      Serialized decimal string. */
+  totalNet: string | null;
   totalIncomplete: boolean;
 }
 
@@ -713,7 +721,7 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
           year,
           label,
           formulaCovered,
-          plannedNet,
+          plannedNet: plannedNet != null ? plannedNet.toString() : null,
           incomePresent,
           expensePresent,
           excludedCount,
@@ -722,14 +730,14 @@ export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetRes
       }
     );
 
-    const totalNet =
+    const totalNetDec =
       incomeTotal != null || expenseTotal != null
         ? (incomeTotal ?? new Decimal("0")).minus(expenseTotal ?? new Decimal("0"))
         : null;
 
     return {
       months,
-      totalNet,
+      totalNet: totalNetDec != null ? totalNetDec.toString() : null,
       // AU16 = AU12 − AU14 treats every blank input cell as 0. The total is
       // flagged incomplete when any covered side is absent or any month the
       // workbook's formulas actually read lacks a verified input — it is not
@@ -757,7 +765,8 @@ export interface RunningBalanceMonth {
   formulaCovered: boolean;
   /** carried balance for the month; null before the first verified input
       or outside the workbook formula range */
-  runningBalance: Decimal | null;
+  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  runningBalance: string | null;
   /** covered months up to and including this one that lack a verified
       input or had ambiguous records excluded (missing treated as 0) */
   gapMonths: number;
@@ -816,9 +825,7 @@ export async function getMonthlyRunningBalance(): Promise<ActionResult<RunningBa
           year,
           label,
           formulaCovered: true,
-          runningBalance: seenVerifiedInput
-            ? new Decimal(running.toString())
-            : null,
+          runningBalance: seenVerifiedInput ? running.toString() : null,
           gapMonths,
           incomplete: gapMonths > 0,
         };

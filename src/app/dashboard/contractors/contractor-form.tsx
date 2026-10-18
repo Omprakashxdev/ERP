@@ -580,7 +580,14 @@ export function ContractorForm({
                       </Label>
                       <Select onValueChange={handleContactMasterSelect}>
                         <SelectTrigger id="contactMasterSelect" className="bg-white">
-                          <SelectValue placeholder="Select a pre-saved contact to auto-fill" />
+                          <SelectValue placeholder="Select a pre-saved contact to auto-fill">
+                            {(value: string) => {
+                              const c = masters?.contactMasters?.find((x) => x.id === value);
+                              return c
+                                ? `${c.name}${c.phone ? ` (${c.phone})` : ""}`
+                                : "Select a pre-saved contact to auto-fill";
+                            }}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {masters.contactMasters.map((c) => (
