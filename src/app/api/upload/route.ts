@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     await writeFile(filePath, Buffer.from(bytes));
 
     // Return the public path
-    const publicPath = `/uploads/${module}/${filename}`;
+    const publicPath = `/uploads/${moduleName}/${filename}`;
 
     return NextResponse.json({ path: publicPath, filename: file.name });
   } catch (error) {
