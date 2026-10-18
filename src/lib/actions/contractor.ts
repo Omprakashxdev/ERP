@@ -120,3 +120,21 @@ export async function getContractorById(
     return contractor;
   });
 }
+
+/** Existing tender advertisement IDs for the contractor form — avoids
+    retyping an ID that already exists on a Tender record. */
+export async function getTenderIdSuggestions(): Promise<
+  ActionResult<{ tenderId: string; name: string }[]>
+> {
+  return withPermission("contractors", "read", async () => {
+    const rows = await prisma.tender.findMany({
+      where: { tenderId: { not: null } },
+      select: { tenderId: true, name: true },
+      orderBy: { tenderDate: "desc" },
+      take: 200,
+    });
+    return rows
+      .filter((r): r is { tenderId: string; name: string } => !!r.tenderId)
+      .map((r) => ({ tenderId: r.tenderId, name: r.name }));
+  });
+}

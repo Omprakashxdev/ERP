@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Contractor } from "@prisma/client";
 import {
@@ -23,7 +23,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { createContractor, updateContractor } from "@/lib/actions/contractor";
+import {
+  createContractor,
+  updateContractor,
+  getTenderIdSuggestions,
+} from "@/lib/actions/contractor";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import type { MasterData } from "@/lib/master-data";
 import { Loader2, FileText, Wrench, Phone, Receipt } from "lucide-react";
@@ -138,6 +142,13 @@ export function ContractorForm({
   const [activeTab, setActiveTab] = useState("contract");
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+  const [tenderIds, setTenderIds] = useState<{ tenderId: string; name: string }[]>([]);
+
+  useEffect(() => {
+    getTenderIdSuggestions().then((res) => {
+      if (res.success) setTenderIds(res.data ?? []);
+    });
+  }, []);
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -414,10 +425,18 @@ export function ContractorForm({
                     <Label htmlFor="tenderId">Tender ID</Label>
                     <Input
                       id="tenderId"
+                      list="existing-tender-ids"
                       value={form.tenderId}
                       onChange={(e) => updateField("tenderId", e.target.value)}
                       placeholder="e.g. Tender ID as per advertisement"
                     />
+                    <datalist id="existing-tender-ids">
+                      {tenderIds.map((t) => (
+                        <option key={t.tenderId} value={t.tenderId}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
 
                   <div className="space-y-1.5">
