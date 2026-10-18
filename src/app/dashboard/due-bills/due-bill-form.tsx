@@ -1,5 +1,7 @@
 "use client";
 
+import { calcNinePercentGst } from "@/lib/due-bill-calc";
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DueBillStatus, DueBillWithComputed } from "@/types/due-bills";
@@ -267,7 +269,7 @@ export function DueBillForm({ bill, mode, projects, onClose }: DueBillFormProps)
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="grossAmount">Gross (₹)</Label>
               <Input
@@ -277,6 +279,22 @@ export function DueBillForm({ bill, mode, projects, onClose }: DueBillFormProps)
                 value={form.grossAmount}
                 onChange={(e) => updateField("grossAmount", e.target.value)}
               />
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 w-full text-xs"
+                title="Fill SGST and CGST at 9% of Gross each, as per the Excel format"
+                onClick={() => {
+                  const gst = calcNinePercentGst(Number(form.grossAmount) || 0);
+                  setForm((prev) => ({ ...prev, sgst: gst, cgst: gst }));
+                }}
+              >
+                Fill 9% GST
+              </Button>
             </div>
 
             <div className="space-y-1.5">
