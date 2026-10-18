@@ -277,16 +277,22 @@ model Contractor {
   tsAaDocumentPath            String?
   tenderCopyPath              String?
   contactProofPath            String?
+  workOrderMasterId           String?
   workOrderCopyPath           String?
+  drawingMasterId             String?
   drawingsPath                String?
   completionCertificatePath   String?
 
   createdAt                   DateTime      @default(now())
   updatedAt                   DateTime      @updatedAt
 
-  projects Project[]
+  workOrderMaster WorkOrderMaster? @relation(fields: [workOrderMasterId], references: [id], onDelete: SetNull)
+  drawingMaster   DrawingMaster?   @relation(fields: [drawingMasterId], references: [id], onDelete: SetNull)
+  projects        Project[]
 
   @@index([name])
+  @@index([workOrderMasterId])
+  @@index([drawingMasterId])
 }
 
 model Tender {
@@ -1206,6 +1212,7 @@ model DrawingMaster {
   id              String   @id @default(cuid())
   name            String   @unique
   referenceNumber String?
+  contractors     Contractor[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -1214,6 +1221,7 @@ model WorkOrderMaster {
   id              String   @id @default(cuid())
   name            String   @unique
   referenceNumber String?
+  contractors     Contractor[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

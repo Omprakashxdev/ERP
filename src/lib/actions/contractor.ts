@@ -138,3 +138,71 @@ export async function getTenderIdSuggestions(): Promise<
       .map((r) => ({ tenderId: r.tenderId, name: r.name }));
   });
 }
+
+/** Read-only RA bills on this contractor's explicitly linked projects.
+    Only returns the contractor's own projects' WIP bill slots — never
+    another contractor's data, never invented records. */
+export async function getContractorLinkedRaBills(
+  contractorId: string
+): Promise<
+  ActionResult<
+    {
+      projectName: string;
+      billNo: number;
+      date: Date | null;
+      amount: string | null;
+      documentPath: string | null;
+    }[]
+  >
+> {
+  return withPermission("contractors", "read", async () => {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      include: {
+        projects: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+    if (!contractor) return [];
+
+    const projectIds = contractor.projects.map((p) => p.id);
+    const wips = await prisma.workInProgress.findMany({
+      where: { projectId: { in: projectIds } },
+      select: {
+        projectId: true,
+        raBill1Date: true, raBill1Amount: true, raBill1Path: true,
+        raBill2Date: true, raBill2Amount: true, raBill2Path: true,
+        raBill3Date: true, raBill3Amount: true, raBill3Path: true,
+        raBill4Date: true, raBill4Amount: true, raBill4Path: true,
+      },
+    });
+
+    const nameByProject = new Map(contractor.projects.map((p) => [p.id, p.name]));
+    const rows: {
+      projectName: string;
+      billNo: number;
+      date: Date | null;
+      amount: string | null;
+      documentPath: string | null;
+    }[] = [];
+
+    for (const wip of wips) {
+      for (let n = 1; n <= 4; n++) {
+        const date = wip[`raBill${n}Date` as keyof typeof wip] as Date | null;
+        const amount = wip[`raBill${n}Amount` as keyof typeof wip] as { toString(): string } | null;
+        const path = wip[`raBill${n}Path` as keyof typeof wip] as string | null;
+        // Only include slots that actually hold a bill.
+        if (!date && !amount && !path) continue;
+        rows.push({
+          projectName: nameByProject.get(wip.projectId) ?? "Project",
+          billNo: n,
+          date,
+          amount: amount?.toString() ?? null,
+          documentPath: path,
+        });
+      }
+    }
+    return rows.sort((a, b) => a.billNo - b.billNo);
+  });
+}

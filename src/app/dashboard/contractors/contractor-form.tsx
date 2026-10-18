@@ -27,6 +27,7 @@ import {
   createContractor,
   updateContractor,
   getTenderIdSuggestions,
+  getContractorLinkedRaBills,
 } from "@/lib/actions/contractor";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import type { MasterData } from "@/lib/master-data";
@@ -89,7 +90,9 @@ function getInitialForm(contractor?: Contractor) {
       tsAaDocumentPath: "",
       tenderCopyPath: "",
       contactProofPath: "",
+      workOrderMasterId: "",
       workOrderCopyPath: "",
+      drawingMasterId: "",
       drawingsPath: "",
       completionCertificatePath: "",
     };
@@ -123,7 +126,9 @@ function getInitialForm(contractor?: Contractor) {
     tsAaDocumentPath: (contractor as any).tsAaDocumentPath ?? "",
     tenderCopyPath: (contractor as any).tenderCopyPath ?? "",
     contactProofPath: (contractor as any).contactProofPath ?? "",
+    workOrderMasterId: (contractor as any).workOrderMasterId ?? "",
     workOrderCopyPath: contractor.workOrderCopyPath ?? "",
+    drawingMasterId: (contractor as any).drawingMasterId ?? "",
     drawingsPath: contractor.drawingsPath ?? "",
     completionCertificatePath: contractor.completionCertificatePath ?? "",
   };
@@ -202,7 +207,9 @@ export function ContractorForm({
       tsAaDocumentPath: emptyToNull(form.tsAaDocumentPath),
       tenderCopyPath: emptyToNull(form.tenderCopyPath),
       contactProofPath: emptyToNull(form.contactProofPath),
+      workOrderMasterId: form.workOrderMasterId || null,
       workOrderCopyPath: emptyToNull(form.workOrderCopyPath),
+      drawingMasterId: form.drawingMasterId || null,
       drawingsPath: emptyToNull(form.drawingsPath),
       completionCertificatePath: emptyToNull(form.completionCertificatePath),
     };
@@ -473,6 +480,38 @@ export function ContractorForm({
                   </div>
 
                   <div className="space-y-1.5">
+                    <Label htmlFor="workOrderMasterId">Work order (Work Order Master)</Label>
+                    <Select
+                      value={form.workOrderMasterId || "none"}
+                      onValueChange={(v) =>
+                        updateField("workOrderMasterId", v === "none" ? "" : (v ?? ""))
+                      }
+                    >
+                      <SelectTrigger id="workOrderMasterId" className="w-full">
+                        <SelectValue placeholder="Select work order">
+                          {(v: string) => {
+                            if (v === "none" || !v) return "Select work order";
+                            const m = masters?.workOrderMasters?.find((w) => w.id === v);
+                            return m
+                              ? m.referenceNumber
+                                ? `${m.name} — ${m.referenceNumber}`
+                                : m.name
+                              : "Select work order";
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No work order selected</SelectItem>
+                        {(masters?.workOrderMasters ?? []).map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.referenceNumber ? `${w.name} — ${w.referenceNumber}` : w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
                     <Label htmlFor="workOrderDate">Work order date</Label>
                     <Input
                       id="workOrderDate"
@@ -574,6 +613,38 @@ export function ContractorForm({
                       accept=".jpg,.jpeg,.png,.pdf"
                       placeholder="Upload TS/AA sanction copy"
                     />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="drawingMasterId">Drawing (Drawing Master)</Label>
+                    <Select
+                      value={form.drawingMasterId || "none"}
+                      onValueChange={(v) =>
+                        updateField("drawingMasterId", v === "none" ? "" : (v ?? ""))
+                      }
+                    >
+                      <SelectTrigger id="drawingMasterId" className="w-full">
+                        <SelectValue placeholder="Select drawing">
+                          {(v: string) => {
+                            if (v === "none" || !v) return "Select drawing";
+                            const m = masters?.drawingMasters?.find((d) => d.id === v);
+                            return m
+                              ? m.referenceNumber
+                                ? `${m.name} — ${m.referenceNumber}`
+                                : m.name
+                              : "Select drawing";
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No drawing selected</SelectItem>
+                        {(masters?.drawingMasters ?? []).map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.referenceNumber ? `${d.name} — ${d.referenceNumber}` : d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
@@ -722,6 +793,12 @@ export function ContractorForm({
                     />
                   </div>
 
+                  {contractor && (
+                    <div className="sm:col-span-2">
+                      <ContractorLinkedRaBillsPanel contractorId={contractor.id} />
+                    </div>
+                  )}
+
                   <div className="space-y-1.5 sm:col-span-2">
                     <FileUploadField
                       id="contractor-ra-bills"
@@ -807,5 +884,69 @@ export function ContractorForm({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Read-only RA bills from this contractor's explicitly linked
+    projects' WIP records. Uses only stored values — never invents
+    bills and never leaks another contractor's data. */
+function ContractorLinkedRaBillsPanel({ contractorId }: { contractorId: string }) {
+  const [rows, setRows] = useState<
+    | {
+        projectName: string;
+        billNo: number;
+        date: string | Date | null;
+        amount: string | null;
+        documentPath: string | null;
+      }[]
+    | null
+  >(null);
+
+  useEffect(() => {
+    getContractorLinkedRaBills(contractorId).then((res) => {
+      setRows(res.success ? (res.data as never) : []);
+    });
+  }, [contractorId]);
+
+  if (!rows) return null;
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <Label className="text-xs">RA Bills on Linked Projects</Label>
+      {rows.length === 0 ? (
+        <p className="text-xs text-zinc-500">
+          No linked projects or no RA bills recorded on them yet. Link a
+          project to this contractor to see its RA bills here.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.map((r, i) => (
+            <li key={i} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">
+                {r.projectName} — RA Bill {r.billNo}
+              </span>
+              <span className="text-xs text-zinc-500">
+                {r.date
+                  ? new Date(r.date).toLocaleDateString("en-IN")
+                  : "no date"}
+                {r.amount ? ` · ₹${r.amount}` : ""}
+              </span>
+              {r.documentPath ? (
+                <a
+                  href={r.documentPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 underline underline-offset-2"
+                >
+                  View document
+                </a>
+              ) : (
+                <span className="text-xs text-zinc-400">no document</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

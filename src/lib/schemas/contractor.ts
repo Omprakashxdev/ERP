@@ -33,7 +33,9 @@ export const contractorCreateSchema = z.object({
   tsAaDocumentPath: cleanedString(500).optional().nullable(),
   tenderCopyPath: cleanedString(500).optional().nullable(),
   contactProofPath: cleanedString(500).optional().nullable(),
+  workOrderMasterId: z.string().cuid().optional().nullable(),
   workOrderCopyPath: cleanedString(500).optional().nullable(),
+  drawingMasterId: z.string().cuid().optional().nullable(),
   drawingsPath: cleanedString(500).optional().nullable(),
   completionCertificatePath: cleanedString(500).optional().nullable(),
 });
