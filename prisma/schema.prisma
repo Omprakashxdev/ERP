@@ -786,24 +786,40 @@ model WorkInProgress {
   raBill1SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill1ProjectExpense    Decimal?      @db.Decimal(19, 2)
   raBill1Path              String?
+  raBill1WoNo              String?
+  raBill1Details           String?
+  raBill1CertificatePath   String?
+  raBill1TestCopyPath      String?
 
   raBill2Amount            Decimal?      @db.Decimal(19, 2)
   raBill2Date              DateTime?
   raBill2SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill2ProjectExpense    Decimal?      @db.Decimal(19, 2)
   raBill2Path              String?
+  raBill2WoNo              String?
+  raBill2Details           String?
+  raBill2CertificatePath   String?
+  raBill2TestCopyPath      String?
 
   raBill3Amount            Decimal?      @db.Decimal(19, 2)
   raBill3Date              DateTime?
   raBill3SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill3ProjectExpense    Decimal?      @db.Decimal(19, 2)
   raBill3Path              String?
+  raBill3WoNo              String?
+  raBill3Details           String?
+  raBill3CertificatePath   String?
+  raBill3TestCopyPath      String?
 
   raBill4Amount            Decimal?      @db.Decimal(19, 2)
   raBill4Date              DateTime?
   raBill4SaecFee           Decimal?      @db.Decimal(19, 2)
   raBill4ProjectExpense    Decimal?      @db.Decimal(19, 2)
   raBill4Path              String?
+  raBill4WoNo              String?
+  raBill4Details           String?
+  raBill4CertificatePath   String?
+  raBill4TestCopyPath      String?
 
   annexure3aPath           String?
   completionCertificatePath String?

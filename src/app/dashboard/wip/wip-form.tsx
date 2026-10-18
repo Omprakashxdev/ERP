@@ -107,9 +107,25 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
       raBill4SaecFee: "",
       raBill4ProjectExpense: "",
       raBill1Path: "",
+      raBill1WoNo: "",
+      raBill1Details: "",
+      raBill1CertificatePath: "",
+      raBill1TestCopyPath: "",
       raBill2Path: "",
+      raBill2WoNo: "",
+      raBill2Details: "",
+      raBill2CertificatePath: "",
+      raBill2TestCopyPath: "",
       raBill3Path: "",
+      raBill3WoNo: "",
+      raBill3Details: "",
+      raBill3CertificatePath: "",
+      raBill3TestCopyPath: "",
       raBill4Path: "",
+      raBill4WoNo: "",
+      raBill4Details: "",
+      raBill4CertificatePath: "",
+      raBill4TestCopyPath: "",
       finalProgressPath: "",
       annexure3aPath: "",
       completionCertificatePath: "",
@@ -154,9 +170,25 @@ function getInitialForm(wip?: WipWithComputed, projectId?: string) {
     raBill4SaecFee: toMoneyString(wip.raBill4SaecFee),
     raBill4ProjectExpense: toMoneyString(wip.raBill4ProjectExpense),
     raBill1Path: (wip as any).raBill1Path ?? "",
+    raBill1WoNo: (wip as any).raBill1WoNo ?? "",
+    raBill1Details: (wip as any).raBill1Details ?? "",
+    raBill1CertificatePath: (wip as any).raBill1CertificatePath ?? "",
+    raBill1TestCopyPath: (wip as any).raBill1TestCopyPath ?? "",
     raBill2Path: (wip as any).raBill2Path ?? "",
+    raBill2WoNo: (wip as any).raBill2WoNo ?? "",
+    raBill2Details: (wip as any).raBill2Details ?? "",
+    raBill2CertificatePath: (wip as any).raBill2CertificatePath ?? "",
+    raBill2TestCopyPath: (wip as any).raBill2TestCopyPath ?? "",
     raBill3Path: (wip as any).raBill3Path ?? "",
+    raBill3WoNo: (wip as any).raBill3WoNo ?? "",
+    raBill3Details: (wip as any).raBill3Details ?? "",
+    raBill3CertificatePath: (wip as any).raBill3CertificatePath ?? "",
+    raBill3TestCopyPath: (wip as any).raBill3TestCopyPath ?? "",
     raBill4Path: (wip as any).raBill4Path ?? "",
+    raBill4WoNo: (wip as any).raBill4WoNo ?? "",
+    raBill4Details: (wip as any).raBill4Details ?? "",
+    raBill4CertificatePath: (wip as any).raBill4CertificatePath ?? "",
+    raBill4TestCopyPath: (wip as any).raBill4TestCopyPath ?? "",
     finalProgressPath: (wip as any).finalProgressPath ?? "",
     annexure3aPath: wip.annexure3aPath ?? "",
     completionCertificatePath: wip.completionCertificatePath ?? "",
@@ -266,9 +298,25 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
       raBill4SaecFee: form.raBill4SaecFee || null,
       raBill4ProjectExpense: form.raBill4ProjectExpense || null,
       raBill1Path: emptyToNull(form.raBill1Path),
+      raBill1WoNo: emptyToNull(form.raBill1WoNo),
+      raBill1Details: emptyToNull(form.raBill1Details),
+      raBill1CertificatePath: emptyToNull(form.raBill1CertificatePath),
+      raBill1TestCopyPath: emptyToNull(form.raBill1TestCopyPath),
       raBill2Path: emptyToNull(form.raBill2Path),
+      raBill2WoNo: emptyToNull(form.raBill2WoNo),
+      raBill2Details: emptyToNull(form.raBill2Details),
+      raBill2CertificatePath: emptyToNull(form.raBill2CertificatePath),
+      raBill2TestCopyPath: emptyToNull(form.raBill2TestCopyPath),
       raBill3Path: emptyToNull(form.raBill3Path),
+      raBill3WoNo: emptyToNull(form.raBill3WoNo),
+      raBill3Details: emptyToNull(form.raBill3Details),
+      raBill3CertificatePath: emptyToNull(form.raBill3CertificatePath),
+      raBill3TestCopyPath: emptyToNull(form.raBill3TestCopyPath),
       raBill4Path: emptyToNull(form.raBill4Path),
+      raBill4WoNo: emptyToNull(form.raBill4WoNo),
+      raBill4Details: emptyToNull(form.raBill4Details),
+      raBill4CertificatePath: emptyToNull(form.raBill4CertificatePath),
+      raBill4TestCopyPath: emptyToNull(form.raBill4TestCopyPath),
       finalProgressPath: emptyToNull(form.finalProgressPath),
       annexure3aPath: emptyToNull(form.annexure3aPath),
       completionCertificatePath: emptyToNull(form.completionCertificatePath),
@@ -755,13 +803,49 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                       </div>
-                      <div className="mt-3">
+                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Work Order No.</Label>
+                          <Input
+                            value={form[`raBill${n}WoNo` as keyof typeof form] as string ?? ""}
+                            onChange={(e) =>
+                              updateField(`raBill${n}WoNo` as keyof typeof form, e.target.value)
+                            }
+                            placeholder="e.g. WO/2025/123"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Details</Label>
+                          <Input
+                            value={form[`raBill${n}Details` as keyof typeof form] as string ?? ""}
+                            onChange={(e) =>
+                              updateField(`raBill${n}Details` as keyof typeof form, e.target.value)
+                            }
+                            placeholder="Bill details / description"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <FileUploadField
                           id={`raBill${n}Path`}
-                          label={`Upload RA Bill ${n} Detail to Concern Authority`}
+                          label={`RA Bill ${n} copy`}
                           value={form[`raBill${n}Path` as keyof typeof form] as string ?? ""}
                           onChange={(url: string) => updateField(`raBill${n}Path` as keyof typeof form, url as any)}
-                          placeholder={`Upload RA Bill ${n} file or enter path`}
+                          placeholder={`Upload bill copy or enter path`}
+                        />
+                        <FileUploadField
+                          id={`raBill${n}CertificatePath`}
+                          label={`RA Bill ${n} certificate`}
+                          value={form[`raBill${n}CertificatePath` as keyof typeof form] as string ?? ""}
+                          onChange={(url: string) => updateField(`raBill${n}CertificatePath` as keyof typeof form, url as any)}
+                          placeholder={`Upload certificate or enter path`}
+                        />
+                        <FileUploadField
+                          id={`raBill${n}TestCopyPath`}
+                          label={`RA Bill ${n} test copy`}
+                          value={form[`raBill${n}TestCopyPath` as keyof typeof form] as string ?? ""}
+                          onChange={(url: string) => updateField(`raBill${n}TestCopyPath` as keyof typeof form, url as any)}
+                          placeholder={`Upload test copy or enter path`}
                         />
                       </div>
                     </div>

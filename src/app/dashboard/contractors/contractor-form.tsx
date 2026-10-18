@@ -897,7 +897,11 @@ function ContractorLinkedRaBillsPanel({ contractorId }: { contractorId: string }
         billNo: number;
         date: string | Date | null;
         amount: string | null;
+        woNo: string | null;
+        details: string | null;
         documentPath: string | null;
+        certificatePath: string | null;
+        testCopyPath: string | null;
       }[]
     | null
   >(null);
@@ -930,18 +934,35 @@ function ContractorLinkedRaBillsPanel({ contractorId }: { contractorId: string }
                   ? new Date(r.date).toLocaleDateString("en-IN")
                   : "no date"}
                 {r.amount ? ` · ₹${r.amount}` : ""}
+                {r.woNo ? ` · WO ${r.woNo}` : ""}
               </span>
-              {r.documentPath ? (
-                <a
-                  href={r.documentPath}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 underline underline-offset-2"
-                >
-                  View document
-                </a>
-              ) : (
-                <span className="text-xs text-zinc-400">no document</span>
+              {r.details ? (
+                <span className="w-full text-xs text-zinc-500">
+                  {r.details}
+                </span>
+              ) : null}
+              {(
+                [
+                  ["Bill copy", r.documentPath],
+                  ["Certificate", r.certificatePath],
+                  ["Test copy", r.testCopyPath],
+                ] as const
+              ).map(([label, path]) =>
+                path ? (
+                  <a
+                    key={label}
+                    href={path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline underline-offset-2"
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  <span key={label} className="text-xs text-zinc-400">
+                    no {label.toLowerCase()}
+                  </span>
+                )
               )}
             </li>
           ))}

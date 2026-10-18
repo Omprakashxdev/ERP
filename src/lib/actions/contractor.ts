@@ -151,7 +151,11 @@ export async function getContractorLinkedRaBills(
       billNo: number;
       date: Date | null;
       amount: string | null;
+      woNo: string | null;
+      details: string | null;
       documentPath: string | null;
+      certificatePath: string | null;
+      testCopyPath: string | null;
     }[]
   >
 > {
@@ -172,9 +176,17 @@ export async function getContractorLinkedRaBills(
       select: {
         projectId: true,
         raBill1Date: true, raBill1Amount: true, raBill1Path: true,
+        raBill1WoNo: true, raBill1Details: true,
+        raBill1CertificatePath: true, raBill1TestCopyPath: true,
         raBill2Date: true, raBill2Amount: true, raBill2Path: true,
+        raBill2WoNo: true, raBill2Details: true,
+        raBill2CertificatePath: true, raBill2TestCopyPath: true,
         raBill3Date: true, raBill3Amount: true, raBill3Path: true,
+        raBill3WoNo: true, raBill3Details: true,
+        raBill3CertificatePath: true, raBill3TestCopyPath: true,
         raBill4Date: true, raBill4Amount: true, raBill4Path: true,
+        raBill4WoNo: true, raBill4Details: true,
+        raBill4CertificatePath: true, raBill4TestCopyPath: true,
       },
     });
 
@@ -184,7 +196,11 @@ export async function getContractorLinkedRaBills(
       billNo: number;
       date: Date | null;
       amount: string | null;
+      woNo: string | null;
+      details: string | null;
       documentPath: string | null;
+      certificatePath: string | null;
+      testCopyPath: string | null;
     }[] = [];
 
     for (const wip of wips) {
@@ -192,14 +208,22 @@ export async function getContractorLinkedRaBills(
         const date = wip[`raBill${n}Date` as keyof typeof wip] as Date | null;
         const amount = wip[`raBill${n}Amount` as keyof typeof wip] as { toString(): string } | null;
         const path = wip[`raBill${n}Path` as keyof typeof wip] as string | null;
+        const woNo = wip[`raBill${n}WoNo` as keyof typeof wip] as string | null;
+        const details = wip[`raBill${n}Details` as keyof typeof wip] as string | null;
+        const cert = wip[`raBill${n}CertificatePath` as keyof typeof wip] as string | null;
+        const testCopy = wip[`raBill${n}TestCopyPath` as keyof typeof wip] as string | null;
         // Only include slots that actually hold a bill.
-        if (!date && !amount && !path) continue;
+        if (!date && !amount && !path && !cert && !testCopy && !woNo && !details) continue;
         rows.push({
           projectName: nameByProject.get(wip.projectId) ?? "Project",
           billNo: n,
           date,
           amount: amount?.toString() ?? null,
+          woNo,
+          details,
           documentPath: path,
+          certificatePath: cert,
+          testCopyPath: testCopy,
         });
       }
     }
