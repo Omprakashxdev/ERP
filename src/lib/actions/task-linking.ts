@@ -8,6 +8,12 @@ interface CreateLinkedTaskInput {
   dueDate: Date | null;
   sourceModule: string;
   sourceEntityId: string;
+  /**
+   * Stable identity of the source event (e.g. "bidding_last",
+   * "cc:<staffId>"). Never derived from the mutable task title —
+   * renaming the task cannot cause a duplicate once keyed.
+   */
+  sourceEventKey?: string;
   projectId?: string | null;
   assignedToId?: string | null;
   assignedById?: string | null;
@@ -16,22 +22,87 @@ interface CreateLinkedTaskInput {
 
 /**
  * Creates a task linked to a source entity (WIP, Tender, etc.)
- * Only creates the task if one doesn't already exist for the same sourceModule + sourceEntityId + title.
+ *
+ * Identity rules:
+ * - With `sourceEventKey`: dedup on sourceModule + sourceEntityId +
+ *   sourceEventKey only. Title and assignee are display data and never
+ *   part of the identity. Backed by the unique index — concurrent saves
+ *   cannot produce duplicates.
+ * - Without a key (legacy/manual callers): dedup on sourceModule +
+ *   sourceEntityId + title + assignedToId, unchanged.
  */
 export async function createLinkedTask(input: CreateLinkedTaskInput): Promise<void> {
-  // Check if a task with the same source, title and assignee already exists.
-  // Assignee is part of the identity: a CC task for staff A must not block
-  // a distinct task for staff B on the same correspondence.
-  const existing = await prisma.task.findFirst({
-    where: {
-      sourceModule: input.sourceModule,
-      sourceEntityId: input.sourceEntityId,
-      title: input.title,
-      assignedToId: input.assignedToId ?? undefined,
-    },
-  });
+  if (input.sourceEventKey) {
+    // A keyed task must always carry its source linkage.
+    if (!input.sourceModule || !input.sourceEntityId) {
+      throw new Error(
+        "Event-keyed linked tasks require sourceModule and sourceEntityId"
+      );
+    }
 
-  if (existing) return;
+    const keyed = await prisma.task.findFirst({
+      where: {
+        sourceModule: input.sourceModule,
+        sourceEntityId: input.sourceEntityId,
+        sourceEventKey: input.sourceEventKey,
+      },
+      select: { id: true },
+    });
+    if (keyed) return;
+
+    // Legacy adoption: adopt an unkeyed historical task only when exactly
+    // one record matches this event's module+entity+title+assignee.
+    // Zero or ambiguous matches are left untouched — never guessed.
+    const legacyMatches = await prisma.task.findMany({
+      where: {
+        sourceModule: input.sourceModule,
+        sourceEntityId: input.sourceEntityId,
+        sourceEventKey: null,
+        title: input.title,
+        assignedToId: input.assignedToId ?? undefined,
+      },
+      select: { id: true },
+      take: 2,
+    });
+    if (legacyMatches.length === 1) {
+      // Race-safe conditional adoption: only update if still unkeyed.
+      const adopted = await prisma.task.updateMany({
+        where: { id: legacyMatches[0].id, sourceEventKey: null },
+        data: { sourceEventKey: input.sourceEventKey },
+      });
+      if (adopted.count === 1) return;
+      // Another request keyed it first — fall through to the keyed check.
+      const again = await prisma.task.findFirst({
+        where: {
+          sourceModule: input.sourceModule,
+          sourceEntityId: input.sourceEntityId,
+          sourceEventKey: input.sourceEventKey,
+        },
+        select: { id: true },
+      });
+      if (again) return;
+    } else if (legacyMatches.length > 1) {
+      // Ambiguous — report for manual resolution, do not silently create
+      // a likely duplicate nor arbitrarily pick one.
+      console.warn(
+        `[createLinkedTask] Ambiguous legacy tasks for ${input.sourceModule}` +
+          `/${input.sourceEntityId}/${input.sourceEventKey}: ` +
+          `${legacyMatches.map((m) => m.id).join(", ")} — needs manual review`
+      );
+      return;
+    }
+  } else {
+    // Legacy unkeyed dedup — title + assignee identify the task.
+    const existing = await prisma.task.findFirst({
+      where: {
+        sourceModule: input.sourceModule,
+        sourceEntityId: input.sourceEntityId,
+        title: input.title,
+        assignedToId: input.assignedToId ?? undefined,
+      },
+    });
+    if (existing) return;
+  }
 
   // Need an assignee — if none specified, find the first active staff member
   let assignedToId = input.assignedToId;
@@ -44,19 +115,39 @@ export async function createLinkedTask(input: CreateLinkedTaskInput): Promise<vo
     assignedToId = firstStaff.id;
   }
 
-  await prisma.task.create({
-    data: {
-      title: input.title,
-      description: input.description,
-      dueDate: input.dueDate,
-      sourceModule: input.sourceModule,
-      sourceEntityId: input.sourceEntityId,
-      projectId: input.projectId ?? null,
-      assignedToId,
-      assignedById: input.assignedById ?? null,
-      priority: input.priority ?? "MEDIUM",
-    },
-  });
+  try {
+    await prisma.task.create({
+      data: {
+        title: input.title,
+        description: input.description,
+        dueDate: input.dueDate,
+        sourceModule: input.sourceModule,
+        sourceEntityId: input.sourceEntityId,
+        sourceEventKey: input.sourceEventKey ?? null,
+        projectId: input.projectId ?? null,
+        assignedToId,
+        assignedById: input.assignedById ?? null,
+        priority: input.priority ?? "MEDIUM",
+      },
+    });
+  } catch (error) {
+    // Race: another request created this event's task between our check
+    // and insert. Treat as successful dedup only when the keyed task
+    // actually exists; re-throw anything unrelated.
+    const code = (error as { code?: string })?.code;
+    if (code === "P2002" && input.sourceEventKey) {
+      const existing = await prisma.task.findFirst({
+        where: {
+          sourceModule: input.sourceModule,
+          sourceEntityId: input.sourceEntityId,
+          sourceEventKey: input.sourceEventKey,
+        },
+        select: { id: true },
+      });
+      if (existing) return;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -110,6 +201,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
 
   if (data.loiReceiptDate) {
     tasks.push({
+      sourceEventKey: "loi",
       title: `LOI received — ${projectName}`,
       description: `LOI has been received for project "${projectName}". Update and upload to reminder/to-do list with concerned authority for time limit compliance.`,
       dueDate: data.loiReceiptDate,
@@ -123,6 +215,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
 
   if (data.agreementDate) {
     tasks.push({
+      sourceEventKey: "agreement",
       title: `Agreement — ${projectName}`,
       description: `Agreement schedule updated for project "${projectName}". Update and upload to reminder/to-do list with concerned authority for time limit compliance.`,
       dueDate: data.agreementDate,
@@ -136,6 +229,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
 
   if (data.workOrderDate) {
     tasks.push({
+      sourceEventKey: "work_order",
       title: `Work order received — ${projectName}`,
       description: `Work order has been received for project "${projectName}". Update and upload with concerned authority & staff members.`,
       dueDate: data.workOrderDate,
@@ -149,6 +243,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
 
   if (data.securityDepositReturnDate) {
     tasks.push({
+      sourceEventKey: "security_deposit",
       title: `Security deposit return — ${projectName}`,
       description: `Security deposit return date for project "${projectName}". Upload details to concerned authority & staff members.`,
       dueDate: data.securityDepositReturnDate,
@@ -171,6 +266,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
   for (const b of raBills) {
     if (b.date || b.path || b.amt) {
       tasks.push({
+        sourceEventKey: `ra_bill_${b.n}`,
         title: `RA Bill ${b.n} — ${projectName}`,
         description: `RA Bill ${b.n} details & copy uploaded for project "${projectName}". Upload details and verify with concern authority.`,
         dueDate: b.date ?? new Date(),
@@ -186,6 +282,7 @@ export async function createWipLinkedTasks(data: WipLinkData): Promise<void> {
   // 3A Certificate / Annexure 3A closure task
   if (data.annexure3aPath || data.completionDate) {
     tasks.push({
+      sourceEventKey: "annexure_3a",
       title: `3A Certificate & Project Closure — ${projectName}`,
       description: `3A Certificate / Annexure 3A submitted for project "${projectName}". Project close after 3A certificate — upload detail to concern authority.`,
       dueDate: data.completionDate ?? new Date(),
@@ -227,6 +324,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.tenderFeeDate) {
     tasks.push({
+      sourceEventKey: "tender_fee",
       title: `Tender fee payment — ${data.tenderName}`,
       description: `Tender fee payment for "${data.tenderName}". Update to Tender Expense List.`,
       dueDate: data.tenderFeeDate,
@@ -239,6 +337,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.emdDate) {
     tasks.push({
+      sourceEventKey: "emd_deposit",
       title: `EMD deposit — ${data.tenderName}`,
       description: `EMD deposit for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.emdDate,
@@ -251,6 +350,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.emdReturnCollectionDate) {
     tasks.push({
+      sourceEventKey: "emd_return",
       title: `EMD return collection — ${data.tenderName}`,
       description: `EMD return collection date for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.emdReturnCollectionDate,
@@ -263,6 +363,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.biddingLastDate) {
     tasks.push({
+      sourceEventKey: "bidding_last",
       title: `Bidding last date — ${data.tenderName}`,
       description: `Last date for bidding for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.biddingLastDate,
@@ -275,6 +376,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.dateOfOpening) {
     tasks.push({
+      sourceEventKey: "opening",
       title: `Tender opening date — ${data.tenderName}`,
       description: `Date of opening for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.dateOfOpening,
@@ -287,6 +389,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.preBidMeetingDate) {
     tasks.push({
+      sourceEventKey: "pre_bid",
       title: `Pre-bid meeting — ${data.tenderName}`,
       description: `Pre-bid meeting for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.preBidMeetingDate,
@@ -299,6 +402,7 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 
   if (data.negotiationMeetingDate) {
     tasks.push({
+      sourceEventKey: "negotiation",
       title: `Negotiation meeting — ${data.tenderName}`,
       description: `Negotiation meeting for tender "${data.tenderName}". Update to reminder/to-do list with concerned authority.`,
       dueDate: data.negotiationMeetingDate,
@@ -334,6 +438,7 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
 
   if (data.actionSuggestedStaffId) {
     tasks.push({
+      sourceEventKey: `action:${data.actionSuggestedStaffId}`,
       title: `Action required: Doc #${data.documentRefNo}`,
       description: data.details
         ? `Inward doc #${data.documentRefNo}: ${data.details}`
@@ -350,6 +455,7 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
     for (const staffId of data.ccStaffIds) {
       if (staffId !== data.actionSuggestedStaffId) {
         tasks.push({
+          sourceEventKey: `cc:${staffId}`,
           title: `CC Notification: Doc #${data.documentRefNo}`,
           description: data.details
             ? `CC marking on inward doc #${data.documentRefNo}: ${data.details}`
@@ -419,6 +525,7 @@ export async function createPaymentScheduleLinkedTask(
       dueDate: data.dueDate,
       sourceModule: PAYMENT_SCHEDULE_SOURCE,
       sourceEntityId: data.scheduleId,
+      sourceEventKey: "follow_up",
       projectId: null,
       assignedToId: data.assignedToId,
       assignedById: data.assignedById ?? null,

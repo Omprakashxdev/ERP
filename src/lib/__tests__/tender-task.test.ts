@@ -5,7 +5,7 @@ import { withPermission } from "../actions/wrapper";
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     tender: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findUnique: vi.fn() },
-    task: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findMany: vi.fn() },
+    task: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(() => Promise.resolve({ count: 1 })) },
     staff: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
   },
@@ -37,6 +37,7 @@ function mockSession(role = "ADMIN") {
 describe("Tender → Task linking (Phase 3A)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    prismaMock.task.findMany.mockResolvedValue([]);
     mockSession();
   });
 
@@ -85,11 +86,13 @@ describe("Tender → Task linking (Phase 3A)", () => {
 
   it("reopening/re-saving a tender does not duplicate existing event tasks", async () => {
     const { createTenderLinkedTasks } = await import("../actions/task-linking");
-    // bidding task already exists (dedup on module+entity+title)
-    prismaMock.task.findFirst.mockImplementation(async ({ where }: any) =>
+    // bidding task already exists — unkeyed legacy row matching the
+    // module+entity+title+assignee signature → adopted (keyed) not duplicated
+    prismaMock.task.findFirst.mockResolvedValue(null); // no keyed task
+    prismaMock.task.findMany.mockImplementation(async ({ where }: any) =>
       where.title?.startsWith("Bidding last date")
-        ? { id: "t-existing" }
-        : null
+        ? [{ id: "t-existing" }]
+        : []
     );
 
     await createTenderLinkedTasks({
@@ -100,9 +103,15 @@ describe("Tender → Task linking (Phase 3A)", () => {
       concernAuthorityId: STAFF_ID,
     });
 
-    // only the new opening-date task is created; the existing bidding
-    // task keeps its original deadline and is never overwritten
+    // only the new opening-date task is created; the legacy bidding
+    // task is adopted (keyed) — its deadline/progress are untouched
     expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "t-existing", sourceEventKey: null },
+        data: { sourceEventKey: "bidding_last" },
+      })
+    );
     expect(prismaMock.task.create.mock.calls[0][0].data.title).toContain(
       "Tender opening date"
     );

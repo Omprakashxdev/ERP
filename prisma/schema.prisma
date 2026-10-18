@@ -1003,6 +1003,9 @@ model Task {
   // Source linking (WIP, Tender, etc.)
   sourceModule    String?
   sourceEntityId  String?
+  // Stable event identity for auto-linked tasks — set only by linked-task
+  // creators, never derived from the mutable title. NULL for manual tasks.
+  sourceEventKey  String?
 
   startDate       DateTime?
   dueDate         DateTime?
@@ -1026,6 +1029,7 @@ model Task {
   @@index([dueDate])
   @@index([sourceModule])
   @@index([sourceEntityId])
+  @@unique([sourceModule, sourceEntityId, sourceEventKey])
 }
 
 // Workbook "To Do Task" attachment column — files live outside public/.

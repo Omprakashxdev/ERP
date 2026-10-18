@@ -62,17 +62,16 @@ const entry = {
 describe("In-Out Register → Task linkage (Phase 4B)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    prismaMock.task.findMany.mockResolvedValue([]);
     mockSession();
   });
 
   it("dedups by assignee — a task for a different staff is NOT a duplicate", async () => {
     const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
-    // An action task exists for staff A; same doc CC'd to staff B must
-    // still create a distinct task for B.
+    // An action task keyed for staff A already exists; same doc CC'd to
+    // staff B must still create a distinct task for B (keyed identity).
     prismaMock.task.findFirst.mockImplementation(async ({ where }: any) =>
-      where.title?.startsWith("Action required") && where.assignedToId === STAFF_A
-        ? { id: "t-old" }
-        : null
+      where.sourceEventKey === `action:${STAFF_A}` ? { id: "t-old" } : null
     );
     prismaMock.task.create.mockResolvedValue({});
 
