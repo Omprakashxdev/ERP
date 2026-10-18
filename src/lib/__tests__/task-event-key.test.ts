@@ -13,6 +13,8 @@ vi.mock("@/lib/prisma", () => ({
     },
     staff: { findFirst: vi.fn(), findUnique: vi.fn() },
     project: { findUnique: vi.fn() },
+    user: { findMany: vi.fn() },
+    notification: { create: vi.fn() },
     auditLog: { create: vi.fn() },
   },
 }));
@@ -229,6 +231,86 @@ describe("Task.sourceEventKey identity (Phase 5A)", () => {
       assignedToId: STAFF_A,
     });
     expect(res).toBe("t-ps");
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("Missing-assignee handling (Phase 5B)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    prismaMock.task.findFirst.mockResolvedValue(null);
+    prismaMock.task.findMany.mockResolvedValue([]);
+    prismaMock.task.create.mockResolvedValue({ id: "t-new" });
+    prismaMock.user.findMany.mockResolvedValue([{ id: "u-admin" }]);
+    prismaMock.notification.create.mockResolvedValue({});
+  });
+
+  it("WIP with no coordinator → no task, no first-staff fallback, admins notified", async () => {
+    const { createWipLinkedTasks } = await import("../actions/task-linking");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    prismaMock.project.findUnique.mockResolvedValue({ name: "Proj" });
+    // no coordinators — the old code would assign the task to the first
+    // active staff member; now nothing is created and admins are alerted.
+    await createWipLinkedTasks({
+      wipId: "cwip000000000000000000001",
+      projectId: "cprj000000000000000000001",
+      loiReceiptDate: new Date("2026-10-01"),
+      hoCoordinatorId: null,
+      roCoordinatorId: null,
+    } as any);
+
+    expect(prismaMock.staff.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "u-admin",
+          title: "Follow-up task not created — no assignee",
+        }),
+      })
+    );
+    warn.mockRestore();
+  });
+
+  it("valid HO coordinator → task created for exactly that staff", async () => {
+    const { createWipLinkedTasks } = await import("../actions/task-linking");
+    prismaMock.project.findUnique.mockResolvedValue({ name: "Proj" });
+    await createWipLinkedTasks({
+      wipId: "cwip000000000000000000001",
+      projectId: "cprj000000000000000000001",
+      loiReceiptDate: new Date("2026-10-01"),
+      hoCoordinatorId: STAFF_A,
+      roCoordinatorId: STAFF_B,
+    } as any);
+    expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.create.mock.calls[0][0].data.assignedToId).toBe(STAFF_A);
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("existing keyed task is preserved — never re-created or reassigned", async () => {
+    const { createWipLinkedTasks } = await import("../actions/task-linking");
+    prismaMock.project.findUnique.mockResolvedValue({ name: "Proj" });
+    prismaMock.task.findFirst.mockImplementation(async ({ where }: any) =>
+      where.sourceEventKey === "loi" ? { id: "t-loi" } : null
+    );
+    await createWipLinkedTasks({
+      wipId: "cwip000000000000000000001",
+      projectId: "cprj000000000000000000001",
+      loiReceiptDate: new Date("2026-10-01"),
+      hoCoordinatorId: STAFF_B, // coordinator changed — existing task untouched
+    } as any);
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
+    expect(prismaMock.task.update).not.toHaveBeenCalled();
+  });
+
+  it("tender still gates on explicit concern authority — unaffected", async () => {
+    const { createTenderLinkedTasks } = await import("../actions/task-linking");
+    await createTenderLinkedTasks({
+      tenderId: TENDER_ID,
+      tenderName: "T",
+      biddingLastDate: new Date("2026-11-01"),
+      concernAuthorityId: null, // gate: no person → no task, no notify needed
+    });
     expect(prismaMock.task.create).not.toHaveBeenCalled();
   });
 });

@@ -104,15 +104,19 @@ export async function createLinkedTask(input: CreateLinkedTaskInput): Promise<vo
     if (existing) return;
   }
 
-  // Need an assignee — if none specified, find the first active staff member
-  let assignedToId = input.assignedToId;
+  // Never invent an assignee — when no responsible person is resolvable,
+  // skip creation and alert administrators instead of silently assigning
+  // the task to the first active staff member.
+  const assignedToId = input.assignedToId;
   if (!assignedToId) {
-    const firstStaff = await prisma.staff.findFirst({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-    });
-    if (!firstStaff) return;
-    assignedToId = firstStaff.id;
+    await notifyAdminsOfUnassignedLinkedTask(input).catch(() => {});
+    console.warn(
+      `[createLinkedTask] No assignee for ${input.sourceModule}` +
+        `/${input.sourceEntityId}` +
+        (input.sourceEventKey ? `/${input.sourceEventKey}` : "") +
+        ` — "${input.title}" not created`
+    );
+    return;
   }
 
   try {
@@ -581,4 +585,36 @@ export async function syncPaymentScheduleTaskDueDate(
     data: { dueDate },
   });
   return { status: "synced", taskId: task.id };
+}
+
+/** Alerts every active ADMIN when a linked task can't be created because
+ *  no responsible person is resolvable — keeps the omission visible. */
+async function notifyAdminsOfUnassignedLinkedTask(
+  input: CreateLinkedTaskInput
+): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", isActive: true },
+    select: { id: true },
+  });
+  if (admins.length === 0) return;
+  const message =
+    `A follow-up task "${input.title}" for ${input.sourceModule}` +
+    ` record ${input.sourceEntityId}` +
+    (input.sourceEventKey ? ` (event: ${input.sourceEventKey})` : "") +
+    ` was not created because no responsible person is assigned. ` +
+    `Assign a coordinator or responsible staff member on the source record.`;
+  for (const admin of admins) {
+    await prisma.notification.create({
+      data: {
+        userId: admin.id,
+        type: "CUSTOM",
+        module: input.sourceModule.toLowerCase(),
+        entityId: input.sourceEntityId,
+        entityName: input.title,
+        title: "Follow-up task not created — no assignee",
+        message,
+        priority: "MEDIUM",
+      },
+    });
+  }
 }
