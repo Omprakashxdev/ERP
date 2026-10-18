@@ -6,6 +6,7 @@ export const taskCreateSchema = z.object({
   description: cleanedString(2000).optional().nullable(),
   assignedToId: cuid,
   projectId: z.string().cuid().optional().nullable(),
+  startDate: z.coerce.date().optional().nullable(),
   dueDate: z.coerce.date().optional().nullable(),
   priority: z
     .enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"])

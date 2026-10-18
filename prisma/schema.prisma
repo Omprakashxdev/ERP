@@ -59,6 +59,7 @@ model User {
   auditLogs     AuditLog[]
   notifications Notification[]
   tasksAssignedBy Task[]       @relation("TaskAssignedBy")
+  taskAttachments TaskAttachment[]
   forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
   reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
 }
@@ -997,6 +998,7 @@ model Task {
   sourceModule    String?
   sourceEntityId  String?
 
+  startDate       DateTime?
   dueDate         DateTime?
   completedAt     DateTime?
   reworkCount     Int           @default(0)
@@ -1008,6 +1010,7 @@ model Task {
   assignedTo      Staff         @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
   assignedBy      User?         @relation("TaskAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
   project         Project?      @relation("TaskProject", fields: [projectId], references: [id], onDelete: SetNull)
+  attachments     TaskAttachment[]
 
   @@index([assignedToId])
   @@index([assignedById])
@@ -1017,6 +1020,26 @@ model Task {
   @@index([dueDate])
   @@index([sourceModule])
   @@index([sourceEntityId])
+}
+
+// Workbook "To Do Task" attachment column — files live outside public/.
+// Restrict (not Cascade): a task holding attachment records cannot be
+// deleted at the database level, so employee work is never silently lost.
+model TaskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  filename     String
+  path         String
+  size         Int?
+  mimeType     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([uploadedById])
 }
 
 // HR module — extends Staff with HR-specific fields

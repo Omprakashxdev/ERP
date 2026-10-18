@@ -23,6 +23,7 @@ interface TaskRow {
   assignedById: string | null;
   reviewerId: string | null;
   projectId: string | null;
+  startDate: Date | null;
   dueDate: Date | null;
   completedAt: Date | null;
   reworkCount: number;

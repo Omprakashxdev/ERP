@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -25,7 +25,9 @@ import {
   createTask,
   updateTask,
   performTaskTransition,
+  getTaskAttachments,
 } from "@/lib/actions/task-management";
+import { withBasePath } from "@/lib/base-path";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
@@ -67,6 +69,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
   const [reviewerId, setReviewerId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [department, setDepartment] = useState("");
 
@@ -83,6 +86,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
         reviewerId: reviewerId || undefined,
         projectId: projectId || undefined,
         priority: priority as never,
+        startDate: startDate ? new Date(startDate) : null,
         dueDate: dueDate ? new Date(dueDate) : null,
         department: department || undefined,
       } as never);
@@ -231,14 +235,24 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-xs">Due Date</Label>
-            <Input
-              type="date"
-              value={dueDate}
-              min={toInputDate(new Date())}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Start Date</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Due Date</Label>
+              <Input
+                type="date"
+                value={dueDate}
+                min={toInputDate(new Date())}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
           </div>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Creating a task")} askingAi={askingAi} aiResponse={aiResponse} />
@@ -266,6 +280,7 @@ interface TaskEditData {
   reviewerId: string | null;
   projectId: string | null;
   priority: string;
+  startDate: Date | null;
   dueDate: Date | null;
   status: string;
   department: string | null;
@@ -294,6 +309,7 @@ export function TaskEditForm({
     reviewerId: task.reviewerId ?? "",
     projectId: task.projectId ?? "",
     priority: task.priority,
+    startDate: toInputDate(task.startDate),
     dueDate: toInputDate(task.dueDate),
     department: task.department ?? "",
     percentageCompletion: task.percentageCompletion ?? 0,
@@ -317,6 +333,7 @@ export function TaskEditForm({
         reviewerId: form.reviewerId || undefined,
         projectId: form.projectId || undefined,
         priority: form.priority as never,
+        startDate: form.startDate ? new Date(form.startDate) : null,
         dueDate: form.dueDate ? new Date(form.dueDate) : null,
         department: form.department || undefined,
         percentageCompletion: form.percentageCompletion,
@@ -490,6 +507,14 @@ export function TaskEditForm({
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs">Start Date</Label>
+              <Input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => updateField("startDate", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs">Due Date</Label>
               <Input
                 type="date"
@@ -498,6 +523,8 @@ export function TaskEditForm({
               />
             </div>
           </div>
+
+          <TaskAttachments taskId={task.id} />
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing a task")} askingAi={askingAi} aiResponse={aiResponse} />
 
@@ -697,5 +724,108 @@ export function TaskStatusActions({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Task attachments panel — list, download, upload. Record-level
+    authorization is enforced server-side; a 403 just hides the panel. */
+function TaskAttachments({ taskId }: { taskId: string }) {
+  const [items, setItems] = useState<
+    { id: string; filename: string; size: number | null }[] | null
+  >(null);
+  const [denied, setDenied] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    const res = await getTaskAttachments(taskId);
+    if (!res.success) {
+      setDenied(true);
+      return;
+    }
+    setItems(res.data ?? []);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("taskId", taskId);
+      const res = await fetch(withBasePath("/api/task-files"), {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      await load();
+      toast.success("File attached");
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  if (denied) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border border-zinc-200 p-3">
+      <Label className="text-xs">Attachments</Label>
+      {items && items.length === 0 && (
+        <p className="text-xs text-zinc-500">No files attached yet.</p>
+      )}
+      {items && items.length > 0 && (
+        <ul className="space-y-1">
+          {items.map((a) => (
+            <li key={a.id} className="flex items-center gap-2 text-sm">
+              <a
+                href={withBasePath(`/api/task-files/${a.id}`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline underline-offset-2"
+              >
+                {a.filename}
+              </a>
+              {a.size != null && (
+                <span className="text-xs text-zinc-400">
+                  ({Math.max(1, Math.round(a.size / 1024))} KB)
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+          onChange={onFile}
+          className="hidden"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Attach a file
+        </Button>
+        {err && <span className="text-xs text-red-600">{err}</span>}
+      </div>
+    </div>
   );
 }

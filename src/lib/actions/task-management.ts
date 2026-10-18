@@ -116,10 +116,46 @@ function transitionForStatusChange(
   return null;
 }
 
+export async function getTaskAttachments(
+  taskId: string
+): Promise<
+  ActionResult<{ id: string; filename: string; size: number | null }[]>
+> {
+  return withPermission("taskManagement", "read", async (user) => {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { assignedToId: true, assignedById: true, reviewerId: true },
+    });
+    if (!task) throw new Error("Task not found.");
+    // Record-level check — module read alone does not expose files.
+    const { canAccessTask } = await import("@/lib/task-access");
+    if (!(await canAccessTask(user, task))) {
+      throw new Error("You are not allowed to view this task's files.");
+    }
+    const rows = await prisma.taskAttachment.findMany({
+      where: { taskId },
+      select: { id: true, filename: true, size: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return rows;
+  });
+}
+
 export async function deleteTask(
   id: string
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("taskManagement", "delete", async (user) => {
+    // Never silently destroy attachment records — the FK is RESTRICT
+    // anyway, so block first with a clear message.
+    const attachmentCount = await prisma.taskAttachment.count({
+      where: { taskId: id },
+    });
+    if (attachmentCount > 0) {
+      throw new Error(
+        `This task has ${attachmentCount} attached file(s). ` +
+          `Remove the attachments in the task first, then delete the task.`
+      );
+    }
     await prisma.task.delete({ where: { id } });
 
     await audit(user.id, "delete", "Task", id, {});
