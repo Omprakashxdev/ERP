@@ -32,6 +32,7 @@ import {
   createInOutRegister,
   updateInOutRegister,
   getNextRegisterRefNo,
+  getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
 import { Loader2, X, Plus, ExternalLink, Sparkles, Link2 } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
@@ -662,6 +663,10 @@ export function InOutRegisterForm({
             </div>
           </div>
 
+          {isEdit && entry && (
+            <InOutLinkedTasksPanel inOutRegisterId={entry.id} />
+          )}
+
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "In-out register entry")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2 pt-4">
@@ -683,5 +688,51 @@ export function InOutRegisterForm({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Follow-up tasks already linked to this correspondence. */
+function InOutLinkedTasksPanel({ inOutRegisterId }: { inOutRegisterId: string }) {
+  const [tasks, setTasks] = useState<
+    | {
+        id: string;
+        title: string;
+        status: string;
+        dueDate: string | Date | null;
+        assignedTo: { name: string } | null;
+      }[]
+    | null
+  >(null);
+
+  useEffect(() => {
+    getInOutRegisterLinkedTasks(inOutRegisterId).then((res) => {
+      setTasks(res.success ? (res.data as never) : []);
+    });
+  }, [inOutRegisterId]);
+
+  if (!tasks || tasks.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <Label className="text-xs">Linked follow-up tasks</Label>
+      <ul className="space-y-1">
+        {tasks.map((t) => (
+          <li key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">{t.title}</span>
+            <span className="text-xs text-zinc-500">
+              {t.dueDate
+                ? `due ${new Date(t.dueDate).toLocaleDateString("en-IN")}`
+                : "no date"}
+              {" · "}
+              {t.status.replace(/_/g, " ").toLowerCase()}
+              {t.assignedTo?.name ? ` · ${t.assignedTo.name}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-zinc-500">
+        Track progress and approval in the Tasks module.
+      </p>
+    </div>
   );
 }

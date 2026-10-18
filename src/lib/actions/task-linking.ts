@@ -19,12 +19,15 @@ interface CreateLinkedTaskInput {
  * Only creates the task if one doesn't already exist for the same sourceModule + sourceEntityId + title.
  */
 export async function createLinkedTask(input: CreateLinkedTaskInput): Promise<void> {
-  // Check if a task with the same source and title already exists
+  // Check if a task with the same source, title and assignee already exists.
+  // Assignee is part of the identity: a CC task for staff A must not block
+  // a distinct task for staff B on the same correspondence.
   const existing = await prisma.task.findFirst({
     where: {
       sourceModule: input.sourceModule,
       sourceEntityId: input.sourceEntityId,
       title: input.title,
+      assignedToId: input.assignedToId ?? undefined,
     },
   });
 
@@ -318,12 +321,16 @@ interface InOutRegisterLinkData {
   documentRefNo: string;
   details?: string | null;
   receivedDate?: Date | null;
+  replyDueDate?: Date | null;
   actionSuggestedStaffId?: string | null;
   ccStaffIds?: string[];
 }
 
 export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData): Promise<void> {
   const tasks: CreateLinkedTaskInput[] = [];
+  // Excel gives no task deadline — prefer the real reply-due date,
+  // then the received date, never an invented offset.
+  const dueDate = data.replyDueDate ?? data.receivedDate ?? new Date();
 
   if (data.actionSuggestedStaffId) {
     tasks.push({
@@ -331,7 +338,7 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
       description: data.details
         ? `Inward doc #${data.documentRefNo}: ${data.details}`
         : `Action required for inward document #${data.documentRefNo}.`,
-      dueDate: data.receivedDate ?? new Date(),
+      dueDate,
       sourceModule: "IN_OUT_REGISTER",
       sourceEntityId: data.inOutRegisterId,
       assignedToId: data.actionSuggestedStaffId,
@@ -347,7 +354,7 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
           description: data.details
             ? `CC marking on inward doc #${data.documentRefNo}: ${data.details}`
             : `You have been marked CC on inward document #${data.documentRefNo}.`,
-          dueDate: data.receivedDate ?? new Date(),
+          dueDate,
           sourceModule: "IN_OUT_REGISTER",
           sourceEntityId: data.inOutRegisterId,
           assignedToId: staffId,

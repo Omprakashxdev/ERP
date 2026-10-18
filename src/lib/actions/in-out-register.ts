@@ -105,6 +105,7 @@ export async function createInOutRegister(
       documentRefNo: entry.documentRefNo,
       details: entry.details,
       receivedDate: entry.receivedDate,
+      replyDueDate: entry.replyDueDate,
       actionSuggestedStaffId: entry.actionSuggestedStaffId,
       ccStaffIds: ccStaffIds,
     }).catch(() => {});
@@ -125,28 +126,74 @@ export async function updateInOutRegister(
 
     const existing = await prisma.inOutRegister.findUnique({
       where: { id },
+      include: {
+        documents: { select: { path: true } },
+        ccStaff: { select: { staffId: true } },
+      },
     });
     if (!existing) throw new Error("In-out register entry not found");
 
-    await prisma.inOutRegisterDocument.deleteMany({
-      where: { inOutRegisterId: id },
-    });
-    await prisma.inOutRegisterCcStaff.deleteMany({
-      where: { inOutRegisterId: id },
-    });
+    // Surgical sync — remove only what the user removed, add only what is
+    // new. Unchanged document/CC rows keep their original records.
+    const keepPaths = documents ?? [];
+    const removedPaths = existing.documents
+      .map((d) => d.path)
+      .filter((p) => !keepPaths.includes(p));
+    const addedPaths = keepPaths.filter(
+      (p) => !existing.documents.some((d) => d.path === p)
+    );
+    if (removedPaths.length > 0) {
+      await prisma.inOutRegisterDocument.deleteMany({
+        where: { inOutRegisterId: id, path: { in: removedPaths } },
+      });
+    }
+    if (addedPaths.length > 0) {
+      await prisma.inOutRegisterDocument.createMany({
+        data: addedPaths.map((path) => ({ inOutRegisterId: id, path })),
+      });
+    }
+
+    const keepStaffIds = ccStaffIds ?? [];
+    const removedStaffIds = existing.ccStaff
+      .map((c) => c.staffId)
+      .filter((sid) => !keepStaffIds.includes(sid));
+    const addedStaffIds = keepStaffIds.filter(
+      (sid) => !existing.ccStaff.some((c) => c.staffId === sid)
+    );
+    if (removedStaffIds.length > 0) {
+      await prisma.inOutRegisterCcStaff.deleteMany({
+        where: { inOutRegisterId: id, staffId: { in: removedStaffIds } },
+      });
+    }
+    if (addedStaffIds.length > 0) {
+      await prisma.inOutRegisterCcStaff.createMany({
+        data: addedStaffIds.map((staffId) => ({
+          inOutRegisterId: id,
+          staffId,
+        })),
+      });
+    }
 
     const entry = await prisma.inOutRegister.update({
       where: { id },
-      data: {
-        ...data,
-        documents: buildDocumentCreateInput(documents),
-        ccStaff: buildCcStaffCreateInput(ccStaffIds),
-      },
+      data,
     });
 
     await audit(user.id, "update", "InOutRegister", entry.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
+
+    // Create tasks for newly chosen staff; existing tasks and their
+    // progress are never touched.
+    await createInOutRegisterLinkedTasks({
+      inOutRegisterId: entry.id,
+      documentRefNo: entry.documentRefNo,
+      details: entry.details,
+      receivedDate: entry.receivedDate,
+      replyDueDate: entry.replyDueDate,
+      actionSuggestedStaffId: entry.actionSuggestedStaffId,
+      ccStaffIds: addedStaffIds,
+    }).catch(() => {});
 
     revalidatePath("/dashboard/in-out-register");
     return { id: entry.id };
@@ -158,6 +205,19 @@ export async function deleteInOutRegister(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("inOutRegister", "delete", async (user) => {
     await checkRateLimit(user.id);
+
+    // Never silently delete linked follow-up tasks — their progress,
+    // comments and history belong to the employees. Block instead.
+    const linkedCount = await prisma.task.count({
+      where: { sourceModule: "IN_OUT_REGISTER", sourceEntityId: id },
+    });
+    if (linkedCount > 0) {
+      throw new Error(
+        `This correspondence has ${linkedCount} linked follow-up task(s) ` +
+          `in the To-Do list. Delete or cancel those tasks in Tasks first, ` +
+          `then delete this entry.`
+      );
+    }
 
     const entry = await prisma.inOutRegister.delete({ where: { id } });
 
@@ -283,3 +343,32 @@ export async function getNextRegisterRefNo(
   });
 }
 
+
+/** Tasks already linked to a register entry — shown when reopening it. */
+export async function getInOutRegisterLinkedTasks(
+  inOutRegisterId: string
+): Promise<
+  ActionResult<
+    {
+      id: string;
+      title: string;
+      status: string;
+      dueDate: Date | null;
+      assignedTo: { name: string } | null;
+    }[]
+  >
+> {
+  return withPermission("inOutRegister", "read", async () => {
+    return prisma.task.findMany({
+      where: { sourceModule: "IN_OUT_REGISTER", sourceEntityId: inOutRegisterId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        assignedTo: { select: { name: true } },
+      },
+      orderBy: { dueDate: "asc" },
+    });
+  });
+}
