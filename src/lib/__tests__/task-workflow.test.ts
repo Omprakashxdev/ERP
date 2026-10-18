@@ -208,3 +208,62 @@ describe("Task workflow transitions (Phase 2C)", () => {
     expect(prismaMock.task.findUnique).not.toHaveBeenCalled();
   });
 });
+
+describe("updateTask status bypass prevention (Phase 2C)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    prismaMock.task.update.mockImplementation(async ({ data }: any) => ({ ...baseTask, ...data }));
+    mockActor("emp@saec.com", STAFF_ASSIGNEE, "Foram Shah");
+  });
+
+  // updateTask requires taskManagement:update — simulate a MANAGER
+  function mockManagerSession(email: string) {
+    vi.mocked(withPermission).mockImplementation(async (_r: any, _a: any, fn: any) => {
+      try {
+        return { success: true, data: await fn({ id: "user-mgr2", role: "MANAGER", email }) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Action failed" };
+      }
+    });
+  }
+
+  it("manager cannot approve a task they did not review via updateTask", async () => {
+    const { updateTask } = await import("../actions/task-management");
+    mockManagerSession("mgr2@saec.com");
+    prismaMock.user.findUnique.mockResolvedValue({ email: "mgr2@saec.com" });
+    prismaMock.staff.findFirst.mockResolvedValue({ id: STAFF_OTHER, name: "Neha" });
+    prismaMock.task.findUnique.mockResolvedValue({ ...baseTask, status: "PENDING_REVIEW" });
+
+    const res = await updateTask({ id: TASK_ID, status: "COMPLETED" } as any);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("reviewer");
+    expect(prismaMock.task.update).not.toHaveBeenCalled();
+  });
+
+  it("manager cannot self-approve their own task via updateTask", async () => {
+    const { updateTask } = await import("../actions/task-management");
+    mockManagerSession("emp@saec.com");
+    prismaMock.user.findUnique.mockResolvedValue({ email: "emp@saec.com" });
+    prismaMock.staff.findFirst.mockResolvedValue({ id: STAFF_ASSIGNEE, name: "Foram Shah" });
+    // assignee == current staff, reviewer too — still blocked for non-admin
+    prismaMock.task.findUnique.mockResolvedValue({
+      ...baseTask, status: "PENDING_REVIEW", reviewerId: STAFF_ASSIGNEE,
+    });
+
+    const res = await updateTask({ id: TASK_ID, status: "COMPLETED" } as any);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("own work");
+  });
+
+  it("field-only edits (no status change) still work for managers", async () => {
+    const { updateTask } = await import("../actions/task-management");
+    mockManagerSession("mgr2@saec.com");
+    prismaMock.task.findUnique.mockResolvedValue({ ...baseTask });
+
+    const res = await updateTask({ id: TASK_ID, title: "Renamed" } as any);
+    expect(res.success).toBe(true);
+    expect(prismaMock.task.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ title: "Renamed" }) })
+    );
+  });
+});
