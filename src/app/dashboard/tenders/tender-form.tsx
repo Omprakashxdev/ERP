@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   TenderStatus,
@@ -26,7 +26,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { createTender, updateTender } from "@/lib/actions/tender";
+import {
+  createTender,
+  updateTender,
+  getTenderLinkedTasks,
+} from "@/lib/actions/tender";
 import type { MasterData } from "@/lib/master-data";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { Loader2 } from "lucide-react";
@@ -70,6 +74,7 @@ function getInitialForm(tender?: Tender) {
       state: "",
       city: "",
       platform: "",
+      concernAuthorityId: "",
       workName: "",
       workType: "",
       serviceType: "",
@@ -107,6 +112,7 @@ function getInitialForm(tender?: Tender) {
     state: tender.state ?? "",
     city: tender.city ?? "",
     platform: tender.platform ?? "",
+    concernAuthorityId: tender.concernAuthorityId ?? "",
     workName: tender.workName ?? "",
     workType: tender.workType ?? "",
     serviceType: tender.serviceType ?? "",
@@ -162,6 +168,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
       state: emptyToNull(form.state),
       city: emptyToNull(form.city),
       platform: emptyToNull(form.platform),
+      concernAuthorityId: form.concernAuthorityId || null,
       workName: emptyToNull(form.workName),
       workType: form.workType || null,
       serviceType: form.serviceType || null,
@@ -456,6 +463,40 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                       placeholder="e.g. npro.gov.in"
                     />
                   )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="concernAuthorityId">
+                    Concerned authority (responsible person)
+                  </Label>
+                  <Select
+                    value={form.concernAuthorityId || "none"}
+                    onValueChange={(v) =>
+                      updateField("concernAuthorityId", v === "none" ? "" : (v ?? ""))
+                    }
+                  >
+                    <SelectTrigger id="concernAuthorityId" className="w-full">
+                      <SelectValue placeholder="Select responsible person">
+                        {(v: string) =>
+                          v === "none" || !v
+                            ? "Select responsible person"
+                            : masters?.staffList?.find((st) => st.id === v)?.name ??
+                              "Select responsible person"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No responsible person</SelectItem>
+                      {(masters?.staffList ?? []).map((st) => (
+                        <SelectItem key={st.id} value={st.id}>
+                          {st.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-zinc-500">
+                    Deadline reminders create a follow-up task for this person.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
@@ -805,6 +846,8 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
 
           <Separator className="my-4" />
 
+          {isEdit && <TenderLinkedTasksPanel tenderId={tender!.id} />}
+
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating tender" : "Editing tender")} askingAi={askingAi} aiResponse={aiResponse} />
 
           <div className="flex justify-end gap-2">
@@ -826,5 +869,44 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Lists the deadline follow-up tasks already linked to this tender. */
+function TenderLinkedTasksPanel({ tenderId }: { tenderId: string }) {
+  const [tasks, setTasks] = useState<
+    { id: string; title: string; status: string; dueDate: string | Date | null; assignedTo: { name: string } | null }[] | null
+  >(null);
+
+  useEffect(() => {
+    getTenderLinkedTasks(tenderId).then((res) => {
+      setTasks(res.success ? (res.data as never) : []);
+    });
+  }, [tenderId]);
+
+  if (!tasks || tasks.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <Label className="text-xs">Linked follow-up tasks</Label>
+      <ul className="space-y-1">
+        {tasks.map((t) => (
+          <li key={t.id} className="flex items-center gap-2 text-sm">
+            <span className="font-medium">{t.title}</span>
+            <span className="text-xs text-zinc-500">
+              {t.dueDate
+                ? `due ${new Date(t.dueDate).toLocaleDateString("en-IN")}`
+                : "no date"}
+              {" · "}
+              {t.status.replace(/_/g, " ").toLowerCase()}
+              {t.assignedTo?.name ? ` · ${t.assignedTo.name}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-zinc-500">
+        Track progress and approval in the Tasks module.
+      </p>
+    </div>
   );
 }

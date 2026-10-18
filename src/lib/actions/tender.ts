@@ -212,6 +212,19 @@ export async function deleteTender(
   return withPermission("tenders", "delete", async (user) => {
     await checkRateLimit(user.id);
 
+    // Never silently delete linked follow-up tasks — employee progress
+    // and history are preserved; remove them in Tasks first.
+    const linkedCount = await prisma.task.count({
+      where: { sourceModule: "TENDER", sourceEntityId: id },
+    });
+    if (linkedCount > 0) {
+      throw new Error(
+        `This tender has ${linkedCount} linked follow-up task(s) in the ` +
+          `To-Do list. Delete or cancel those tasks in Tasks first, ` +
+          `then delete this tender.`
+      );
+    }
+
     const tender = await prisma.tender.delete({ where: { id } });
 
     await deleteLinkedTasks("TENDER", id).catch(() => {});
@@ -263,5 +276,33 @@ export async function getTenderById(
     if (!tender) return null;
 
     return { ...tender, ...computeTenderTotals(tender) };
+  });
+}
+
+export async function getTenderLinkedTasks(
+  tenderId: string
+): Promise<
+  ActionResult<
+    {
+      id: string;
+      title: string;
+      status: string;
+      dueDate: Date | null;
+      assignedTo: { name: string } | null;
+    }[]
+  >
+> {
+  return withPermission("tenders", "read", async () => {
+    return prisma.task.findMany({
+      where: { sourceModule: "TENDER", sourceEntityId: tenderId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        assignedTo: { select: { name: true } },
+      },
+      orderBy: { dueDate: "asc" },
+    });
   });
 }

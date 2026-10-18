@@ -215,6 +215,11 @@ interface TenderLinkData {
 }
 
 export async function createTenderLinkedTasks(data: TenderLinkData): Promise<void> {
+  // Workbook rule: deadline reminders go "to do list with concern
+  // authority" — without an explicitly chosen responsible person no
+  // task is created; never invent an assignee.
+  if (!data.concernAuthorityId) return;
+
   const tasks: CreateLinkedTaskInput[] = [];
 
   if (data.tenderFeeDate) {
