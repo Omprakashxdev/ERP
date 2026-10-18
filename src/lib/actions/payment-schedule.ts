@@ -15,7 +15,6 @@ import { buildPaymentScheduleWhere } from "@/lib/queries/payment-schedules";
 import {
   createPaymentScheduleLinkedTask,
   syncPaymentScheduleTaskDueDate,
-  deleteLinkedTasks,
 } from "./task-linking";
 
 const PAYMENT_SCHEDULE_SOURCE = "PAYMENT_SCHEDULE";
@@ -125,24 +124,36 @@ export async function updatePaymentSchedule(
       }
     }
 
-    // Keep the linked task's due date in sync when the schedule's due
-    // date changed — touches ONLY dueDate, never task work.
+    // Keep the linked task's due date in sync ONLY when safe: the
+    // helper preserves deadlines an employee changed manually and never
+    // touches completed/cancelled tasks.
     if (
       parsed.dueDate &&
       (!existing?.dueDate ||
         existing.dueDate.getTime() !== parsed.dueDate.getTime())
     ) {
-      const syncedTaskId = await syncPaymentScheduleTaskDueDate(
+      const { status, taskId } = await syncPaymentScheduleTaskDueDate(
         paymentSchedule.id,
-        parsed.dueDate
+        parsed.dueDate,
+        existing?.dueDate ?? null
       );
-      if (syncedTaskId) {
-        await audit(user.id, "update", "Task", syncedTaskId, {
+      if (status === "synced") {
+        await audit(user.id, "update", "Task", taskId!, {
           source: "payment-schedule-due-date-sync",
           paymentScheduleId: paymentSchedule.id,
           dueDate: parsed.dueDate.toISOString(),
         });
         revalidatePath("/dashboard/tasks");
+      } else if (status === "kept-manual" || status === "closed") {
+        // Provenance for the deliberate non-overwrite — no task field changed.
+        await audit(user.id, "update", "Task", taskId!, {
+          source: "payment-schedule-due-date-sync-skipped",
+          reason:
+            status === "kept-manual"
+              ? "task due date was edited manually — employee's deadline preserved"
+              : "task is completed/cancelled — not modified",
+          paymentScheduleId: paymentSchedule.id,
+        });
       }
     }
 
@@ -157,8 +168,21 @@ export async function deletePaymentSchedule(
   return withPermission("paymentSchedules", "delete", async (user) => {
     await checkRateLimit(user.id);
 
-    // Remove only the tasks linked to THIS schedule.
-    await deleteLinkedTasks(PAYMENT_SCHEDULE_SOURCE, id);
+    // Never silently delete a linked follow-up task — its progress,
+    // assignment and history are employee work. Block until the user
+    // removes the task themselves in the Tasks module.
+    const linkedTask = await prisma.task.findFirst({
+      where: { sourceModule: PAYMENT_SCHEDULE_SOURCE, sourceEntityId: id },
+      select: { id: true, title: true, status: true },
+    });
+    if (linkedTask) {
+      throw new Error(
+        `This payment schedule has a follow-up task ("${linkedTask.title}") ` +
+          `in the To-Do list. Delete or cancel that task in Tasks first, ` +
+          `then delete this schedule — the task's progress and history ` +
+          `will otherwise be lost.`
+      );
+    }
 
     const paymentSchedule = await prisma.paymentSchedule.delete({
       where: { id },

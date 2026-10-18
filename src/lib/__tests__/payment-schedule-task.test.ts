@@ -138,7 +138,13 @@ describe("Payment schedule → follow-up task (Phase 2A)", () => {
       id: "sched1",
       dueDate: new Date("2026-11-20"),
     });
-    prismaMock.task.findFirst.mockResolvedValue({ id: "task1" });
+    // task deadline still matches the schedule's previous due date —
+    // untouched by the employee → safe to sync
+    prismaMock.task.findFirst.mockResolvedValue({
+      id: "task1",
+      dueDate: new Date("2026-11-15"),
+      status: "OPEN",
+    });
     prismaMock.task.update.mockResolvedValue({ id: "task1" });
 
     const res = await updatePaymentSchedule({
@@ -155,6 +161,52 @@ describe("Payment schedule → follow-up task (Phase 2A)", () => {
     expect(Object.keys(upd)).toEqual(["dueDate"]);
   });
 
+  it("update: never overwrites a deadline the employee changed manually", async () => {
+    prismaMock.paymentSchedule.findUnique.mockResolvedValue({
+      dueDate: new Date("2026-11-15"),
+    });
+    prismaMock.paymentSchedule.update.mockResolvedValue({
+      id: "sched1",
+      dueDate: new Date("2026-11-20"),
+    });
+    // employee moved the task deadline to 18th — differs from the
+    // schedule's previous due date → must be preserved
+    prismaMock.task.findFirst.mockResolvedValue({
+      id: "task1",
+      dueDate: new Date("2026-11-18"),
+      status: "IN_PROGRESS",
+    });
+
+    const res = await updatePaymentSchedule({
+      id: "c5s1d1g8e2f3h4i5j6k7l8m9",
+      dueDate: "2026-11-20",
+    } as any);
+    expect(res.success).toBe(true);
+    expect(prismaMock.task.update).not.toHaveBeenCalled();
+  });
+
+  it("update: never touches a completed/cancelled task", async () => {
+    prismaMock.paymentSchedule.findUnique.mockResolvedValue({
+      dueDate: new Date("2026-11-15"),
+    });
+    prismaMock.paymentSchedule.update.mockResolvedValue({
+      id: "sched1",
+      dueDate: new Date("2026-11-20"),
+    });
+    prismaMock.task.findFirst.mockResolvedValue({
+      id: "task1",
+      dueDate: new Date("2026-11-15"),
+      status: "COMPLETED",
+    });
+
+    const res = await updatePaymentSchedule({
+      id: "c5s1d1g8e2f3h4i5j6k7l8m9",
+      dueDate: "2026-11-20",
+    } as any);
+    expect(res.success).toBe(true);
+    expect(prismaMock.task.update).not.toHaveBeenCalled();
+  });
+
   it("update: unchanged due date does not touch the task", async () => {
     prismaMock.paymentSchedule.findUnique.mockResolvedValue({
       dueDate: new Date("2026-11-15T00:00:00.000Z"),
@@ -169,12 +221,27 @@ describe("Payment schedule → follow-up task (Phase 2A)", () => {
     expect(prismaMock.task.update).not.toHaveBeenCalled();
   });
 
-  it("delete: removes only tasks linked to that schedule", async () => {
+  it("delete: blocked while a linked task exists — task and schedule preserved", async () => {
+    prismaMock.task.findFirst.mockResolvedValue({
+      id: "task1",
+      title: "Payment due — GST",
+      status: "IN_PROGRESS",
+    });
+    const res = await deletePaymentSchedule("c5s1d1g8e2f3h4i5j6k7l8m9");
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("follow-up task");
+    // neither the task nor the schedule was deleted
+    expect(prismaMock.task.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.paymentSchedule.delete).not.toHaveBeenCalled();
+  });
+
+  it("delete: succeeds when no linked task exists", async () => {
+    prismaMock.task.findFirst.mockResolvedValue(null);
     prismaMock.paymentSchedule.delete.mockResolvedValue({ id: "sched1" });
-    const res = await deletePaymentSchedule("sched1");
+    const res = await deletePaymentSchedule("c5s1d1g8e2f3h4i5j6k7l8m9");
     expect(res.success).toBe(true);
-    expect(prismaMock.task.deleteMany).toHaveBeenCalledWith({
-      where: { sourceModule: "PAYMENT_SCHEDULE", sourceEntityId: "sched1" },
+    expect(prismaMock.paymentSchedule.delete).toHaveBeenCalledWith({
+      where: { id: "c5s1d1g8e2f3h4i5j6k7l8m9" },
     });
   });
 

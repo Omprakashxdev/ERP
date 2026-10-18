@@ -421,21 +421,45 @@ export async function createPaymentScheduleLinkedTask(
  * date changes. Updates ONLY dueDate — task status, description,
  * progress and assignment are never touched.
  */
+export type PaymentScheduleSyncResult =
+  | "synced" // task due date updated to match the schedule
+  | "kept-manual" // employee changed the task deadline — preserved
+  | "closed" // task COMPLETED/CANCELLED — never touched
+  | "none"; // no linked task exists
+
+/**
+ * Synchronizes the linked task's due date ONLY when demonstrably safe:
+ * the task's current dueDate must still equal the schedule's previous
+ * dueDate (employee has not edited it) and the task must not be
+ * completed or cancelled. Task status, description, progress and
+ * assignment are never touched.
+ */
 export async function syncPaymentScheduleTaskDueDate(
   scheduleId: string,
-  dueDate: Date
-): Promise<string | null> {
+  dueDate: Date,
+  expectedCurrentDueDate: Date | null
+): Promise<{ status: PaymentScheduleSyncResult; taskId: string | null }> {
   const task = await prisma.task.findFirst({
     where: {
       sourceModule: PAYMENT_SCHEDULE_SOURCE,
       sourceEntityId: scheduleId,
     },
-    select: { id: true },
+    select: { id: true, dueDate: true, status: true },
   });
-  if (!task) return null;
+  if (!task) return { status: "none", taskId: null };
+  if (task.status === "COMPLETED" || task.status === "CANCELLED") {
+    return { status: "closed", taskId: task.id };
+  }
+  const taskTime = task.dueDate ? task.dueDate.getTime() : null;
+  const expectedTime = expectedCurrentDueDate
+    ? expectedCurrentDueDate.getTime()
+    : null;
+  if (taskTime !== expectedTime) {
+    return { status: "kept-manual", taskId: task.id };
+  }
   await prisma.task.update({
     where: { id: task.id },
     data: { dueDate },
   });
-  return task.id;
+  return { status: "synced", taskId: task.id };
 }
