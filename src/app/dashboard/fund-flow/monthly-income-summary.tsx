@@ -305,6 +305,11 @@ export function MonthlyIncomeSummary() {
 
   const selectedProject = projects?.find((p) => p.id === projectId) ?? null;
   const selProjectAlloc = allocations?.[selectedIdx] ?? null;
+  const [allocView, setAllocView] = useState<"entered" | "all">("entered");
+  const [allocPage, setAllocPage] = useState(0);
+  useEffect(() => {
+    setAllocPage(0);
+  }, [projectId, allocView]);
 
   async function openEditor(projectId: string) {
     const res = await getFundFlowByProjectId(projectId);
@@ -501,6 +506,10 @@ export function MonthlyIncomeSummary() {
             allocLoading={allocLoading}
             selMonth={selMonth}
             selProjectAlloc={selProjectAlloc}
+            allocView={allocView}
+            setAllocView={setAllocView}
+            allocPage={allocPage}
+            setAllocPage={setAllocPage}
             onOpenEditor={openEditor}
           />
         ) : (
@@ -940,6 +949,10 @@ function ProjectWisePanel({
   allocLoading,
   selMonth,
   selProjectAlloc,
+  allocView,
+  setAllocView,
+  allocPage,
+  setAllocPage,
   onOpenEditor,
 }: {
   projects: ProjectOption[] | null;
@@ -953,6 +966,10 @@ function ProjectWisePanel({
   allocLoading: boolean;
   selMonth: IncomeMonth | undefined;
   selProjectAlloc: ProjectAllocation | null;
+  allocView: "entered" | "all";
+  setAllocView: (v: "entered" | "all") => void;
+  allocPage: number;
+  setAllocPage: (fn: (p: number) => number) => void;
   onOpenEditor: (projectId: string) => Promise<void> | void;
 }) {
   return (
@@ -1023,7 +1040,7 @@ function ProjectWisePanel({
         </p>
       ) : (
         <>
-          {/* Selected project header */}
+          {/* Selected project header + compact summary */}
           <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
             <p className="text-sm font-semibold text-zinc-800">
               {selectedProject.name}
@@ -1043,78 +1060,210 @@ function ProjectWisePanel({
                     : "Not entered"}
               </span>
             </div>
+            {allocations && (
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-zinc-600">
+                <span>
+                  Total entered planned income:{" "}
+                  <span className="font-mono font-medium text-zinc-800">
+                    {fmt2(allocTotal) ?? "—"}
+                  </span>
+                </span>
+                <span>
+                  Entered months:{" "}
+                  <span className="font-medium text-zinc-800">
+                    {
+                      allocations.filter(
+                        (a) => a.amount != null || a.unavailable
+                      ).length
+                    }
+                  </span>
+                </span>
+                <span>
+                  Blank months:{" "}
+                  <span className="font-medium text-zinc-800">
+                    {
+                      allocations.filter(
+                        (a) => a.amount == null && !a.unavailable
+                      ).length
+                    }
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Full monthly allocation schedule */}
-          <div className="overflow-x-auto rounded-lg border border-zinc-200">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                  <th className="py-2 pl-3 pr-3">Month</th>
-                  <th className="py-2 pr-3 text-right">Planned Income</th>
-                  <th className="py-2 pr-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allocLoading && (
-                  <tr>
-                    <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
-                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                      Loading allocation schedule…
-                    </td>
-                  </tr>
-                )}
-                {!allocLoading &&
-                  allocations?.map((a) => (
-                    <tr key={`${a.year}-${a.month}`} className="border-b last:border-0">
-                      <td className="py-1.5 pl-3 pr-3 font-medium text-zinc-800">
-                        {monthLabel(a.month, a.year)}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono">
-                        {a.unavailable ? (
-                          <span className="text-amber-600" title={a.unavailableReason}>
-                            Unverified
-                          </span>
-                        ) : a.amount != null ? (
-                          fmt2(a.amount)
-                        ) : (
-                          <span className="italic text-zinc-400">Not entered</span>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-3 text-xs text-zinc-500">
-                        {a.unavailable
-                          ? "Record without workbook provenance"
-                          : a.amount == null
-                            ? "Blank"
-                            : Number(a.amount) === 0
-                              ? "Entered as zero"
-                              : "Planned"}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-              {!allocLoading && allocations && allocations.length > 0 && (
-                <tfoot>
-                  <tr className="border-t bg-zinc-50 font-medium">
-                    <td className="py-2 pl-3 pr-3 text-zinc-700">
-                      Total planned income (Apr 2026 – Mar 2028)
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono">
-                      {fmt2(allocTotal) ?? "—"}
-                    </td>
-                    <td className="py-2 pr-3 text-xs font-normal text-zinc-500">
-                      Entered months only
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+          {/* View toggle */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+              {(
+                [
+                  ["entered", "Entered Months"],
+                  ["all", "All 24 Months"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAllocView(value)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    allocView === value
+                      ? "bg-teal-600 text-white"
+                      : "text-zinc-600 hover:bg-zinc-100"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Paginated allocation schedule (6 rows per page) */}
+          <AllocMonthsTable
+            allocations={allocations}
+            allocLoading={allocLoading}
+            view={allocView}
+            page={allocPage}
+            setPage={setAllocPage}
+          />
           <p className="text-xs text-zinc-400">
             Project-wise view shows income allocations only. Expenses, net and
             running balance are company-level workbook figures — not per project.
+            Allocations after June 2027 remain project data but are not counted
+            in the company Row 12 total.
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+const ALLOC_PAGE_SIZE = 6;
+
+function AllocMonthsTable({
+  allocations,
+  allocLoading,
+  view,
+  page,
+  setPage,
+}: {
+  allocations: ProjectAllocation[] | null;
+  allocLoading: boolean;
+  view: "entered" | "all";
+  page: number;
+  setPage: (fn: (p: number) => number) => void;
+}) {
+  const rows =
+    view === "entered"
+      ? (allocations ?? []).filter(
+          (a) => a.amount != null || a.unavailable === true
+        )
+      : (allocations ?? []);
+  const pageCount = Math.max(1, Math.ceil(rows.length / ALLOC_PAGE_SIZE));
+  const pageRows = rows.slice(
+    page * ALLOC_PAGE_SIZE,
+    (page + 1) * ALLOC_PAGE_SIZE
+  );
+  const firstIdx = page * ALLOC_PAGE_SIZE;
+
+  return (
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+              <th className="py-2 pl-3 pr-3">Month</th>
+              <th className="py-2 pr-3 text-right">Planned Income</th>
+              <th className="py-2 pr-3">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allocLoading && (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
+                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                  Loading allocation schedule…
+                </td>
+              </tr>
+            )}
+            {!allocLoading && pageRows.length === 0 && (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
+                  {view === "entered"
+                    ? "No entered months yet — switch to All 24 Months to plan."
+                    : "No allocation data."}
+                </td>
+              </tr>
+            )}
+            {!allocLoading &&
+              pageRows.map((a) => (
+                <tr key={`${a.year}-${a.month}`} className="border-b last:border-0">
+                  <td className="py-1.5 pl-3 pr-3 font-medium text-zinc-800">
+                    {monthLabel(a.month, a.year)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono">
+                    {a.unavailable ? (
+                      <span
+                        className="text-amber-600"
+                        title={a.unavailableReason}
+                      >
+                        Unverified
+                      </span>
+                    ) : a.amount != null ? (
+                      fmt2(a.amount)
+                    ) : (
+                      <span className="italic text-zinc-400">Not entered</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 pr-3 text-xs text-zinc-500">
+                    {a.unavailable
+                      ? "Record without workbook provenance"
+                      : a.amount == null
+                        ? "Blank"
+                        : Number(a.amount) === 0
+                          ? "Entered as zero"
+                          : "Planned"}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {rows.length > ALLOC_PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-zinc-500">
+            Showing {firstIdx + 1}–{firstIdx + pageRows.length} of{" "}
+            {rows.length} months
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              className="gap-1"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+      {rows.length > 0 && rows.length <= ALLOC_PAGE_SIZE && !allocLoading && (
+        <p className="text-xs text-zinc-400">
+          Showing all {rows.length} {view === "entered" ? "entered" : ""} months
+        </p>
       )}
     </div>
   );
