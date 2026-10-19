@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AssetFilterInput } from "@/lib/schemas/asset";
 import { AssetWithComputed } from "@/types/assets";
 import { AssetForm } from "./asset-form";
+import { documentDisplayName } from "@/components/ui/file-upload-field";
 import { AssetTransferDialog } from "./asset-transfer-dialog";
 import { AssetMovementHistory } from "./asset-movement-history";
 import type { MasterData } from "@/lib/master-data";
@@ -207,16 +208,24 @@ export function AssetsTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     {row.billWarrantyPath ? (
-                      <a
-                        href={row.billWarrantyPath}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
-                        title="View scanned bill or warranty"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-blue-600" />
-                        <span>View doc</span>
-                      </a>
+                      <span className="inline-flex max-w-[10rem] items-center gap-1">
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                        <span
+                          className="truncate text-xs text-zinc-700"
+                          title={documentDisplayName(row.billWarrantyPath)}
+                        >
+                          {documentDisplayName(row.billWarrantyPath)}
+                        </span>
+                        <a
+                          href={row.billWarrantyPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-xs font-medium text-primary hover:underline"
+                          title="View scanned bill or warranty"
+                        >
+                          View
+                        </a>
+                      </span>
                     ) : (
                       <span className="text-xs text-zinc-400">No doc</span>
                     )}

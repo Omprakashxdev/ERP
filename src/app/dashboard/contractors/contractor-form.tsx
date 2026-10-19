@@ -29,7 +29,7 @@ import {
   getTenderIdSuggestions,
   getContractorLinkedRaBills,
 } from "@/lib/actions/contractor";
-import { FileUploadField } from "@/components/ui/file-upload-field";
+import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
 import type { MasterData } from "@/lib/master-data";
 import { Loader2, FileText, Wrench, Phone, Receipt } from "lucide-react";
 import { toast } from "sonner";
@@ -949,15 +949,25 @@ function ContractorLinkedRaBillsPanel({ contractorId }: { contractorId: string }
                 ] as const
               ).map(([label, path]) =>
                 path ? (
-                  <a
+                  <span
                     key={label}
-                    href={path}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 underline underline-offset-2"
+                    className="inline-flex max-w-[14rem] items-baseline gap-1.5"
                   >
-                    {label}
-                  </a>
+                    <a
+                      href={path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-xs text-blue-600 underline underline-offset-2"
+                    >
+                      {label}
+                    </a>
+                    <span
+                      className="truncate text-[11px] text-zinc-500"
+                      title={documentDisplayName(path)}
+                    >
+                      {documentDisplayName(path)}
+                    </span>
+                  </span>
                 ) : (
                   <span key={label} className="text-xs text-zinc-400">
                     no {label.toLowerCase()}
