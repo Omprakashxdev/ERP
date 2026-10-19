@@ -34,9 +34,9 @@ import {
   getNextRegisterRefNo,
   getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink, Sparkles, Link2 } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
-import { FileUploadField } from "@/components/ui/file-upload-field";
+import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import { toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
@@ -636,7 +636,10 @@ export function InOutRegisterForm({
                         className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
                       >
                         <div className="flex items-center gap-1.5 truncate">
-                          <span className="truncate">{document}</span>
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                          <span className="truncate" title={documentDisplayName(document)}>
+                            {documentDisplayName(document)}
+                          </span>
                           <a
                             href={withBasePath(document)}
                             target="_blank"
