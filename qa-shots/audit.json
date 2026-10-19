@@ -1,0 +1,108 @@
+[
+  {
+    "name": "dashboard",
+    "route": "/dashboard",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "fund-flow",
+    "route": "/dashboard/fund-flow",
+    "status": 200,
+    "issues": [
+      "50 console errors"
+    ]
+  },
+  {
+    "name": "due-bills",
+    "route": "/dashboard/due-bills",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "wip",
+    "route": "/dashboard/wip",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "payment-schedules",
+    "route": "/dashboard/payment-schedules",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "tasks",
+    "route": "/dashboard/tasks",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "contractors",
+    "route": "/dashboard/contractors",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "tenders",
+    "route": "/dashboard/tenders",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "tada-bills",
+    "route": "/dashboard/tada-bills",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "vehicle-log-book",
+    "route": "/dashboard/vehicle-log-book",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "property",
+    "route": "/dashboard/property",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "in-out-register",
+    "route": "/dashboard/in-out-register",
+    "status": "ERR",
+    "issues": [
+      "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"http://localhost:3000/dashboard/in-out-register\", waiting until \"networkidle\"\n"
+    ]
+  },
+  {
+    "name": "employee",
+    "route": "/dashboard/employee",
+    "status": "ERR",
+    "issues": [
+      "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"http://localhost:3000/dashboard/employee\", waiting until \"networkidle\"\n"
+    ]
+  },
+  {
+    "name": "masters",
+    "route": "/dashboard/masters",
+    "status": 200,
+    "issues": []
+  },
+  {
+    "name": "reports",
+    "route": "/dashboard/reports",
+    "status": "ERR",
+    "issues": [
+      "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"http://localhost:3000/dashboard/reports\", waiting until \"networkidle\"\n"
+    ]
+  },
+  {
+    "name": "settings",
+    "route": "/dashboard/settings",
+    "status": "ERR",
+    "issues": [
+      "TimeoutError: page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"http://localhost:3000/dashboard/settings\", waiting until \"networkidle\"\n"
+    ]
+  }
+]
