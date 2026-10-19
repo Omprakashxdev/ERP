@@ -1,16 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Loader2,
+  Minus,
+  Pencil,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FundFlowEditor } from "./fund-flow-editor";
 import {
   getMonthlyIncomeSummary,
+  getMonthlyIncomeBreakdown,
   getMonthlyExpenses,
   upsertMonthlyExpense,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
 } from "@/lib/actions/fund-flow-monthly";
+import { getFundFlowByProjectId } from "@/lib/actions/fund-flow";
+import type { FundFlowWithComputed } from "@/types/fund-flow";
 
 interface IncomeMonth {
   month: number;
@@ -54,9 +76,36 @@ interface RunningBalanceMonth {
   incomplete: boolean;
 }
 
-/** Convert a Decimal-like value to an input-safe string without Number() precision loss.
-    maxFrac defaults to 6 to preserve DECIMAL(23,6) fee/allocation precision. */
-function decimalToInputString(value: unknown, maxFrac = 6): string {
+interface BreakdownRow {
+  projectId: string;
+  projectName: string;
+  clientName: string;
+  regionName: string;
+  income: string;
+}
+
+interface Breakdown {
+  formulaCovered: boolean;
+  rows: BreakdownRow[];
+  total: string | null;
+  excluded: { projectName: string; reason: string }[];
+}
+
+/** Display a decimal string at 2 places — display only; stored precision
+    stays DECIMAL(23,6). No unit suffix: workbook units are unverified. */
+function fmt2(value: unknown): string | null {
+  if (value == null) return null;
+  const s = typeof value === "string" ? value : String(value);
+  if (s === "" || s === "null") return null;
+  const n = Number(s);
+  if (Number.isNaN(n)) return null;
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function decimalToInputString(value: unknown, maxFrac = 2): string {
   if (value == null) return "";
   const s = typeof value === "string" ? value : String(value);
   if (s === "" || s === "null" || s === "undefined") return "";
@@ -67,16 +116,36 @@ function decimalToInputString(value: unknown, maxFrac = 6): string {
   return s;
 }
 
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+function monthLabel(month: number, year: number) {
+  return `${MONTH_LABELS[month - 1] ?? month} ${year}`;
+}
+
+const OVERVIEW_PAGE_SIZE = 6;
+
 export function MonthlyIncomeSummary() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<IncomeMonth[]>([]);
   const [expenses, setExpenses] = useState<ExpenseMonth[]>([]);
-  const [expenseTotal, setExpenseTotal] = useState<string | null>(null);
   const [planned, setPlanned] = useState<PlannedNetMonth[]>([]);
-  const [plannedTotal, setPlannedTotal] = useState<string | null>(null);
-  const [plannedIncomplete, setPlannedIncomplete] = useState(false);
   const [running, setRunning] = useState<RunningBalanceMonth[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Selected month — defaults to the first formula-covered month with income,
+  // else the first covered month (Apr 2026).
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [monthChosen, setMonthChosen] = useState(false);
+
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const [editExpenses, setEditExpenses] = useState(false);
+  const [overviewPage, setOverviewPage] = useState(0);
+  const [editorProject, setEditorProject] = useState<FundFlowWithComputed | null>(null);
 
   async function load() {
     setLoading(true);
@@ -92,22 +161,11 @@ export function MonthlyIncomeSummary() {
         setSummary(incomeResult.data);
       }
       if (expenseResult.success && expenseResult.data) {
-        const data = expenseResult.data as {
-          expenses: ExpenseMonth[];
-          total: { toString: () => string } | null;
-        };
+        const data = expenseResult.data as { expenses: ExpenseMonth[] };
         setExpenses(data.expenses);
-        setExpenseTotal(decimalToInputString(data.total) || null);
       }
       if (netResult.success && netResult.data) {
-        const data = netResult.data as {
-          months: PlannedNetMonth[];
-          totalNet: { toString: () => string } | null;
-          totalIncomplete: boolean;
-        };
-        setPlanned(data.months);
-        setPlannedTotal(decimalToInputString(data.totalNet) || null);
-        setPlannedIncomplete(data.totalIncomplete);
+        setPlanned((netResult.data as { months: PlannedNetMonth[] }).months);
       }
       if (balResult.success && balResult.data) {
         setRunning((balResult.data as { months: RunningBalanceMonth[] }).months);
@@ -120,6 +178,47 @@ export function MonthlyIncomeSummary() {
   useEffect(() => {
     void load();
   }, []);
+
+  // Default selection once data arrives: first covered month that has income.
+  useEffect(() => {
+    if (monthChosen || summary.length === 0) return;
+    const firstWithIncome = summary.findIndex(
+      (m) => m.formulaCovered && m.totalIncome != null
+    );
+    setSelectedIdx(firstWithIncome >= 0 ? firstWithIncome : 0);
+    setMonthChosen(true);
+  }, [summary, monthChosen]);
+
+  const selMonth = summary[selectedIdx];
+  const selExpense = expenses[selectedIdx];
+  const selPlanned = planned[selectedIdx];
+  const selRunning = running[selectedIdx];
+
+  useEffect(() => {
+    if (!showBreakdown || !selMonth) return;
+    let cancelled = false;
+    setBreakdownLoading(true);
+    getMonthlyIncomeBreakdown(selMonth.month, selMonth.year)
+      .then((res) => {
+        if (!cancelled && res.success && res.data)
+          setBreakdown(res.data as Breakdown);
+      })
+      .finally(() => {
+        if (!cancelled) setBreakdownLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showBreakdown, selectedIdx, selMonth]);
+
+  async function openEditor(projectId: string) {
+    const res = await getFundFlowByProjectId(projectId);
+    if (res.success && res.data) {
+      setEditorProject(res.data as FundFlowWithComputed);
+    } else {
+      toast.error("Could not load the project for editing.");
+    }
+  }
 
   async function saveExpense(
     month: number,
@@ -160,204 +259,526 @@ export function MonthlyIncomeSummary() {
     return (
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            Monthly Income, Expense &amp; Planned Balances (Rows 12–18)
+          <CardTitle className="text-base font-medium">
+            Monthly Fund Flow Report
             <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-12 animate-pulse bg-zinc-100 rounded" />
+          <div className="h-24 animate-pulse rounded bg-zinc-100" />
         </CardContent>
       </Card>
     );
   }
 
-  const grandTotal = summary.reduce((acc, m) => {
-    if (m.totalIncome == null) return acc;
-    return acc + Number(m.totalIncome.toString());
-  }, 0);
+  const selIncomeText = fmt2(selMonth?.totalIncome);
+  const selExpenseEntered = selExpense?.amount != null && !selExpense.unavailable;
+  const selExpenseText = selExpenseEntered ? fmt2(selExpense.amount) : null;
+  const selNetText = fmt2(selPlanned?.plannedNet);
+  const selBalText = fmt2(selRunning?.runningBalance);
+  const selProvisional =
+    selPlanned?.incomplete === true || selRunning?.incomplete === true;
+
+  const overviewPageCount = Math.ceil(summary.length / OVERVIEW_PAGE_SIZE);
+  const overviewSlice = summary.slice(
+    overviewPage * OVERVIEW_PAGE_SIZE,
+    (overviewPage + 1) * OVERVIEW_PAGE_SIZE
+  );
+
+  function statusFor(i: number): { label: string; tone: "green" | "amber" | "zinc" } {
+    const m = summary[i];
+    const e = expenses[i];
+    if (m && !m.formulaCovered)
+      return { label: "Outside formula range", tone: "zinc" };
+    if (e?.unavailable) return { label: "Expense unverified", tone: "amber" };
+    const incomePresent = m?.totalIncome != null;
+    const expensePresent = e?.amount != null;
+    if (!incomePresent && !expensePresent)
+      return { label: "No data", tone: "zinc" };
+    if (!expensePresent)
+      return { label: "Missing expense", tone: "amber" };
+    if (!incomePresent)
+      return { label: "No income planned", tone: "zinc" };
+    return { label: "Complete", tone: "green" };
+  }
+
+  const statusClasses: Record<string, string> = {
+    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
+    zinc: "bg-zinc-50 text-zinc-500 border-zinc-200",
+  };
 
   return (
     <Card className="shadow-sm">
       <CardHeader>
-        <CardTitle className="text-sm font-medium">
-          Monthly Income, Expense &amp; Planned Balances (Rows 12–18)
-        </CardTitle>
+        <div className="flex flex-wrap items-center gap-3">
+          <CardTitle className="text-base font-medium">
+            Monthly Fund Flow Report
+          </CardTitle>
+          <span className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs text-zinc-500">
+            All projects (combined)
+          </span>
+        </div>
         <p className="text-xs text-zinc-500">
-          Income: verified workbook allocations summed across projects. Expenses:
-          worksheet-level manually entered monthly plan (units as entered — not
-          assumed). Planned Net = income − expenses; Planned Running Balance
-          carries the prior month forward from an implied zero baseline. These
-          are plan figures — not verified cash flow or bank balances. Blank =
-          unentered, distinct from zero.{" "}
-          <span className="text-amber-600">*</span> marks months where inputs are
-          missing or ambiguous records were excluded — not fully reconciled.
+          This report summarizes Rows 12–18 across all listed projects.
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <div className="grid grid-cols-[repeat(25,minmax(96px,1fr))] gap-1 text-xs">
-            {/* Header row */}
-            {summary.map(({ label }) => (
-              <div key={label} className="text-center text-zinc-500">
-                {label}
-              </div>
-            ))}
-            <div className="text-center font-medium text-zinc-700">Total</div>
+      <CardContent className="space-y-5">
+        {/* Info banner */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
+          <span className="inline-flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" />
+            Planned figures only — not actual bank balance.
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" />
+            Blank expense is different from zero.
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" />
+            Amounts shown in workbook units as entered (2 decimals).
+          </span>
+        </div>
 
-            {/* Row 12 — Income (display only) */}
-            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
-              Total Income per Month (Row 12)
-            </div>
-            {summary.map(({ label, formulaCovered, totalIncome, projectCount, unavailableCount }) => (
-              <div
-                key={label}
-                className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
-                title={
-                  !formulaCovered
-                    ? projectCount > 0
-                      ? "Workbook has no Row 12 formula for this month — project allocations exist but are not summarized here"
-                      : "Workbook has no Row 12 formula for this month"
-                    : unavailableCount > 0
-                    ? `Incomplete: ${projectCount} projects with valid allocations, ${unavailableCount} ambiguous record(s) excluded — total is not a fully reconciled workbook figure`
-                    : projectCount > 0
-                    ? `${projectCount} projects`
-                    : "No allocations"
-                }
-              >
-                {totalIncome != null
-                  ? `₹${decimalToInputString(totalIncome)}`
-                  : "—"}
-                {formulaCovered && unavailableCount > 0 && (
-                  <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+        {/* Month selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-zinc-700">Selected Month</span>
+          <Select
+            value={String(selectedIdx)}
+            onValueChange={(v) => setSelectedIdx(Number(v ?? 0))}
+          >
+            <SelectTrigger className="w-40" size="sm">
+              <SelectValue>
+                {() => (selMonth ? selMonth.label : "Select month")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {summary.map((m, i) => (
+                <SelectItem key={`${m.year}-${m.month}`} value={String(i)}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard
+            label="Planned Income"
+            row="Row 12"
+            value={selIncomeText}
+            icon={<ArrowUpRight className="h-4 w-4 text-emerald-600" />}
+            tone="emerald"
+            emptyHint="No verified project allocations"
+          />
+          <SummaryCard
+            label="Planned Expenses"
+            row="Row 14"
+            value={selExpenseText}
+            icon={<ArrowDownRight className="h-4 w-4 text-rose-600" />}
+            tone="rose"
+            emptyHint={
+              selExpense?.unavailable
+                ? "Unverified record — not editable"
+                : "Expense not entered"
+            }
+          />
+          <SummaryCard
+            label="Planned Net"
+            row="Row 16"
+            value={selNetText}
+            icon={<Minus className="h-4 w-4 text-zinc-500" />}
+            tone="zinc"
+            provisional={selPlanned?.incomplete}
+            provisionalHint="Computed with missing inputs treated as 0"
+            emptyHint="Outside formula range"
+          />
+          <SummaryCard
+            label="Planned Running Balance"
+            row="Row 18"
+            value={selBalText}
+            icon={<Wallet className="h-4 w-4 text-blue-600" />}
+            tone="blue"
+            provisional={selRunning?.incomplete}
+            provisionalHint="Includes months with missing inputs"
+            emptyHint="Outside formula range"
+            caption="Plan from an implied zero baseline — not a bank balance"
+          />
+        </div>
+        {selProvisional && (
+          <p className="text-xs text-amber-700">
+            * Provisional — this month's result uses missing or excluded inputs.
+          </p>
+        )}
+
+        {/* Project income breakdown */}
+        <details
+          className="rounded-lg border border-zinc-200"
+          onToggle={(e) =>
+            setShowBreakdown((e.target as HTMLDetailsElement).open)
+          }
+        >
+          <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50">
+            Which Projects Contribute to This Month's Income?
+            <span className="ml-auto text-xs font-normal text-zinc-500">
+              {selMonth?.label ?? ""} · click to expand
+            </span>
+          </summary>
+          <div className="border-t border-zinc-200 px-4 py-3">
+            {breakdownLoading ? (
+              <div className="py-4 text-center text-sm text-zinc-400">
+                <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                Loading…
+              </div>
+            ) : breakdown ? (
+              <>
+                {!breakdown.formulaCovered && (
+                  <p className="mb-2 text-xs text-amber-700">
+                    This month is outside the workbook Row 12 formula range —
+                    allocations listed below are not added to Row 12.
+                  </p>
                 )}
-              </div>
-            ))}
-            <div className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700">
-              {grandTotal > 0
-                ? `₹${grandTotal.toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 6,
-                  })}`
-                : "—"}
-            </div>
-
-            {/* Row 14 — Monthly Expenses (manually entered, worksheet-level) */}
-            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
-              Monthly Expenses (Row 14 — manual entry)
-            </div>
-            {expenses.map((e) => {
-              const labelKey = `${e.year}-${e.month}`;
-              return (
-                <div
-                  key={labelKey}
-                  className="h-8 flex items-center justify-end px-1"
-                  title={
-                    e.unavailable
-                      ? e.unavailableReason ?? "Unavailable for editing"
-                      : "Manually entered monthly expense"
-                  }
-                >
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    defaultValue={decimalToInputString(e.amount, 2)}
-                    disabled={e.unavailable === true || saving}
-                    placeholder="—"
-                    className="h-7 w-full rounded border border-zinc-200 bg-white px-1 text-right font-mono text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-400 focus:border-zinc-400 focus:outline-none"
-                    onBlur={(ev) => {
-                      const v = ev.target.value.trim();
-                      if (v === decimalToInputString(e.amount, 2)) return;
-                      void saveExpense(e.month, e.year, v, e.updatedAt);
-                    }}
-                  />
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-zinc-500">
+                        <th className="py-2 pr-3">Project</th>
+                        <th className="py-2 pr-3">Client</th>
+                        <th className="py-2 pr-3">Region</th>
+                        <th className="py-2 pr-3 text-right">Planned income</th>
+                        <th className="py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {breakdown.rows.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="py-4 text-center text-sm text-zinc-400"
+                          >
+                            No verified project allocations for this month.
+                          </td>
+                        </tr>
+                      )}
+                      {breakdown.rows.map((r) => (
+                        <tr key={r.projectId} className="border-b last:border-0">
+                          <td className="py-2 pr-3 font-medium text-zinc-800">
+                            {r.projectName}
+                          </td>
+                          <td className="py-2 pr-3 text-zinc-600">{r.clientName}</td>
+                          <td className="py-2 pr-3 text-zinc-600">{r.regionName}</td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {fmt2(r.income)}
+                          </td>
+                          <td className="py-2 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                              onClick={() => void openEditor(r.projectId)}
+                            >
+                              View / Edit
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {breakdown.rows.length > 0 && (
+                      <tfoot>
+                        <tr className="border-t font-medium">
+                          <td colSpan={3} className="py-2 text-zinc-700">
+                            Total (equals Row 12 for {selMonth?.label})
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {fmt2(breakdown.total) ?? "—"}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
                 </div>
-              );
-            })}
-            <div
-              className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700"
-              title="Sum of entered monthly expense values (Excel AU14 parity)"
-            >
-              {expenseTotal ?? "—"}
-            </div>
+                {breakdown.excluded.length > 0 && (
+                  <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <p className="font-medium">
+                      Excluded — not counted toward Row 12:
+                    </p>
+                    <ul className="mt-1 list-inside list-disc">
+                      {breakdown.excluded.map((e) => (
+                        <li key={e.projectName + e.reason}>
+                          {e.projectName} — {e.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="py-3 text-sm text-zinc-400">
+                Expand to load this month's project allocations.
+              </p>
+            )}
+          </div>
+        </details>
 
-            {/* Row 16 — Planned Net = income − expense (computed, display only) */}
-            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
-              Planned Net (Row 16 = Row 12 − Row 14)
-            </div>
-            {planned.map((p) => {
-              const reasons: string[] = [];
-              if (!p.incomePresent) reasons.push("income missing — treated as 0");
-              if (!p.expensePresent) reasons.push("expense missing — treated as 0");
-              if (p.excludedCount > 0)
-                reasons.push(`${p.excludedCount} ambiguous record(s) excluded`);
-              return (
-                <div
-                  key={`${p.year}-${p.month}`}
-                  className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
-                  title={
-                    !p.formulaCovered
-                      ? "Workbook has no Row 16 formula for this month"
-                      : reasons.length > 0
-                      ? `Incomplete: ${reasons.join("; ")}`
-                      : "Planned net = monthly income − monthly expense"
-                  }
-                >
-                  {p.plannedNet != null ? decimalToInputString(p.plannedNet) : "—"}
-                  {p.incomplete && p.plannedNet != null && (
-                    <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
-                  )}
-                </div>
-              );
-            })}
-            <div
-              className="flex h-8 items-center justify-end px-1 font-mono font-medium text-zinc-700"
-              title={
-                plannedIncomplete
-                  ? "Incomplete: computed treating missing or excluded inputs as 0 (Excel AU16 = AU12 − AU14 parity)"
-                  : "Total income − total expenses (Excel AU16 = AU12 − AU14 parity)"
-              }
-            >
-              {plannedTotal ?? "—"}
-              {plannedIncomplete && plannedTotal != null && (
-                <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
+        {/* Monthly overview table */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-zinc-800">
+              Monthly Overview (All Projects Combined)
+            </h3>
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              {overviewSlice.length > 0 && (
+                <span>
+                  Showing {overviewSlice[0].label} –{" "}
+                  {overviewSlice[overviewSlice.length - 1].label}
+                </span>
               )}
-            </div>
-
-            {/* Row 18 — Planned Running Balance (carry-forward, display only).
-                Workbook has no AU18 total; the Total column shows "—". */}
-            <div className="col-span-full text-[10px] uppercase tracking-wide text-zinc-400 mt-1">
-              Planned Running Balance (Row 18 — carries prior month + net)
-            </div>
-            {running.map((r) => (
-              <div
-                key={`${r.year}-${r.month}`}
-                className="h-8 flex items-center justify-end px-1 font-mono text-zinc-700"
-                title={
-                  !r.formulaCovered
-                    ? "Workbook has no Row 18 formula for this month"
-                    : r.incomplete
-                    ? `Incomplete: balance carries ${r.gapMonths} month(s) with missing or excluded inputs — a plan figure, not a verified bank balance`
-                    : "Planned running balance — a plan figure, not a verified bank balance"
-                }
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                disabled={overviewPage === 0}
+                onClick={() => setOverviewPage((p) => Math.max(0, p - 1))}
+                aria-label="Earlier months"
               >
-                {r.runningBalance != null
-                  ? decimalToInputString(r.runningBalance)
-                  : "—"}
-                {r.incomplete && r.runningBalance != null && (
-                  <sup className="ml-0.5 text-amber-600" aria-label="incomplete">*</sup>
-                )}
-              </div>
-            ))}
-            <div
-              className="flex h-8 items-center justify-end px-1 font-mono text-zinc-400"
-              title="No workbook formula (AU18 is empty) — running balance has no grand total"
-            >
-              —
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                disabled={overviewPage >= overviewPageCount - 1}
+                onClick={() =>
+                  setOverviewPage((p) => Math.min(overviewPageCount - 1, p + 1))
+                }
+                aria-label="Later months"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
+          <div className="overflow-x-auto rounded-lg border border-zinc-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                  <th className="py-2 pl-3 pr-3">Month</th>
+                  <th className="py-2 pr-3 text-right">Planned Income</th>
+                  <th className="py-2 pr-3 text-right">Planned Expenses</th>
+                  <th className="py-2 pr-3 text-right">Planned Net</th>
+                  <th className="py-2 pr-3 text-right">Running Balance</th>
+                  <th className="py-2 pr-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overviewSlice.map((m) => {
+                  const i = summary.indexOf(m);
+                  const e = expenses[i];
+                  const p = planned[i];
+                  const r = running[i];
+                  const status = statusFor(i);
+                  return (
+                    <tr key={m.label} className="border-b last:border-0">
+                      <td className="py-2 pl-3 pr-3 font-medium text-zinc-800">
+                        {m.label}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {fmt2(m.totalIncome) ?? "—"}
+                        {m.unavailableCount > 0 && m.totalIncome != null && (
+                          <sup
+                            className="ml-0.5 text-amber-600"
+                            title={`${m.unavailableCount} ambiguous record(s) excluded`}
+                          >
+                            *
+                          </sup>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {e?.unavailable ? (
+                          <span className="text-amber-600" title={e.unavailableReason}>
+                            Unverified
+                          </span>
+                        ) : e?.amount != null ? (
+                          fmt2(e.amount)
+                        ) : (
+                          <span className="italic text-zinc-400">Not entered</span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {p?.plannedNet != null ? (
+                          <>
+                            {fmt2(p.plannedNet)}
+                            {p.incomplete && (
+                              <sup
+                                className="ml-0.5 text-amber-600"
+                                title="Provisional — missing or excluded inputs treated as 0"
+                              >
+                                *
+                              </sup>
+                            )}
+                          </>
+                        ) : p?.formulaCovered ? (
+                          <span className="italic text-zinc-400">Incomplete</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {r?.runningBalance != null ? (
+                          <>
+                            {fmt2(r.runningBalance)}
+                            {r.incomplete && (
+                              <sup
+                                className="ml-0.5 text-amber-600"
+                                title="Provisional — balance carries months with missing inputs"
+                              >
+                                *
+                              </sup>
+                            )}
+                          </>
+                        ) : r?.formulaCovered ? (
+                          <span className="italic text-zinc-400">Incomplete</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses[status.tone]}`}
+                        >
+                          {status.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Expense editing */}
+        <div className="rounded-lg border border-zinc-200">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+            onClick={() => setEditExpenses((v) => !v)}
+            aria-expanded={editExpenses}
+          >
+            <Pencil className="h-4 w-4 text-zinc-500" />
+            Edit Monthly Expenses (Row 14)
+            <span className="ml-auto text-xs font-normal text-zinc-500">
+              {editExpenses ? "Hide" : "Show"}
+            </span>
+          </button>
+          {editExpenses && (
+            <div className="border-t border-zinc-200 px-4 py-3">
+              <p className="mb-3 text-xs text-zinc-500">
+                Company monthly expense plan — enter one amount per month.
+                Leave blank for unentered; enter 0 for an explicit zero.
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {expenses.map((e) => (
+                  <div key={`${e.year}-${e.month}`} className="space-y-1">
+                    <label className="block text-[11px] text-zinc-500">
+                      {monthLabel(e.month, e.year)}
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      defaultValue={decimalToInputString(e.amount, 2)}
+                      disabled={e.unavailable === true || saving}
+                      placeholder="—"
+                      title={
+                        e.unavailable
+                          ? e.unavailableReason ?? "Unavailable for editing"
+                          : "Manually entered monthly expense"
+                      }
+                      className="h-8 w-full rounded border border-zinc-200 bg-white px-2 text-right font-mono text-sm text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-400 focus:border-zinc-400 focus:outline-none"
+                      onBlur={(ev) => {
+                        const v = ev.target.value.trim();
+                        if (v === decimalToInputString(e.amount, 2)) return;
+                        void saveExpense(e.month, e.year, v, e.updatedAt);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
+      {editorProject && (
+        <FundFlowEditor
+          project={editorProject}
+          onClose={() => {
+            setEditorProject(null);
+            void load();
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+function SummaryCard({
+  label,
+  row,
+  value,
+  icon,
+  tone,
+  provisional,
+  provisionalHint,
+  emptyHint,
+  caption,
+}: {
+  label: string;
+  row: string;
+  value: string | null;
+  icon: React.ReactNode;
+  tone: "emerald" | "rose" | "zinc" | "blue";
+  provisional?: boolean;
+  provisionalHint?: string;
+  emptyHint?: string;
+  caption?: string;
+}) {
+  const toneClasses = {
+    emerald: "bg-emerald-50 border-emerald-100",
+    rose: "bg-rose-50 border-rose-100",
+    zinc: "bg-zinc-50 border-zinc-200",
+    blue: "bg-blue-50 border-blue-100",
+  }[tone];
+  return (
+    <div className={`rounded-xl border p-4 ${toneClasses}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-zinc-500">
+          {label} <span className="text-zinc-400">({row})</span>
+        </p>
+        {icon}
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900">
+        {value != null ? (
+          <>
+            {value}
+            {provisional && (
+              <sup
+                className="ml-0.5 text-sm text-amber-600"
+                title={provisionalHint}
+              >
+                *
+              </sup>
+            )}
+          </>
+        ) : (
+          <span className="text-sm font-normal italic text-zinc-400">
+            {emptyHint ?? "—"}
+          </span>
+        )}
+      </p>
+      <p className="mt-1 text-[11px] text-zinc-400">
+        {caption ?? "workbook units"}
+      </p>
+    </div>
   );
 }

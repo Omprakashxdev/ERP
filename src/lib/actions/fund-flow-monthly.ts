@@ -1316,3 +1316,105 @@ export async function applyMonthlyPlan(
     return { created, kept: preview.keepCount + (preview.conflictCount - replaced), replaced };
   });
 }
+
+// ─── Row 12 project breakdown (read-only, report UI) ────────────
+
+export interface MonthlyIncomeBreakdownRow {
+  projectId: string;
+  projectName: string;
+  clientName: string;
+  regionName: string;
+  /** Serialized decimal string — Row 12 contribution for this project. */
+  income: string;
+}
+
+export interface MonthlyIncomeBreakdownResult {
+  /** Whether the month falls inside the workbook Row 12 formula range
+      (Apr 2026 – Jun 2027). Outside it, allocations are never summed. */
+  formulaCovered: boolean;
+  rows: MonthlyIncomeBreakdownRow[];
+  /** Serialized decimal sum of the verified contributing rows (Row 12 parity). */
+  total: string | null;
+  /** Allocations that exist for the month but cannot be counted toward
+      Row 12 — ambiguous provenance or non-income-bearing records. */
+  excluded: { projectName: string; reason: string }[];
+}
+
+export async function getMonthlyIncomeBreakdown(
+  month: number,
+  year: number
+): Promise<ActionResult<MonthlyIncomeBreakdownResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const parsed = z
+      .object({
+        month: z.number().int().min(1).max(12),
+        year: z.number().int().min(2000).max(2100),
+      })
+      .parse({ month, year });
+
+    const index = MONTHLY_ALLOCATION_WINDOW.findIndex(
+      (w) => w.month === parsed.month && w.year === parsed.year
+    );
+    // Row 12 formulas exist only in V12:AJ12 (Apr 2026 – Jun 2027).
+    const formulaCovered = index >= 0 && index <= 14;
+
+    const records = await prisma.fundFlowMonthly.findMany({
+      where: { month: parsed.month, year: parsed.year },
+      include: {
+        fundFlow: {
+          include: { project: { include: { client: true, region: true } } },
+        },
+      },
+    });
+
+    const provenanceSet = await fetchProvenanceSet(records.map((r) => r.id));
+
+    const rows: MonthlyIncomeBreakdownRow[] = [];
+    const excluded: { projectName: string; reason: string }[] = [];
+    let total: Decimal | null = null;
+
+    for (const r of records) {
+      const projectName = r.fundFlow?.project?.name ?? "Unknown project";
+      if (!isSafeWorkbookRecord(r)) {
+        excluded.push({
+          projectName,
+          reason: "Record carries non-income fields — not a Row 12 allocation",
+        });
+        continue;
+      }
+      if (!provenanceSet.has(r.id)) {
+        excluded.push({
+          projectName,
+          reason: "Allocation lacks verified workbook provenance",
+        });
+        continue;
+      }
+      if (!formulaCovered) {
+        excluded.push({
+          projectName,
+          reason: "Outside the workbook Row 12 formula range",
+        });
+        continue;
+      }
+      if (r.fundFlow?.project) {
+        rows.push({
+          projectId: r.fundFlow.project.id,
+          projectName,
+          clientName: r.fundFlow.project.client.name,
+          regionName: r.fundFlow.project.region.name,
+          income: r.income.toString(),
+        });
+        total = (total ?? new Decimal("0")).plus(new Decimal(r.income.toString()));
+      }
+    }
+
+    rows.sort((a, b) => a.projectName.localeCompare(b.projectName));
+
+    return {
+      formulaCovered,
+      rows,
+      total: total != null ? total.toString() : null,
+      excluded,
+    };
+  });
+}
