@@ -147,10 +147,59 @@ export function InOutRegisterTable({
             <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
               Add an inward or outward document to start tracking entries.
             </p>
-            <Button size="sm" onClick={() => setCreateEntryOpen(true)}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New entry
-            </Button>
+            <div className="flex items-center gap-2">
+              {filter.direction === "OUTWARD" ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setReplyParentInward(null);
+                    setCreateDirection("OUTWARD");
+                    setCreateEntryOpen(true);
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  New Outward Entry
+                </Button>
+              ) : filter.direction === "INWARD" ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setReplyParentInward(null);
+                    setCreateDirection("INWARD");
+                    setCreateEntryOpen(true);
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  New Inward Entry
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setReplyParentInward(null);
+                      setCreateDirection("INWARD");
+                      setCreateEntryOpen(true);
+                    }}
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    New Inward
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setReplyParentInward(null);
+                      setCreateDirection("OUTWARD");
+                      setCreateEntryOpen(true);
+                    }}
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    New Outward
+                  </Button>
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : (
