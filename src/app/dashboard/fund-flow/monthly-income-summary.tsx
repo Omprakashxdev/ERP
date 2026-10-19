@@ -22,6 +22,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
 import { FundFlowEditor } from "./fund-flow-editor";
 import {
   getMonthlyIncomeSummary,
@@ -30,8 +44,9 @@ import {
   upsertMonthlyExpense,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
+  getMonthlyAllocations,
 } from "@/lib/actions/fund-flow-monthly";
-import { getFundFlowByProjectId } from "@/lib/actions/fund-flow";
+import { getFundFlowByProjectId, getFundFlows } from "@/lib/actions/fund-flow";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
 
 interface IncomeMonth {
@@ -91,6 +106,21 @@ interface Breakdown {
   excluded: { projectName: string; reason: string }[];
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+  clientName: string;
+  regionName: string;
+}
+
+interface ProjectAllocation {
+  month: number;
+  year: number;
+  amount: string | null;
+  unavailable?: boolean;
+  unavailableReason?: string;
+}
+
 /** Display a decimal string at 2 places — display only; stored precision
     stays DECIMAL(23,6). No unit suffix: workbook units are unverified. */
 function fmt2(value: unknown): string | null {
@@ -146,6 +176,15 @@ export function MonthlyIncomeSummary() {
   const [editExpenses, setEditExpenses] = useState(false);
   const [overviewPage, setOverviewPage] = useState(0);
   const [editorProject, setEditorProject] = useState<FundFlowWithComputed | null>(null);
+
+  // Project-wise mode
+  const [scope, setScope] = useState<"all" | "project">("all");
+  const [projects, setProjects] = useState<ProjectOption[] | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [allocations, setAllocations] = useState<ProjectAllocation[] | null>(null);
+  const [allocTotal, setAllocTotal] = useState<string | null>(null);
+  const [allocLoading, setAllocLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -210,6 +249,62 @@ export function MonthlyIncomeSummary() {
       cancelled = true;
     };
   }, [showBreakdown, selectedIdx, selMonth]);
+
+  // Lazy-load the project list the first time Project Wise is chosen.
+  useEffect(() => {
+    if (scope !== "project" || projects !== null) return;
+    let cancelled = false;
+    void getFundFlows(undefined, 1, 500).then((res) => {
+      if (cancelled || !res.success || !res.data) return;
+      const list = (res.data as { rows: unknown[] }).rows.map((raw) => {
+        const r = raw as {
+          id: string;
+          name: string;
+          client?: { name: string };
+          region?: { name: string };
+        };
+        return {
+          id: r.id,
+          name: r.name,
+          clientName: r.client?.name ?? "—",
+          regionName: r.region?.name ?? "—",
+        };
+      });
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      setProjects(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, projects]);
+
+  useEffect(() => {
+    if (scope !== "project" || !projectId) {
+      setAllocations(null);
+      return;
+    }
+    let cancelled = false;
+    setAllocLoading(true);
+    getMonthlyAllocations(projectId)
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        const d = res.data as {
+          allocations: ProjectAllocation[];
+          total: string | null;
+        };
+        setAllocations(d.allocations);
+        setAllocTotal(d.total);
+      })
+      .finally(() => {
+        if (!cancelled) setAllocLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, projectId]);
+
+  const selectedProject = projects?.find((p) => p.id === projectId) ?? null;
+  const selProjectAlloc = allocations?.[selectedIdx] ?? null;
 
   async function openEditor(projectId: string) {
     const res = await getFundFlowByProjectId(projectId);
@@ -340,6 +435,37 @@ export function MonthlyIncomeSummary() {
           </span>
         </div>
 
+        {/* Scope toggle */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-zinc-700">Scope</span>
+          <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+            {(
+              [
+                ["all", "All Projects"],
+                ["project", "Project Wise"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setScope(value)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  scope === value
+                    ? "bg-teal-600 text-white"
+                    : "text-zinc-600 hover:bg-zinc-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-zinc-400">
+            {scope === "all"
+              ? "Combined company figures (Rows 12–18)"
+              : "One project's saved monthly income plan"}
+          </span>
+        </div>
+
         {/* Month selector */}
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-zinc-700">Selected Month</span>
@@ -362,6 +488,23 @@ export function MonthlyIncomeSummary() {
           </Select>
         </div>
 
+        {scope === "project" ? (
+          <ProjectWisePanel
+            projects={projects}
+            selectedProject={selectedProject}
+            projectId={projectId}
+            setProjectId={setProjectId}
+            pickerOpen={pickerOpen}
+            setPickerOpen={setPickerOpen}
+            allocations={allocations}
+            allocTotal={allocTotal}
+            allocLoading={allocLoading}
+            selMonth={selMonth}
+            selProjectAlloc={selProjectAlloc}
+            onOpenEditor={openEditor}
+          />
+        ) : (
+        <>
         {/* Summary cards */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
@@ -708,6 +851,8 @@ export function MonthlyIncomeSummary() {
             </div>
           )}
         </div>
+        </>
+        )}
       </CardContent>
       {editorProject && (
         <FundFlowEditor
@@ -779,6 +924,198 @@ function SummaryCard({
       <p className="mt-1 text-[11px] text-zinc-400">
         {caption ?? "workbook units"}
       </p>
+    </div>
+  );
+}
+
+function ProjectWisePanel({
+  projects,
+  selectedProject,
+  projectId,
+  setProjectId,
+  pickerOpen,
+  setPickerOpen,
+  allocations,
+  allocTotal,
+  allocLoading,
+  selMonth,
+  selProjectAlloc,
+  onOpenEditor,
+}: {
+  projects: ProjectOption[] | null;
+  selectedProject: ProjectOption | null;
+  projectId: string | null;
+  setProjectId: (id: string) => void;
+  pickerOpen: boolean;
+  setPickerOpen: (v: boolean) => void;
+  allocations: ProjectAllocation[] | null;
+  allocTotal: string | null;
+  allocLoading: boolean;
+  selMonth: IncomeMonth | undefined;
+  selProjectAlloc: ProjectAllocation | null;
+  onOpenEditor: (projectId: string) => Promise<void> | void;
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Project picker */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-zinc-700">Project</span>
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger className="inline-flex h-9 min-w-[16rem] items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-700 hover:bg-zinc-50">
+            {selectedProject ? (
+              <span className="truncate">{selectedProject.name}</span>
+            ) : (
+              <span className="text-zinc-400">Search projects…</span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </PopoverTrigger>
+          <PopoverContent className="w-[24rem] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Type project, client or region…" />
+              <CommandList>
+                <CommandEmpty>
+                  {projects == null ? "Loading…" : "No project found."}
+                </CommandEmpty>
+                <CommandGroup>
+                  {(projects ?? []).map((p) => (
+                    <CommandItem
+                      key={p.id}
+                      value={`${p.name} ${p.clientName} ${p.regionName}`}
+                      onSelect={() => {
+                        setProjectId(p.id);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={`mr-2 h-4 w-4 ${
+                          projectId === p.id ? "opacity-100" : "opacity-0"
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-zinc-800">
+                          {p.name}
+                        </span>
+                        <span className="block truncate text-xs text-zinc-400">
+                          {p.clientName} · {p.regionName}
+                        </span>
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        {selectedProject && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onOpenEditor(selectedProject.id)}
+          >
+            View / Edit Project
+          </Button>
+        )}
+      </div>
+
+      {!selectedProject ? (
+        <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-400">
+          Choose a project above to see its saved monthly income plan.
+        </p>
+      ) : (
+        <>
+          {/* Selected project header */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
+            <p className="text-sm font-semibold text-zinc-800">
+              {selectedProject.name}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {selectedProject.clientName} · {selectedProject.regionName}
+            </p>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-xs text-zinc-500">
+                Planned income in {selMonth?.label ?? "selected month"}:
+              </span>
+              <span className="text-xl font-semibold text-zinc-900">
+                {selProjectAlloc?.amount != null
+                  ? fmt2(selProjectAlloc.amount)
+                  : selProjectAlloc?.unavailable
+                    ? "Unverified"
+                    : "Not entered"}
+              </span>
+            </div>
+          </div>
+
+          {/* Full monthly allocation schedule */}
+          <div className="overflow-x-auto rounded-lg border border-zinc-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                  <th className="py-2 pl-3 pr-3">Month</th>
+                  <th className="py-2 pr-3 text-right">Planned Income</th>
+                  <th className="py-2 pr-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocLoading && (
+                  <tr>
+                    <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
+                      <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                      Loading allocation schedule…
+                    </td>
+                  </tr>
+                )}
+                {!allocLoading &&
+                  allocations?.map((a) => (
+                    <tr key={`${a.year}-${a.month}`} className="border-b last:border-0">
+                      <td className="py-1.5 pl-3 pr-3 font-medium text-zinc-800">
+                        {monthLabel(a.month, a.year)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono">
+                        {a.unavailable ? (
+                          <span className="text-amber-600" title={a.unavailableReason}>
+                            Unverified
+                          </span>
+                        ) : a.amount != null ? (
+                          fmt2(a.amount)
+                        ) : (
+                          <span className="italic text-zinc-400">Not entered</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-3 text-xs text-zinc-500">
+                        {a.unavailable
+                          ? "Record without workbook provenance"
+                          : a.amount == null
+                            ? "Blank"
+                            : Number(a.amount) === 0
+                              ? "Entered as zero"
+                              : "Planned"}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+              {!allocLoading && allocations && allocations.length > 0 && (
+                <tfoot>
+                  <tr className="border-t bg-zinc-50 font-medium">
+                    <td className="py-2 pl-3 pr-3 text-zinc-700">
+                      Total planned income (Apr 2026 – Mar 2028)
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono">
+                      {fmt2(allocTotal) ?? "—"}
+                    </td>
+                    <td className="py-2 pr-3 text-xs font-normal text-zinc-500">
+                      Entered months only
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          <p className="text-xs text-zinc-400">
+            Project-wise view shows income allocations only. Expenses, net and
+            running balance are company-level workbook figures — not per project.
+          </p>
+        </>
+      )}
     </div>
   );
 }
