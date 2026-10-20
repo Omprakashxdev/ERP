@@ -767,8 +767,8 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                       <h4 className="text-sm font-medium">{level} dealer</h4>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Contractor name</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="tender-contractor-name">Contractor name</Label>
+                          <Input id="tender-contractor-name"
                             value={form[nameKey] as string}
                             onChange={(e) =>
                               updateField(nameKey, e.target.value)
@@ -776,8 +776,8 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">City</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="tender-city">City</Label>
+                          <Input id="tender-city"
                             value={form[cityKey] as string}
                             onChange={(e) =>
                               updateField(cityKey, e.target.value)
@@ -785,8 +785,8 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Amount (₹)</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="tender-amount">Amount (₹)</Label>
+                          <Input id="tender-amount"
                             type="number"
                             step="0.01"
                             value={form[amountKey] as string}
@@ -863,7 +863,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
-              {isEdit ? "Save changes" : "Create tender"}
+              {isEdit ? "Save Changes" : "Create Tender"}
             </Button>
           </div>
         </form>

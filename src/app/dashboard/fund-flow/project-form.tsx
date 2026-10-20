@@ -918,7 +918,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                 {submitting && (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
-                {isEdit ? "Save changes" : "Create project"}
+                {isEdit ? "Save Changes" : "Create Project"}
               </Button>
             </div>
           </form>

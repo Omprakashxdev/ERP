@@ -230,16 +230,16 @@ export function TaskTable({
                       <div className="flex gap-1">
                         {canEdit(task.status) && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 w-7 p-0"
+                            className="h-8 px-2.5"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditTask(task);
                             }}
                             title="Edit task"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
                           </Button>
                         )}
                         {canChangeStatus(task.status) && (
@@ -252,6 +252,7 @@ export function TaskTable({
                               setStatusTask(task);
                             }}
                             title="Change status"
+                            aria-label={`Change status for ${task.title}`}
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
                           </Button>

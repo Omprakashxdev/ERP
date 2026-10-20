@@ -384,16 +384,16 @@ export function InOutRegisterTable({
                         </Button>
                       )}
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-7 w-7 p-0"
+                        className="h-8 px-2.5"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedEntry(row);
                         }}
                         title="Edit entry"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
                       </Button>
                     </div>
                   </TableCell>

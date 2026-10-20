@@ -133,9 +133,9 @@ export function VehicleLogBookFilters({
 
       {activeTab === "vehicles" ? (
         <div className="flex min-w-40 flex-col gap-1.5">
-          <label className="text-xs font-medium text-zinc-600">Status</label>
+          <label className="text-xs font-medium text-zinc-600" htmlFor="vehicle-log-book-status">Status</label>
           <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-            <SelectTrigger className="w-full min-w-40" size="sm">
+            <SelectTrigger id="vehicle-log-book-status" className="w-full min-w-40" size="sm">
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -151,12 +151,12 @@ export function VehicleLogBookFilters({
       ) : (
         <>
           <div className="flex min-w-40 flex-col gap-1.5">
-            <label className="text-xs font-medium text-zinc-600">Vehicle</label>
+            <label className="text-xs font-medium text-zinc-600" htmlFor="vehicle-log-book-vehicle">Vehicle</label>
             <Select
               value={vehicleId}
               onValueChange={(v) => setVehicleId(v ?? "")}
             >
-              <SelectTrigger className="w-full min-w-40" size="sm">
+              <SelectTrigger id="vehicle-log-book-vehicle" className="w-full min-w-40" size="sm">
                 <SelectValue placeholder="All vehicles">
                   {(value: string) => value ? vehicles.find((v) => v.id === value)?.registrationNumber ?? "All vehicles" : "All vehicles"}
                 </SelectValue>
@@ -173,12 +173,12 @@ export function VehicleLogBookFilters({
           </div>
 
           <div className="flex min-w-40 flex-col gap-1.5">
-            <label className="text-xs font-medium text-zinc-600">Approval</label>
+            <label className="text-xs font-medium text-zinc-600" htmlFor="vehicle-log-book-approval">Approval</label>
             <Select
               value={approvalStatus}
               onValueChange={(v) => setApprovalStatus(v ?? "")}
             >
-              <SelectTrigger className="w-full min-w-40" size="sm">
+              <SelectTrigger id="vehicle-log-book-approval" className="w-full min-w-40" size="sm">
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -193,8 +193,8 @@ export function VehicleLogBookFilters({
           </div>
 
           <div className="flex min-w-36 flex-col gap-1.5">
-            <label className="text-xs font-medium text-zinc-600">From</label>
-            <Input
+            <label className="text-xs font-medium text-zinc-600" htmlFor="vehicle-log-book-from">From</label>
+            <Input id="vehicle-log-book-from"
               type="date"
               value={journeyDateFrom}
               onChange={(e) => setJourneyDateFrom(e.target.value)}
@@ -203,8 +203,8 @@ export function VehicleLogBookFilters({
           </div>
 
           <div className="flex min-w-36 flex-col gap-1.5">
-            <label className="text-xs font-medium text-zinc-600">To</label>
-            <Input
+            <label className="text-xs font-medium text-zinc-600" htmlFor="vehicle-log-book-to">To</label>
+            <Input id="vehicle-log-book-to"
               type="date"
               value={journeyDateTo}
               onChange={(e) => setJourneyDateTo(e.target.value)}

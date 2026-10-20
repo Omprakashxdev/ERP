@@ -148,13 +148,13 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Employee</Label>
+              <Label className="text-xs" htmlFor="tada-bills-employee">Employee</Label>
               <Select value={staffId} onValueChange={(v) => {
                 setStaffId(v ?? "");
                 const emp = staff.find(s => s.id === v);
                 if (emp?.regionId) setRegionId(emp.regionId);
               }}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="tada-bills-employee" className="w-full" size="sm">
                   <SelectValue placeholder="Select employee">
                     {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select employee"}
                   </SelectValue>
@@ -169,9 +169,9 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Region</Label>
+              <Label className="text-xs" htmlFor="tada-bills-region">Region</Label>
               <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")} disabled>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="tada-bills-region" className="w-full" size="sm">
                   <SelectValue placeholder="Select region">
                     {(value: string) => regions.find((r) => r.id === value)?.name ?? "Select region"}
                   </SelectValue>
@@ -186,10 +186,10 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Location (City)</Label>
+              <Label className="text-xs" htmlFor="tada-bills-location-city">Location (City)</Label>
               {cities && cities.length > 0 ? (
                 <Select value={location} onValueChange={(v) => setLocation(v ?? "")}>
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="tada-bills-location-city" className="w-full" size="sm">
                     <SelectValue placeholder="Select city" />
                   </SelectTrigger>
                   <SelectContent>
@@ -210,7 +210,7 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               )}
             </div>
             <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Tour Purpose</Label>
+              <Label className="text-xs" htmlFor="tada-bills-tour-purpose">Tour Purpose</Label>
               <Textarea
                 value={tourPurpose}
                 onChange={(e) => setTourPurpose(e.target.value)}
@@ -220,7 +220,7 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
             </div>
             <div className="space-y-1">
               <Label className="text-xs">From Date</Label>
-              <Input
+              <Input id="tada-bills-tour-purpose"
                 type="date"
                 min="2026-01-01"
                 max={toInputDate(new Date())}
@@ -230,8 +230,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">To Date</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-to-date">To Date</Label>
+              <Input id="tada-bills-to-date"
                 type="date"
                 min={fromDate || "2026-01-01"}
                 max={toInputDate(new Date())}
@@ -244,8 +244,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
 
           <div className="grid grid-cols-3 gap-3 border-t pt-3">
             <div className="space-y-1">
-              <Label className="text-xs">Travel ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-travel">Travel ₹</Label>
+              <Input id="tada-bills-travel"
                 type="number"
                 step="0.01"
                 value={travelExpense}
@@ -253,8 +253,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Accommodation ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-accommodation">Accommodation ₹</Label>
+              <Input id="tada-bills-accommodation"
                 type="number"
                 step="0.01"
                 value={accommodationExp}
@@ -262,8 +262,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Food ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-food">Food ₹</Label>
+              <Input id="tada-bills-food"
                 type="number"
                 step="0.01"
                 value={foodExpense}
@@ -271,8 +271,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Local Conveyance ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-local-conveyance">Local Conveyance ₹</Label>
+              <Input id="tada-bills-local-conveyance"
                 type="number"
                 step="0.01"
                 value={localConveyance}
@@ -280,8 +280,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Other ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-other">Other ₹</Label>
+              <Input id="tada-bills-other"
                 type="number"
                 step="0.01"
                 value={otherExpense}
@@ -289,8 +289,8 @@ export function TadaClaimFormDialog({ staff, regions, cities }: { staff: StaffOp
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Advance ₹</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-advance">Advance ₹</Label>
+              <Input id="tada-bills-advance"
                 type="number"
                 step="0.01"
                 value={advanceAmount}
@@ -466,7 +466,7 @@ export function TadaClaimEditForm({
           <div className="max-h-[60vh] overflow-y-auto space-y-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Employee</Label>
+                <Label className="text-xs" htmlFor="tada-bills-employee-2">Employee</Label>
                 <Select
                   value={form.staffId}
                   onValueChange={(v) => {
@@ -475,7 +475,7 @@ export function TadaClaimEditForm({
                     if (emp?.regionId) updateField("regionId", emp.regionId);
                   }}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="tada-bills-employee-2" className="w-full" size="sm">
                     <SelectValue placeholder="Select employee">
                       {(value: string) => staff.find((s) => s.id === value)?.name ?? "Select employee"}
                     </SelectValue>
@@ -490,13 +490,13 @@ export function TadaClaimEditForm({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Region</Label>
+                <Label className="text-xs" htmlFor="tada-bills-region-2">Region</Label>
                 <Select
                   value={form.regionId}
                   onValueChange={(v) => updateField("regionId", v ?? "")}
                   disabled
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="tada-bills-region-2" className="w-full" size="sm">
                     <SelectValue placeholder="Select region">
                       {(value: string) => regions.find((r) => r.id === value)?.name ?? "Select region"}
                     </SelectValue>
@@ -511,13 +511,13 @@ export function TadaClaimEditForm({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Location (City)</Label>
+                <Label className="text-xs" htmlFor="tada-bills-location-city-2">Location (City)</Label>
                 {cities && cities.length > 0 ? (
                   <Select
                     value={form.location}
                     onValueChange={(v) => updateField("location", v ?? "")}
                   >
-                    <SelectTrigger className="w-full" size="sm">
+                    <SelectTrigger id="tada-bills-location-city-2" className="w-full" size="sm">
                       <SelectValue placeholder="Select city" />
                     </SelectTrigger>
                     <SelectContent>
@@ -540,7 +540,7 @@ export function TadaClaimEditForm({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Tour Purpose</Label>
+              <Label className="text-xs" htmlFor="tada-bills-tour-purpose-2">Tour Purpose</Label>
               <Textarea
                 value={form.tourPurpose}
                 onChange={(e) => updateField("tourPurpose", e.target.value)}
@@ -552,7 +552,7 @@ export function TadaClaimEditForm({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">From Date</Label>
-                <Input
+                <Input id="tada-bills-tour-purpose-2"
                   type="date"
                   min="2026-01-01"
                   max={toInputDate(new Date())}
@@ -562,8 +562,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">To Date</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-to-date-2">To Date</Label>
+                <Input id="tada-bills-to-date-2"
                   type="date"
                   min={form.fromDate || "2026-01-01"}
                   max={toInputDate(new Date())}
@@ -576,8 +576,8 @@ export function TadaClaimEditForm({
 
             <div className="grid grid-cols-3 gap-3 border-t pt-3">
               <div className="space-y-1">
-                <Label className="text-xs">Travel ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-travel-2">Travel ₹</Label>
+                <Input id="tada-bills-travel-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -586,8 +586,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Accommodation ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-accommodation-2">Accommodation ₹</Label>
+                <Input id="tada-bills-accommodation-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -596,8 +596,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Food ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-food-2">Food ₹</Label>
+                <Input id="tada-bills-food-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -606,8 +606,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Local Conveyance ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-local-conveyance-2">Local Conveyance ₹</Label>
+                <Input id="tada-bills-local-conveyance-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -616,8 +616,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Other ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-other-2">Other ₹</Label>
+                <Input id="tada-bills-other-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -626,8 +626,8 @@ export function TadaClaimEditForm({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Advance ₹</Label>
-                <Input
+                <Label className="text-xs" htmlFor="tada-bills-advance-2">Advance ₹</Label>
+                <Input id="tada-bills-advance-2"
                   type="number"
                   step="0.01"
                   min="0"
@@ -782,8 +782,8 @@ export function TadaApprovalActions({
         <div className="space-y-3 py-2">
           {status === "FINANCE_APPROVED" && (
             <div className="space-y-1">
-              <Label className="text-xs">Payment Mode</Label>
-              <Input
+              <Label className="text-xs" htmlFor="tada-bills-payment-mode">Payment Mode</Label>
+              <Input id="tada-bills-payment-mode"
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value)}
                 placeholder="e.g. Bank Transfer, Salary"

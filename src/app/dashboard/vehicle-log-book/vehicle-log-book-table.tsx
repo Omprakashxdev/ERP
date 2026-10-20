@@ -859,16 +859,16 @@ export function VehicleLogBookTable({
                   >
                     <div className="flex items-center justify-end gap-1">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
+                        className="h-8 px-2.5"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedVehicle(row);
                         }}
-                        title="Edit vehicle"
+                        title="View / Edit vehicle"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        View / Edit
                       </Button>
                     </div>
                   </TableCell>
@@ -948,16 +948,16 @@ export function VehicleLogBookTable({
                   >
                     <div className="flex items-center justify-end gap-1">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-600 hover:text-zinc-900"
+                        className="h-8 px-2.5"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedJourney(row);
                         }}
-                        title="Edit journey log"
+                        title="View / Edit journey log"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        View / Edit
                       </Button>
                     </div>
                   </TableCell>

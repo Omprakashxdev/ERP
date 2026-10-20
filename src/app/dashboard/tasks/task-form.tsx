@@ -125,8 +125,8 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs">Title</Label>
-            <Input
+            <Label className="text-xs" htmlFor="task-title">Title</Label>
+            <Input id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
@@ -134,7 +134,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Description</Label>
+            <Label className="text-xs" htmlFor="task-description">Description</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -146,7 +146,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
             <div className="space-y-1">
               <Label className="text-xs">Assign To</Label>
               <Select value={assignedToId} onValueChange={(v) => setAssignedToId(v ?? "")}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="task-description" className="w-full" size="sm">
                   <SelectValue placeholder="Select staff">
                     {(value: string) =>
                       staff.find((s) => s.id === value)?.name ?? "Select staff"
@@ -163,9 +163,9 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Priority</Label>
+              <Label className="text-xs" htmlFor="task-priority">Priority</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v ?? "MEDIUM")}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="task-priority" className="w-full" size="sm">
                   <SelectValue>
                     {(value: string) => priorityLabels[value] ?? value}
                   </SelectValue>
@@ -181,10 +181,10 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Also Assign To (optional)</Label>
+            <Label className="text-xs" htmlFor="task-also-assign-to-optional">Also Assign To (optional)</Label>
             <div className="flex items-center gap-2">
               <Select value={newCoAssigneeId} onValueChange={(v) => setNewCoAssigneeId(v ?? "")}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="task-also-assign-to-optional" className="w-full" size="sm">
                   <SelectValue placeholder="Add a team member">
                     {(value: string) =>
                       staff.find((s) => s.id === value)?.name ?? "Add a team member"
@@ -239,9 +239,9 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
 
           {projects && projects.length > 0 && (
             <div className="space-y-1">
-              <Label className="text-xs">Project (optional)</Label>
+              <Label className="text-xs" htmlFor="task-project-optional">Project (optional)</Label>
               <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="task-project-optional" className="w-full" size="sm">
                   <SelectValue placeholder="No project">
                     {(value: string) =>
                       value
@@ -264,17 +264,17 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Department (optional)</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-department-optional">Department (optional)</Label>
+              <Input id="task-department-optional"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 placeholder="e.g. Civil, Electrical"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Reviewer (optional)</Label>
+              <Label className="text-xs" htmlFor="task-reviewer-optional">Reviewer (optional)</Label>
               <Select value={reviewerId} onValueChange={(v) => setReviewerId(v ?? "")}>
-                <SelectTrigger className="w-full" size="sm">
+                <SelectTrigger id="task-reviewer-optional" className="w-full" size="sm">
                   <SelectValue placeholder="No reviewer">
                     {(value: string) =>
                       value
@@ -297,16 +297,16 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Start Date</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-start-date">Start Date</Label>
+              <Input id="task-start-date"
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Due Date</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-due-date">Due Date</Label>
+              <Input id="task-due-date"
                 type="date"
                 value={dueDate}
                 min={toInputDate(new Date())}
@@ -433,8 +433,8 @@ export function TaskEditForm({
         <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
           <div className="max-h-[60vh] overflow-y-auto space-y-3 py-2">
             <div className="space-y-1">
-              <Label className="text-xs">Title</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-title-2">Title</Label>
+              <Input id="task-title-2"
                 value={form.title}
                 onChange={(e) => updateField("title", e.target.value)}
                 required
@@ -442,7 +442,7 @@ export function TaskEditForm({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Description</Label>
+              <Label className="text-xs" htmlFor="task-description-2">Description</Label>
               <Textarea
                 value={form.description}
                 onChange={(e) => updateField("description", e.target.value)}
@@ -457,7 +457,7 @@ export function TaskEditForm({
                   value={form.assignedToId}
                   onValueChange={(v) => updateField("assignedToId", v ?? "")}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="task-description-2" className="w-full" size="sm">
                     <SelectValue placeholder="Select staff">
                       {(value: string) =>
                         staff.find((s) => s.id === value)?.name ?? "Select staff"
@@ -474,12 +474,12 @@ export function TaskEditForm({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Priority</Label>
+                <Label className="text-xs" htmlFor="task-priority-2">Priority</Label>
                 <Select
                   value={form.priority}
                   onValueChange={(v) => updateField("priority", v ?? "MEDIUM")}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="task-priority-2" className="w-full" size="sm">
                     <SelectValue>
                       {(value: string) => priorityLabels[value] ?? value}
                     </SelectValue>
@@ -495,13 +495,13 @@ export function TaskEditForm({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Also Assigned To</Label>
+              <Label className="text-xs" htmlFor="task-also-assigned-to">Also Assigned To</Label>
               <div className="flex items-center gap-2">
                 <Select
                   value={form.newCoAssigneeId}
                   onValueChange={(v) => updateField("newCoAssigneeId", v ?? "")}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="task-also-assigned-to" className="w-full" size="sm">
                     <SelectValue placeholder="Add a team member">
                       {(value: string) =>
                         staff.find((s) => s.id === value)?.name ?? "Add a team member"
@@ -569,12 +569,12 @@ export function TaskEditForm({
 
             {projects && projects.length > 0 && (
               <div className="space-y-1">
-                <Label className="text-xs">Project</Label>
+                <Label className="text-xs" htmlFor="task-project">Project</Label>
                 <Select
                   value={form.projectId}
                   onValueChange={(v) => updateField("projectId", v ?? "")}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="task-project" className="w-full" size="sm">
                     <SelectValue placeholder="No project">
                       {(value: string) =>
                         value
@@ -597,20 +597,20 @@ export function TaskEditForm({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Department</Label>
-                <Input
+                <Label className="text-xs" htmlFor="task-department">Department</Label>
+                <Input id="task-department"
                   value={form.department}
                   onChange={(e) => updateField("department", e.target.value)}
                   placeholder="e.g. Civil, Electrical"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Reviewer</Label>
+                <Label className="text-xs" htmlFor="task-reviewer">Reviewer</Label>
                 <Select
                   value={form.reviewerId}
                   onValueChange={(v) => updateField("reviewerId", v ?? "")}
                 >
-                  <SelectTrigger className="w-full" size="sm">
+                  <SelectTrigger id="task-reviewer" className="w-full" size="sm">
                     <SelectValue placeholder="No reviewer">
                       {(value: string) =>
                         value
@@ -644,16 +644,16 @@ export function TaskEditForm({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Start Date</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-start-date-2">Start Date</Label>
+              <Input id="task-start-date-2"
                 type="date"
                 value={form.startDate}
                 onChange={(e) => updateField("startDate", e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Due Date</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-due-date-2">Due Date</Label>
+              <Input id="task-due-date-2"
                 type="date"
                 value={form.dueDate}
                 onChange={(e) => updateField("dueDate", e.target.value)}
@@ -802,8 +802,8 @@ export function TaskStatusActions({
                 onChange={(e) => setProgress(Number(e.target.value))}
                 className="w-full"
               />
-              <Label className="text-xs">Note (optional)</Label>
-              <Input
+              <Label className="text-xs" htmlFor="task-note-optional">Note (optional)</Label>
+              <Input id="task-note-optional"
                 value={progressNote}
                 onChange={(e) => setProgressNote(e.target.value)}
                 placeholder="What was done?"

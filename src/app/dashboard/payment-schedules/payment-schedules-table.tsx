@@ -203,16 +203,16 @@ export function PaymentSchedulesTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0"
+                      className="h-8 px-2.5"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedSchedule(row);
                       }}
-                      title="Edit schedule"
+                      title="View / Edit schedule"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      View / Edit
                     </Button>
                   </TableCell>
                 </TableRow>

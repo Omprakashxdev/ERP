@@ -760,8 +760,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                       </h4>
                       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Amount (₹)</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-amount">Amount (₹)</Label>
+                          <Input id="wip-amount"
                             type="number"
                             step="0.01"
                             value={form[amountKey]}
@@ -771,8 +771,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Date</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-date">Date</Label>
+                          <Input id="wip-date"
                             type="date"
                             value={form[dateKey]}
                             onChange={(e) =>
@@ -781,8 +781,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">SAEC fee (₹)</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-saec-fee">SAEC fee (₹)</Label>
+                          <Input id="wip-saec-fee"
                             type="number"
                             step="0.01"
                             value={form[feeKey]}
@@ -792,8 +792,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Project exp (₹)</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-project-exp">Project exp (₹)</Label>
+                          <Input id="wip-project-exp"
                             type="number"
                             step="0.01"
                             value={form[expenseKey]}
@@ -805,8 +805,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                       </div>
                       <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Work Order No.</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-work-order-no">Work Order No.</Label>
+                          <Input id="wip-work-order-no"
                             value={form[`raBill${n}WoNo` as keyof typeof form] as string ?? ""}
                             onChange={(e) =>
                               updateField(`raBill${n}WoNo` as keyof typeof form, e.target.value)
@@ -815,8 +815,8 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Details</Label>
-                          <Input
+                          <Label className="text-xs" htmlFor="wip-details">Details</Label>
+                          <Input id="wip-details"
                             value={form[`raBill${n}Details` as keyof typeof form] as string ?? ""}
                             onChange={(e) =>
                               updateField(`raBill${n}Details` as keyof typeof form, e.target.value)
@@ -952,7 +952,7 @@ export function WipForm({ wip, mode, projects, staff, onClose }: WipFormProps) {
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
-              {isEdit ? "Save changes" : "Create WIP record"}
+              {isEdit ? "Save Changes" : "Create WIP Record"}
             </Button>
           </div>
         </form>

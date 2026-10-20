@@ -73,12 +73,12 @@ export function FundFlowFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Region</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="fund-flow-region">Region</label>
         <Select
           value={regionId}
           onValueChange={(v) => setRegionId(v ?? "")}
         >
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="fund-flow-region" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All regions">
               {(value: string) => value ? regions.find((r) => r.id === value)?.name ?? "All regions" : "All regions"}
             </SelectValue>
@@ -95,12 +95,12 @@ export function FundFlowFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Client</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="fund-flow-client">Client</label>
         <Select
           value={clientId}
           onValueChange={(v) => setClientId(v ?? "")}
         >
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="fund-flow-client" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All clients">
               {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
             </SelectValue>
@@ -117,12 +117,12 @@ export function FundFlowFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="fund-flow-status">Status</label>
         <Select
           value={status}
           onValueChange={(v) => setStatus(v ?? "")}
         >
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="fund-flow-status" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>

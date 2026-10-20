@@ -97,9 +97,9 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-status">Status</label>
         <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="tenders-status" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -114,12 +114,12 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Work type</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-work-type">Work type</label>
         <Select
           value={workType}
           onValueChange={(v) => setWorkType(v === "none" || !v ? "" : v)}
         >
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="tenders-work-type" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All work types" />
           </SelectTrigger>
           <SelectContent>
@@ -134,8 +134,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Service</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-service">Service</label>
+        <Input id="tenders-service"
           value={serviceType}
           onChange={(e) => setServiceType(e.target.value)}
           className="h-8"
@@ -144,8 +144,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">State</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-state">State</label>
+        <Input id="tenders-state"
           value={state}
           onChange={(e) => setState(e.target.value)}
           className="h-8"
@@ -154,8 +154,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">City</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-city">City</label>
+        <Input id="tenders-city"
           value={city}
           onChange={(e) => setCity(e.target.value)}
           className="h-8"
@@ -164,8 +164,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Platform</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-platform">Platform</label>
+        <Input id="tenders-platform"
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
           className="h-8"
@@ -174,8 +174,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">From</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-from">From</label>
+        <Input id="tenders-from"
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
@@ -184,8 +184,8 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">To</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="tenders-to">To</label>
+        <Input id="tenders-to"
           type="date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}

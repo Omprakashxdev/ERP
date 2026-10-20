@@ -106,9 +106,9 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Direction</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-direction">Direction</label>
         <Select value={direction} onValueChange={(v) => setDirection(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="in-out-register-direction" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -120,9 +120,9 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-48 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">From / To</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-from-to">From / To</label>
         <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-48" size="sm">
+          <SelectTrigger id="in-out-register-from-to" className="w-full min-w-48" size="sm">
             <SelectValue placeholder="All clients">
               {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
             </SelectValue>
@@ -160,9 +160,9 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Deadline Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-deadline-status">Deadline Status</label>
         <Select value={hasDeadline} onValueChange={(v) => setHasDeadline(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="in-out-register-deadline-status" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -174,8 +174,8 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Rec. from</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-rec-from">Rec. from</label>
+        <Input id="in-out-register-rec-from"
           type="date"
           value={receivedDateFrom}
           onChange={(e) => setReceivedDateFrom(e.target.value)}
@@ -184,8 +184,8 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Rec. to</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-rec-to">Rec. to</label>
+        <Input id="in-out-register-rec-to"
           type="date"
           value={receivedDateTo}
           onChange={(e) => setReceivedDateTo(e.target.value)}
@@ -194,9 +194,9 @@ export function InOutRegisterFilters({
       </div>
 
       <div className="flex min-w-32 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Age due</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-age-due">Age due</label>
         <Select value={ageDue} onValueChange={(v) => setAgeDue(v ?? "")}>
-          <SelectTrigger className="w-full min-w-32" size="sm">
+          <SelectTrigger id="in-out-register-age-due" className="w-full min-w-32" size="sm">
             <SelectValue placeholder="Any age" />
           </SelectTrigger>
           <SelectContent>

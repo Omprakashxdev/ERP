@@ -81,9 +81,9 @@ export function DueBillsFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Region</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="due-bills-region">Region</label>
         <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="due-bills-region" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All regions">
               {(value: string) => value ? regions.find((r) => r.id === value)?.name ?? "All regions" : "All regions"}
             </SelectValue>
@@ -100,9 +100,9 @@ export function DueBillsFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Client</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="due-bills-client">Client</label>
         <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="due-bills-client" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All clients">
               {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
             </SelectValue>
@@ -119,9 +119,9 @@ export function DueBillsFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Project</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="due-bills-project">Project</label>
         <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="due-bills-project" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All projects">
               {(value: string) => value ? projects.find((p) => p.id === value)?.name ?? "All projects" : "All projects"}
             </SelectValue>
@@ -138,9 +138,9 @@ export function DueBillsFilters({
       </div>
 
       <div className="flex min-w-32 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="due-bills-status">Status</label>
         <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-          <SelectTrigger className="w-full min-w-32" size="sm">
+          <SelectTrigger id="due-bills-status" className="w-full min-w-32" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -155,8 +155,8 @@ export function DueBillsFilters({
       </div>
 
       <div className="flex min-w-32 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Scheme</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="due-bills-scheme">Scheme</label>
+        <Input id="due-bills-scheme"
           placeholder="Filter scheme…"
           value={scheme}
           onChange={(e) => setScheme(e.target.value)}

@@ -100,9 +100,9 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Category</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-category">Category</label>
         <Select value={category} onValueChange={(v) => setCategory(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="payment-schedules-category" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All categories" />
           </SelectTrigger>
           <SelectContent>
@@ -117,9 +117,9 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-status">Status</label>
         <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="payment-schedules-status" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -134,8 +134,8 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">From</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-from">From</label>
+        <Input id="payment-schedules-from"
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
@@ -144,8 +144,8 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">To</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-to">To</label>
+        <Input id="payment-schedules-to"
           type="date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
@@ -154,8 +154,8 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Due from</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-due-from">Due from</label>
+        <Input id="payment-schedules-due-from"
           type="date"
           value={dueDateFrom}
           onChange={(e) => setDueDateFrom(e.target.value)}
@@ -164,8 +164,8 @@ export function PaymentSchedulesFilters({
       </div>
 
       <div className="flex min-w-36 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Due to</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="payment-schedules-due-to">Due to</label>
+        <Input id="payment-schedules-due-to"
           type="date"
           value={dueDateTo}
           onChange={(e) => setDueDateTo(e.target.value)}

@@ -421,7 +421,7 @@ export function PaymentScheduleForm({
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
-              {isEdit ? "Save changes" : "Create schedule"}
+              {isEdit ? "Save Changes" : "Create Payment Schedule"}
             </Button>
           </div>
         </form>

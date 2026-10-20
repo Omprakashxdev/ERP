@@ -421,7 +421,7 @@ export function DueBillForm({ bill, mode, projects, onClose }: DueBillFormProps)
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
-              {isEdit ? "Save changes" : "Create bill"}
+              {isEdit ? "Save Changes" : "Create Due Bill"}
             </Button>
           </div>
         </form>

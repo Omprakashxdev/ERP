@@ -78,9 +78,9 @@ export function WipFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Region</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="wip-region">Region</label>
         <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="wip-region" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All regions">
               {(value: string) => value ? regions.find((r) => r.id === value)?.name ?? "All regions" : "All regions"}
             </SelectValue>
@@ -97,9 +97,9 @@ export function WipFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Client</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="wip-client">Client</label>
         <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="wip-client" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All clients">
               {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
             </SelectValue>
@@ -116,9 +116,9 @@ export function WipFilters({
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Project</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="wip-project">Project</label>
         <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="wip-project" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All projects">
               {(value: string) => value ? projects.find((p) => p.id === value)?.name ?? "All projects" : "All projects"}
             </SelectValue>
@@ -135,9 +135,9 @@ export function WipFilters({
       </div>
 
       <div className="flex min-w-32 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="wip-status">Status</label>
         <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-          <SelectTrigger className="w-full min-w-32" size="sm">
+          <SelectTrigger id="wip-status" className="w-full min-w-32" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>

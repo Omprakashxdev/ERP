@@ -72,8 +72,8 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Category</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="assets-category">Category</label>
+        <Input id="assets-category"
           placeholder="Filter by category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -82,9 +82,9 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
       </div>
 
       <div className="flex min-w-40 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Status</label>
+        <label className="text-xs font-medium text-zinc-600" htmlFor="assets-status">Status</label>
         <Select value={status} onValueChange={(v) => setStatus(v ?? "")}>
-          <SelectTrigger className="w-full min-w-40" size="sm">
+          <SelectTrigger id="assets-status" className="w-full min-w-40" size="sm">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -99,8 +99,8 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
       </div>
 
       <div className="flex min-w-32 flex-col gap-1.5">
-        <label className="text-xs font-medium text-zinc-600">Year</label>
-        <Input
+        <label className="text-xs font-medium text-zinc-600" htmlFor="assets-year">Year</label>
+        <Input id="assets-year"
           type="number"
           placeholder="e.g. 2023"
           value={yearOfPurchase}

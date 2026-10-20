@@ -562,13 +562,13 @@ export function InOutRegisterForm({
               )}
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>CC marking</Label>
+                <Label htmlFor="in-out-register-cc-marking">CC marking</Label>
                 <div className="flex gap-2">
                   <Select
                     value={newCcStaffId}
                     onValueChange={(v) => setNewCcStaffId(v ?? "")}
                   >
-                    <SelectTrigger className="flex-1">
+                    <SelectTrigger id="in-out-register-cc-marking" className="flex-1">
                       <SelectValue placeholder="Select staff to CC">
                         {(value: string) =>
                           staff.find((s) => s.id === value)?.name ?? "Select staff to CC"
@@ -685,7 +685,7 @@ export function InOutRegisterForm({
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
-              {isEdit ? "Save changes" : "Create entry"}
+              {isEdit ? "Save Changes" : "Create Entry"}
             </Button>
           </div>
         </form>

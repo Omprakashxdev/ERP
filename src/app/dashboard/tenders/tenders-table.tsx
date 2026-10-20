@@ -241,16 +241,16 @@ export function TendersTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0"
+                      className="h-8 px-2.5"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedTender(row);
                       }}
-                      title="Edit tender"
+                      title="View / Edit tender"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      View / Edit
                     </Button>
                   </TableCell>
                 </TableRow>
