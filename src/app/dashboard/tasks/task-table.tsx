@@ -63,6 +63,19 @@ const priorityColors: Record<string, string> = {
   CRITICAL: "bg-red-50 text-red-700",
 };
 
+const SOURCE_MODULE_LABELS: Record<string, string> = {
+  FUND_FLOW: "Fund Flow",
+  DUE_BILL: "Due Bill",
+  WIP: "Work in Progress",
+  TENDER: "Tender",
+  IN_OUT_REGISTER: "In-Out Register",
+  PAYMENT_SCHEDULE: "Payment Schedule",
+  CONTRACTOR: "Contractor",
+  VEHICLE: "Vehicle Log Book",
+  ASSET: "Property",
+  TADA: "TADA Bill",
+};
+
 export function TaskTable({
   tasks,
   total,
@@ -214,8 +227,12 @@ export function TaskTable({
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {task.sourceModule ? (
-                        <span className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-indigo-600">
-                          {{ FUND_FLOW: "Fund Flow", DUE_BILL: "Due Bill", WIP: "Work in Progress", TENDER: "Tender", IN_OUT_REGISTER: "In-Out Register", PAYMENT_SCHEDULE: "Payment Schedule", CONTRACTOR: "Contractor", VEHICLE: "Vehicle Log Book", ASSET: "Property", TADA: "TADA Bill" }[task.sourceModule] ?? task.sourceModule.toLowerCase().replace(/_/g, " ")}
+                        <span
+                          className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-indigo-600"
+                          title={SOURCE_MODULE_LABELS[task.sourceModule]}
+                        >
+                          {SOURCE_MODULE_LABELS[task.sourceModule] ??
+                            task.sourceModule.toLowerCase().replace(/_/g, " ")}
                         </span>
                       ) : (
                         <span className="text-zinc-500">Manual</span>
