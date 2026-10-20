@@ -111,31 +111,39 @@ export function InOutRegisterTable({
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-zinc-600">Register Records</h2>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
-            onClick={() => {
-              setReplyParentInward(null);
-              setCreateDirection("OUTWARD");
-              setCreateEntryOpen(true);
-            }}
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Outward
-          </Button>
-          <Button
-            size="sm"
-            className="bg-zinc-900 text-white hover:bg-zinc-800"
-            onClick={() => {
-              setReplyParentInward(null);
-              setCreateDirection("INWARD");
-              setCreateEntryOpen(true);
-            }}
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Inward
-          </Button>
+          {filter.direction !== "INWARD" && (
+            <Button
+              size="sm"
+              variant={filter.direction === "OUTWARD" ? "default" : "outline"}
+              className={
+                filter.direction === "OUTWARD"
+                  ? "bg-blue-700 text-white hover:bg-blue-800"
+                  : "border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+              }
+              onClick={() => {
+                setReplyParentInward(null);
+                setCreateDirection("OUTWARD");
+                setCreateEntryOpen(true);
+              }}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Outward
+            </Button>
+          )}
+          {filter.direction !== "OUTWARD" && (
+            <Button
+              size="sm"
+              className="bg-zinc-900 text-white hover:bg-zinc-800"
+              onClick={() => {
+                setReplyParentInward(null);
+                setCreateDirection("INWARD");
+                setCreateEntryOpen(true);
+              }}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Inward
+            </Button>
+          )}
         </div>
       </div>
 
