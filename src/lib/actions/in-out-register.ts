@@ -88,9 +88,18 @@ export async function createInOutRegister(
     const { ccStaffIds, documents, ...data } = parsed;
     await checkRateLimit(user.id);
 
+    let serialNo = data.serialNo;
+    if (!serialNo || String(serialNo).trim() === "") {
+      const nextRes = await getNextRegisterRefNo(data.direction || "INWARD", data.documentDate || data.receivedDate);
+      if (nextRes.success && nextRes.data) {
+        serialNo = nextRes.data.refNo;
+      }
+    }
+
     const entry = await prisma.inOutRegister.create({
       data: {
         ...data,
+        serialNo,
         documents: buildDocumentCreateInput(documents),
         ccStaff: buildCcStaffCreateInput(ccStaffIds),
       },
@@ -102,7 +111,7 @@ export async function createInOutRegister(
 
     await createInOutRegisterLinkedTasks({
       inOutRegisterId: entry.id,
-      documentRefNo: entry.documentRefNo,
+      documentRefNo: entry.documentRefNo || entry.serialNo || "",
       details: entry.details,
       receivedDate: entry.receivedDate,
       replyDueDate: entry.replyDueDate,
@@ -174,9 +183,12 @@ export async function updateInOutRegister(
       });
     }
 
+    // Ensure serialNo is immutable and cannot be changed on edit
+    const { serialNo: _ignoredSerialNo, ...updateData } = data;
+
     const entry = await prisma.inOutRegister.update({
       where: { id },
-      data,
+      data: updateData,
     });
 
     await audit(user.id, "update", "InOutRegister", entry.id, {
@@ -187,7 +199,7 @@ export async function updateInOutRegister(
     // progress are never touched.
     await createInOutRegisterLinkedTasks({
       inOutRegisterId: entry.id,
-      documentRefNo: entry.documentRefNo,
+      documentRefNo: entry.documentRefNo || entry.serialNo || "",
       details: entry.details,
       receivedDate: entry.receivedDate,
       replyDueDate: entry.replyDueDate,
@@ -253,10 +265,10 @@ export async function getInOutRegisters(
             include: { staff: true },
           },
           parentInward: {
-            select: { id: true, documentRefNo: true, details: true, documentDate: true },
+            select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true },
           },
           replies: {
-            select: { id: true, documentRefNo: true, receivedDate: true, details: true },
+            select: { id: true, serialNo: true, documentRefNo: true, receivedDate: true, details: true },
           },
         },
         orderBy: { receivedDate: "desc" },
@@ -290,10 +302,10 @@ export async function getInOutRegisterById(
           include: { staff: true },
         },
         parentInward: {
-          select: { id: true, documentRefNo: true, details: true, documentDate: true },
+          select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true },
         },
         replies: {
-          select: { id: true, documentRefNo: true, receivedDate: true, details: true },
+          select: { id: true, serialNo: true, documentRefNo: true, receivedDate: true, details: true },
         },
       },
     });
@@ -319,21 +331,25 @@ export async function getNextRegisterRefNo(
     const records = await prisma.inOutRegister.findMany({
       where: {
         direction,
-        documentRefNo: {
-          startsWith: prefix,
-          mode: "insensitive",
-        },
+        OR: [
+          { serialNo: { startsWith: prefix, mode: "insensitive" } },
+          { documentRefNo: { startsWith: prefix, mode: "insensitive" } },
+        ],
       },
-      select: { documentRefNo: true },
+      select: { serialNo: true, documentRefNo: true },
     });
 
     let maxSeq = 0;
     for (const rec of records) {
-      const parts = rec.documentRefNo.split("/");
-      const lastPart = parts[parts.length - 1];
-      const num = parseInt(lastPart, 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
+      for (const val of [rec.serialNo, rec.documentRefNo]) {
+        if (val && val.toUpperCase().startsWith(prefix.toUpperCase())) {
+          const parts = val.split("/");
+          const lastPart = parts[parts.length - 1];
+          const num = parseInt(lastPart, 10);
+          if (!isNaN(num) && num > maxSeq) {
+            maxSeq = num;
+          }
+        }
       }
     }
 

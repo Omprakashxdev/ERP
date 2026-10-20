@@ -74,7 +74,8 @@ export function InOutRegisterTable({
   const [createDirection, setCreateDirection] = useState<"INWARD" | "OUTWARD">("INWARD");
   const [replyParentInward, setReplyParentInward] = useState<{
     id: string;
-    documentRefNo: string;
+    serialNo?: string | null;
+    documentRefNo?: string | null;
     clientId: string;
     department?: string | null;
     details?: string | null;
@@ -216,6 +217,7 @@ export function InOutRegisterTable({
           <Table className="text-xs">
             <TableHeader className="sticky top-0 z-10 bg-white">
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-14 text-center whitespace-nowrap">Sr. No.</TableHead>
                 <TableHead className="whitespace-nowrap">Doc Date</TableHead>
                 <TableHead className="whitespace-nowrap">Rec. / Sent Date</TableHead>
                 <TableHead className="whitespace-nowrap">Doc Ref. No</TableHead>
@@ -231,21 +233,24 @@ export function InOutRegisterTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {typedRows.map((row) => (
+              {typedRows.map((row, index) => (
                 <TableRow
                   key={row.id}
                   onClick={() => setSelectedEntry(row)}
                   className="cursor-pointer hover:bg-zinc-50/70 transition-colors"
                 >
+                  <TableCell className="text-center font-mono font-medium text-zinc-700 whitespace-nowrap">
+                    {row.serialNo ?? (page - 1) * pageSize + index + 1}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.documentDate)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {formatDate(row.receivedDate)}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap font-semibold text-zinc-900">
+                  <TableCell className="whitespace-nowrap font-medium text-zinc-900">
                     <div className="flex flex-col gap-0.5">
-                      <span>{row.documentRefNo}</span>
+                      <span>{row.documentRefNo || "—"}</span>
                       {row.direction === "INWARD" && row.replies && row.replies.length > 0 && (
                         <div
                           className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
@@ -264,7 +269,7 @@ export function InOutRegisterTable({
                           }}
                         >
                           <Link2 className="h-3 w-3 shrink-0" />
-                          <span>Replied: {row.replies[0].documentRefNo}</span>
+                          <span>Replied: {row.replies[0].serialNo || row.replies[0].documentRefNo}</span>
                         </div>
                       )}
                       {row.direction === "OUTWARD" && row.parentInward && (
@@ -284,7 +289,7 @@ export function InOutRegisterTable({
                           }}
                         >
                           <ArrowUpRight className="h-3 w-3 shrink-0" />
-                          <span>Re: {row.parentInward.documentRefNo}</span>
+                          <span>Re: {row.parentInward.serialNo || row.parentInward.documentRefNo}</span>
                         </div>
                       )}
                     </div>
@@ -369,6 +374,7 @@ export function InOutRegisterTable({
                             e.stopPropagation();
                             setReplyParentInward({
                               id: row.id,
+                              serialNo: row.serialNo,
                               documentRefNo: row.documentRefNo,
                               clientId: row.clientId,
                               department: row.department,

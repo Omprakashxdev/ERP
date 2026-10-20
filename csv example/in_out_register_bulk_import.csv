@@ -1,7 +1,7 @@
 direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo
-INWARD,2026-10-01,2026-10-03,INW/2026-27/001,Technical sanction and approved architectural drawings for Bhavnagar residential police quarters,GSPHC,Engineering Division,Jitendra Patel,ACTION_REQUIRED,Ramesh Patel,2026-10-25,
-INWARD,2026-10-05,2026-10-06,INW/2026-27/002,Request for geotechnical soil investigation report and vetting for Ring Road flyover,Surat Municipal Corporation,Bridge & Road Cell,Amit Desai,ACTION_REQUIRED,Naresh Rathod,2026-10-28,
-INWARD,2026-10-08,2026-10-09,INW/2026-27/003,Circular regarding updated environmental compliance guidelines for sewage treatment projects,GUDM,Health & Sanitation,Neha Mehta,INFORMATIVE,Foram Shah,,
-OUTWARD,2026-10-10,2026-10-10,OUT/2026-27/001,Forwarding vetted DPR and structural design analysis for Dhebar Road multi-level parking project,Rajkot Municipal Corporation,Town Planning,,,,,
-OUTWARD,2026-10-12,2026-10-12,OUT/2026-27/002,Submission of Running Account (RA) Bill No. 3 with contractor measurement sheets,GSPHC,Engineering Division,,,,,INW/2026-27/001
-OUTWARD,2026-10-14,2026-10-14,OUT/2026-27/003,Dispatch of material test inspection certificates and cube compressive strength reports,Surat Municipal Corporation,Bridge & Road Cell,,,,,INW/2026-27/002
+INWARD,2026-10-01,2026-10-03,GSPHC/ENG/2026/89,Technical sanction and approved architectural drawings for Bhavnagar residential police quarters,GSPHC,Engineering Division,Jitendra Patel,ACTION_REQUIRED,Ramesh Patel,2026-10-25,
+INWARD,2026-10-05,2026-10-06,SMC/BRG/2026/142,Request for geotechnical soil investigation report and vetting for Ring Road flyover,Surat Municipal Corporation,Bridge & Road Cell,Amit Desai,ACTION_REQUIRED,Naresh Rathod,2026-10-28,
+INWARD,2026-10-08,2026-10-09,GUDM/SWM/2026/410,Circular regarding updated environmental compliance guidelines for sewage treatment projects,GUDM,Health & Sanitation,Neha Mehta,INFORMATIVE,Foram Shah,,
+OUTWARD,2026-10-10,2026-10-10,SAEC/RMC/2026/501,Forwarding vetted DPR and structural design analysis for Dhebar Road multi-level parking project,Rajkot Municipal Corporation,Town Planning,,,,,
+OUTWARD,2026-10-12,2026-10-12,SAEC/GSPHC/2026/502,Submission of Running Account (RA) Bill No. 3 with contractor measurement sheets,GSPHC,Engineering Division,,,,,GSPHC/ENG/2026/89
+OUTWARD,2026-10-14,2026-10-14,SAEC/SMC/2026/503,Dispatch of material test inspection certificates and cube compressive strength reports,Surat Municipal Corporation,Bridge & Road Cell,,,,,SMC/BRG/2026/142

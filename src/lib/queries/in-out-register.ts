@@ -15,6 +15,7 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     const term = filter.search.trim();
     and.push({
       OR: [
+        { serialNo: { contains: term, mode: "insensitive" } },
         { documentRefNo: { contains: term, mode: "insensitive" } },
         { details: { contains: term, mode: "insensitive" } },
         { client: { name: { contains: term, mode: "insensitive" } } },

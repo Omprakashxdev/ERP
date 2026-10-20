@@ -574,7 +574,7 @@ export async function importModule(
               }
             }
             const allowedFields = [
-              "direction", "documentDate", "receivedDate", "documentRefNo", "clientId",
+              "direction", "serialNo", "documentDate", "receivedDate", "documentRefNo", "clientId",
               "details", "actionSuggestedStaffId",
               "inwardType", "receivedByPersonName", "department", "replyDueDate", "parentInwardId"
             ];
@@ -600,17 +600,17 @@ export async function importModule(
               if (parentRef && !cleanData.parentInwardId) {
                 const parentDoc = await prisma.inOutRegister.findFirst({
                   where: {
-                    documentRefNo: {
-                      equals: String(parentRef).trim(),
-                      mode: "insensitive",
-                    },
+                    OR: [
+                      { serialNo: { equals: String(parentRef).trim(), mode: "insensitive" } },
+                      { documentRefNo: { equals: String(parentRef).trim(), mode: "insensitive" } },
+                    ],
                   },
-                  select: { id: true },
+                  select: { id: true, serialNo: true, documentRefNo: true },
                 });
                 if (parentDoc) {
                   cleanData.parentInwardId = parentDoc.id;
                   corrections.push(
-                    `Row ${i + 1}: Linked Outward dispatch "${cleanData.documentRefNo}" to Inward letter "${parentRef}"`
+                    `Row ${i + 1}: Linked Outward dispatch to Inward letter "${parentDoc.serialNo || parentDoc.documentRefNo || parentRef}"`
                   );
                 }
               }
@@ -624,33 +624,47 @@ export async function importModule(
               cleanData.documentDate = (cleanData.receivedDate as Date) || new Date();
             }
 
-            // Auto-generate standard documentRefNo if not provided in CSV
-            if (!cleanData.documentRefNo || String(cleanData.documentRefNo).trim() === "") {
-              const dir = (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
-              const dateVal = (cleanData.documentDate as Date) || (cleanData.receivedDate as Date) || new Date();
-              const fy = getIndianFinancialYear(dateVal);
-              const prefix = dir === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
+            // Auto-generate standard sequential serialNo if not provided in CSV
+            if (!cleanData.serialNo || String(cleanData.serialNo).trim() === "") {
+              if (
+                cleanData.documentRefNo &&
+                /^(INW|OUT)\//i.test(String(cleanData.documentRefNo).trim())
+              ) {
+                cleanData.serialNo = String(cleanData.documentRefNo).trim();
+              } else {
+                const dir = (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
+                const dateVal = (cleanData.documentDate as Date) || (cleanData.receivedDate as Date) || new Date();
+                const fy = getIndianFinancialYear(dateVal);
+                const prefix = dir === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
 
-              const existing = await prisma.inOutRegister.findMany({
-                where: {
-                  direction: dir,
-                  documentRefNo: { startsWith: prefix, mode: "insensitive" },
-                },
-                select: { documentRefNo: true },
-              });
+                const existing = await prisma.inOutRegister.findMany({
+                  where: {
+                    direction: dir,
+                    OR: [
+                      { serialNo: { startsWith: prefix, mode: "insensitive" } },
+                      { documentRefNo: { startsWith: prefix, mode: "insensitive" } },
+                    ],
+                  },
+                  select: { serialNo: true, documentRefNo: true },
+                });
 
-              let maxSeq = 0;
-              for (const rec of existing) {
-                const parts = rec.documentRefNo.split("/");
-                const last = parseInt(parts[parts.length - 1], 10);
-                if (!isNaN(last) && last > maxSeq) maxSeq = last;
+                let maxSeq = 0;
+                for (const rec of existing) {
+                  for (const val of [rec.serialNo, rec.documentRefNo]) {
+                    if (val && val.toUpperCase().startsWith(prefix.toUpperCase())) {
+                      const parts = val.split("/");
+                      const last = parseInt(parts[parts.length - 1], 10);
+                      if (!isNaN(last) && last > maxSeq) maxSeq = last;
+                    }
+                  }
+                }
+
+                const nextSeq = maxSeq + 1;
+                cleanData.serialNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+                corrections.push(
+                  `Row ${i + 1}: Auto-generated ${dir} serial number "${cleanData.serialNo}"`
+                );
               }
-
-              const nextSeq = maxSeq + 1;
-              cleanData.documentRefNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
-              corrections.push(
-                `Row ${i + 1}: Auto-generated ${dir} reference number "${cleanData.documentRefNo}"`
-              );
             }
 
             await prisma.inOutRegister.create({ data: cleanData as never });
@@ -1370,11 +1384,11 @@ async function checkDuplicates(
     }
 
     case "inOutRegister": {
-      if (data.documentRefNo && String(data.documentRefNo).trim()) {
+      if (data.serialNo && String(data.serialNo).trim()) {
         const existing = await prisma.inOutRegister.findFirst({
-          where: { documentRefNo: { equals: String(data.documentRefNo).trim(), mode: "insensitive" } },
+          where: { serialNo: { equals: String(data.serialNo).trim(), mode: "insensitive" } },
         });
-        if (existing) return { isDuplicate: true, identifier: `Doc Ref: ${data.documentRefNo}` };
+        if (existing) return { isDuplicate: true, identifier: `Serial No: ${data.serialNo}` };
       }
       return { isDuplicate: false };
     }
@@ -1554,7 +1568,7 @@ function getTemplateSampleRow(module: string): string[] {
     dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
     wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
     vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
-    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "INW/2026-27/001", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
+    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
     tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
     tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],

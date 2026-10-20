@@ -123,10 +123,10 @@ async function checkInOutRegisterReplies(thresholdDays: number): Promise<Generat
         type: NotificationType.PENDING_REPLY,
         priority: days > 20 ? NotificationPriority.URGENT : NotificationPriority.HIGH,
         title: `Pending reply for ${days} days`,
-        message: `Document ${entry.documentRefNo} from ${entry.client.name} has been pending a reply for ${days} days.`,
+        message: `Document ${entry.serialNo || entry.documentRefNo || "Inward"} from ${entry.client.name} has been pending a reply for ${days} days.`,
         module: "inOutRegister",
         entityId: entry.id,
-        entityName: entry.documentRefNo,
+        entityName: entry.serialNo || entry.documentRefNo || "Inward",
       });
     }
   }

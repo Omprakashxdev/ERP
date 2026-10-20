@@ -571,9 +571,10 @@ enum InOutDirection {
 model InOutRegister {
   id                     String                  @id @default(cuid())
   direction              InOutDirection?         @default(INWARD)
+  serialNo               String?
   documentDate           DateTime
   receivedDate           DateTime
-  documentRefNo          String
+  documentRefNo          String?
   details                String?
   clientId               String
   actionSuggestedStaffId String?
@@ -597,6 +598,7 @@ model InOutRegister {
 
   @@index([clientId])
   @@index([direction])
+  @@index([serialNo])
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])

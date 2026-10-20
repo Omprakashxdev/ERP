@@ -15,7 +15,8 @@ const inOutRegisterBaseFields = z.object({
   receivedDate: z.coerce.date({
     error: "Received/Sent date is required and must be a valid date",
   }).refine((d) => isNotFutureCalendarDate(d), "Received/Sent date cannot be in the future"),
-  documentRefNo: cleanedString(100),
+  serialNo: cleanedString(100).optional().nullable(),
+  documentRefNo: cleanedString(100).optional().nullable(),
   details: cleanedString(500).optional().nullable(),
   clientId: cuid,
   actionSuggestedStaffId: z.string().cuid().optional().nullable(),

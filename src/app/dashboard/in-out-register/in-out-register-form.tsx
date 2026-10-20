@@ -34,7 +34,7 @@ import {
   getNextRegisterRefNo,
   getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
 import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
 import { toast } from "sonner";
@@ -49,14 +49,16 @@ interface InOutRegisterFormProps {
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
     parentInward?: {
       id: string;
-      documentRefNo: string;
+      serialNo?: string | null;
+      documentRefNo?: string | null;
       details?: string | null;
     } | null;
   };
   defaultDirection?: InOutDirection;
   parentInward?: {
     id: string;
-    documentRefNo: string;
+    serialNo?: string | null;
+    documentRefNo?: string | null;
     clientId: string;
     department?: string | null;
     details?: string | null;
@@ -86,12 +88,13 @@ function getInitialForm(
     const direction = defaultDirection ?? (parentInward ? "OUTWARD" : "INWARD");
     return {
       direction: direction as InOutDirection,
+      serialNo: "",
       documentDate: toInputDate(new Date()),
       receivedDate: toInputDate(new Date()),
       documentRefNo: "",
       department: parentInward?.department ?? "",
       details: parentInward
-        ? `Re: Inward ${parentInward.documentRefNo}${parentInward.details ? ` - ${parentInward.details}` : ""}`
+        ? `Re: Inward ${parentInward.serialNo || parentInward.documentRefNo || ""}${parentInward.details ? ` - ${parentInward.details}` : ""}`
         : "",
       clientId: parentInward?.clientId ?? clients[0]?.id ?? "",
       actionSuggestedStaffId: "",
@@ -105,9 +108,10 @@ function getInitialForm(
   }
   return {
     direction: entry.direction ?? "INWARD",
+    serialNo: (entry as Record<string, unknown>)?.serialNo as string ?? "",
     documentDate: toInputDate(entry.documentDate),
     receivedDate: toInputDate(entry.receivedDate),
-    documentRefNo: entry.documentRefNo,
+    documentRefNo: entry.documentRefNo ?? "",
     department: (entry as Record<string, unknown>)?.department as string ?? "",
     details: entry.details ?? "",
     clientId: entry.clientId,
@@ -158,7 +162,7 @@ export function InOutRegisterForm({
     try {
       const res = await getNextRegisterRefNo(dir, dateVal);
       if (res.success && res.data?.refNo) {
-        updateField("documentRefNo", res.data.refNo);
+        updateField("serialNo", res.data.refNo);
       }
     } catch {
       // ignore
@@ -168,7 +172,7 @@ export function InOutRegisterForm({
   };
 
   useEffect(() => {
-    if (!isEdit && !form.documentRefNo) {
+    if (!isEdit && !form.serialNo) {
       fetchNextRefNo(form.direction, form.documentDate);
     }
   }, [isEdit]);
@@ -215,9 +219,10 @@ export function InOutRegisterForm({
   function buildPayload() {
     const base = {
       direction: form.direction,
+      serialNo: emptyToNull(form.serialNo),
       documentDate: form.documentDate || undefined,
       receivedDate: form.receivedDate || undefined,
-      documentRefNo: form.documentRefNo,
+      documentRefNo: emptyToNull(form.documentRefNo),
       department: emptyToNull(form.department),
       replyDueDate:
         form.direction === "INWARD" && form.replyDueDate
@@ -366,30 +371,45 @@ export function InOutRegisterForm({
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="documentRefNo">
-                    {isOutward ? "Outward Dispatch Ref. No" : "Inward Ref. No"}
+                  <Label htmlFor="serialNo">
+                    Serial No. ({isOutward ? "Outward No" : "Inward No"})
                   </Label>
-                  {!isEdit && (
-                    <button
-                      type="button"
-                      onClick={() => fetchNextRefNo(form.direction, form.documentDate)}
-                      disabled={loadingRefNo}
-                      className="text-xs text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Generate next sequential serial number for this financial year"
-                    >
-                      <Sparkles className={`h-3 w-3 ${loadingRefNo ? "animate-spin" : ""}`} />
-                      Auto-generate
-                    </button>
-                  )}
+                  <span className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded font-medium flex items-center gap-1 border border-zinc-200/60">
+                    <Lock className="h-3 w-3 text-zinc-400" />
+                    Auto-generated
+                  </span>
                 </div>
+                <Input
+                  id="serialNo"
+                  value={form.serialNo || (loadingRefNo ? "Generating..." : "")}
+                  disabled
+                  readOnly
+                  tabIndex={-1}
+                  placeholder={loadingRefNo ? "Generating serial number..." : (isOutward ? "e.g. OUT/2026-27/001" : "e.g. INW/2026-27/001")}
+                  className="font-mono font-semibold text-zinc-700 bg-zinc-100/90 border-zinc-200 cursor-not-allowed select-none opacity-90"
+                />
+                <p className="text-xs text-zinc-500">
+                  System-assigned register serial number (locked — cannot be edited).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="documentRefNo">
+                  {isOutward ? "Outgoing Document Ref. No" : "Incoming Document Ref. No"}
+                </Label>
                 <Input
                   id="documentRefNo"
                   value={form.documentRefNo}
                   onChange={(e) =>
                     updateField("documentRefNo", e.target.value)
                   }
-                  placeholder={isOutward ? "e.g. OUT/2026-27/001" : "e.g. INW/2026-27/001"}
+                  placeholder={isOutward ? "e.g. SAEC/OUT/2026/101 (filled by employee)" : "e.g. SMC/HEALTH/2026/142 (filled by employee)"}
                 />
+                <p className="text-xs text-zinc-500">
+                  {isOutward
+                    ? "Outgoing letter or client reference number to be filled by employee (optional)."
+                    : "The reference number printed on received letter to be filled by employee (leave blank if none)."}
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -636,6 +656,9 @@ export function InOutRegisterForm({
                         className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
                       >
                         <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-mono text-zinc-500 font-medium shrink-0">
+                            {index + 1}.
+                          </span>
                           <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
                           <span className="truncate" title={documentDisplayName(document)}>
                             {documentDisplayName(document)}

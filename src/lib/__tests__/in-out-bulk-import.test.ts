@@ -34,11 +34,15 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     vi.spyOn(prisma.client, "findFirst").mockResolvedValue({ id: "client-gsphc-id", name: "GSPHC", abbreviation: "GSPHC" } as any);
     vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({ id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001" } as any);
     (vi.spyOn(prisma.inOutRegister, "findFirst") as any).mockImplementation(async (args: any) => {
-      // Return previously created inward record when looked up by documentRefNo
-      const refSearch = args?.where?.documentRefNo?.equals;
-      if (refSearch) {
-        const found = createdRecords.find((r) => r.documentRefNo === refSearch);
-        if (found) return found;
+      const orList = args?.where?.OR || [args?.where];
+      for (const clause of orList) {
+        const target = clause?.serialNo?.equals || clause?.documentRefNo?.equals;
+        if (target) {
+          const found = createdRecords.find(
+            (r) => r.serialNo === target || r.documentRefNo === target
+          );
+          if (found) return found;
+        }
       }
       return null;
     });
@@ -107,7 +111,7 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     expect(res.success).toBe(true);
     expect(createdRecords).toHaveLength(1);
     // Sequence was 005, so next must be auto-generated as INW/2026-27/006
-    expect(createdRecords[0].documentRefNo).toBe("INW/2026-27/006");
+    expect(createdRecords[0].serialNo).toBe("INW/2026-27/006");
   });
 
   it("auto-heals when parentInwardRefNo is placed in replyDueDate column on outward row", async () => {
@@ -123,10 +127,15 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     vi.spyOn(prisma.client, "findFirst").mockResolvedValue({ id: "client-gsphc-id", name: "GSPHC", abbreviation: "GSPHC" } as any);
     vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({ id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001" } as any);
     (vi.spyOn(prisma.inOutRegister, "findFirst") as any).mockImplementation(async (args: any) => {
-      const refSearch = args?.where?.documentRefNo?.equals;
-      if (refSearch) {
-        const found = createdRecords.find((r) => r.documentRefNo === refSearch);
-        if (found) return found;
+      const orList = args?.where?.OR || [args?.where];
+      for (const clause of orList) {
+        const target = clause?.serialNo?.equals || clause?.documentRefNo?.equals;
+        if (target) {
+          const found = createdRecords.find(
+            (r) => r.serialNo === target || r.documentRefNo === target
+          );
+          if (found) return found;
+        }
       }
       return null;
     });

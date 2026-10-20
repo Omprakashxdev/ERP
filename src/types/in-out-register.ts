@@ -7,13 +7,15 @@ export type InOutRegisterListRow = InOutRegister & {
   ccStaff: (InOutRegisterCcStaff & { staff: Staff })[];
   parentInward?: {
     id: string;
-    documentRefNo: string;
+    serialNo?: string | null;
+    documentRefNo?: string | null;
     details?: string | null;
     documentDate?: Date;
   } | null;
   replies?: {
     id: string;
-    documentRefNo: string;
+    serialNo?: string | null;
+    documentRefNo?: string | null;
     receivedDate?: Date;
     details?: string | null;
   }[];
