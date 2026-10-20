@@ -191,8 +191,11 @@ export function FundFlowTable({
                     <TableCell className="text-right font-mono whitespace-nowrap">
                       {formatMoney(row.remainingWorkAmt)}
                     </TableCell>
-                    <TableCell className="text-right font-mono whitespace-nowrap">
-                      {formatMoney(row.totalFee, 6)}
+                    <TableCell
+                      className="text-right font-mono whitespace-nowrap"
+                      title={row.totalFee != null ? `Exact: ₹${formatMoney(row.totalFee, 6)}` : undefined}
+                    >
+                      {formatMoney(row.totalFee)}
                     </TableCell>
                     <TableCell>
                       <Badge
