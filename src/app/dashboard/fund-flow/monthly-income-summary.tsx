@@ -361,7 +361,7 @@ export function MonthlyIncomeSummary() {
         <CardHeader>
           <CardTitle className="text-base font-medium">
             Monthly Fund Flow Report
-            <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
+            <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -464,7 +464,7 @@ export function MonthlyIncomeSummary() {
               </button>
             ))}
           </div>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-zinc-500">
             {scope === "all"
               ? "Combined company figures (Rows 12–18)"
               : "One project's saved monthly income plan"}
@@ -579,7 +579,7 @@ export function MonthlyIncomeSummary() {
           </summary>
           <div className="border-t border-zinc-200 px-4 py-3">
             {breakdownLoading ? (
-              <div className="py-4 text-center text-sm text-zinc-400">
+              <div className="py-4 text-center text-sm text-zinc-500">
                 <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                 Loading…
               </div>
@@ -607,7 +607,7 @@ export function MonthlyIncomeSummary() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="py-4 text-center text-sm text-zinc-400"
+                            className="py-4 text-center text-sm text-zinc-500"
                           >
                             No verified project allocations for this month.
                           </td>
@@ -667,7 +667,7 @@ export function MonthlyIncomeSummary() {
                 )}
               </>
             ) : (
-              <p className="py-3 text-sm text-zinc-400">
+              <p className="py-3 text-sm text-zinc-500">
                 Expand to load this month's project allocations.
               </p>
             )}
@@ -754,7 +754,7 @@ export function MonthlyIncomeSummary() {
                         ) : e?.amount != null ? (
                           fmt2(e.amount)
                         ) : (
-                          <span className="italic text-zinc-400">Not entered</span>
+                          <span className="italic text-zinc-500">Not entered</span>
                         )}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">
@@ -771,7 +771,7 @@ export function MonthlyIncomeSummary() {
                             )}
                           </>
                         ) : p?.formulaCovered ? (
-                          <span className="italic text-zinc-400">Incomplete</span>
+                          <span className="italic text-zinc-500">Incomplete</span>
                         ) : (
                           "—"
                         )}
@@ -790,14 +790,14 @@ export function MonthlyIncomeSummary() {
                             )}
                           </>
                         ) : r?.formulaCovered ? (
-                          <span className="italic text-zinc-400">Incomplete</span>
+                          <span className="italic text-zinc-500">Incomplete</span>
                         ) : (
                           "—"
                         )}
                       </td>
                       <td className="py-2 pr-3">
                         <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses[status.tone]}`}
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${statusClasses[status.tone]}`}
                         >
                           {status.label}
                         </span>
@@ -833,7 +833,7 @@ export function MonthlyIncomeSummary() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                 {expenses.map((e) => (
                   <div key={`${e.year}-${e.month}`} className="space-y-1">
-                    <label className="block text-[11px] text-zinc-500">
+                    <label className="block text-xs text-zinc-500">
                       {monthLabel(e.month, e.year)}
                     </label>
                     <input
@@ -847,7 +847,7 @@ export function MonthlyIncomeSummary() {
                           ? e.unavailableReason ?? "Unavailable for editing"
                           : "Manually entered monthly expense"
                       }
-                      className="h-8 w-full rounded border border-zinc-200 bg-white px-2 text-right font-mono text-sm text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-400 focus:border-zinc-400 focus:outline-none"
+                      className="h-8 w-full rounded border border-zinc-200 bg-white px-2 text-right font-mono text-sm text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-500 focus:border-zinc-400 focus:outline-none"
                       onBlur={(ev) => {
                         const v = ev.target.value.trim();
                         if (v === decimalToInputString(e.amount, 2)) return;
@@ -907,7 +907,7 @@ function SummaryCard({
     <div className={`rounded-xl border p-4 ${toneClasses}`}>
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-zinc-500">
-          {label} <span className="text-zinc-400">({row})</span>
+          {label} <span className="text-zinc-500">({row})</span>
         </p>
         {icon}
       </div>
@@ -925,12 +925,12 @@ function SummaryCard({
             )}
           </>
         ) : (
-          <span className="text-sm font-normal italic text-zinc-400">
+          <span className="text-sm font-normal italic text-zinc-500">
             {emptyHint ?? "—"}
           </span>
         )}
       </p>
-      <p className="mt-1 text-[11px] text-zinc-400">
+      <p className="mt-1 text-xs text-zinc-500">
         {caption ?? "workbook units"}
       </p>
     </div>
@@ -982,7 +982,7 @@ function ProjectWisePanel({
             {selectedProject ? (
               <span className="truncate">{selectedProject.name}</span>
             ) : (
-              <span className="text-zinc-400">Search projects…</span>
+              <span className="text-zinc-500">Search projects…</span>
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </PopoverTrigger>
@@ -1012,7 +1012,7 @@ function ProjectWisePanel({
                         <span className="block truncate text-sm text-zinc-800">
                           {p.name}
                         </span>
-                        <span className="block truncate text-xs text-zinc-400">
+                        <span className="block truncate text-xs text-zinc-500">
                           {p.clientName} · {p.regionName}
                         </span>
                       </span>
@@ -1035,7 +1035,7 @@ function ProjectWisePanel({
       </div>
 
       {!selectedProject ? (
-        <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-400">
+        <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500">
           Choose a project above to see its saved monthly income plan.
         </p>
       ) : (
@@ -1125,7 +1125,7 @@ function ProjectWisePanel({
             page={allocPage}
             setPage={setAllocPage}
           />
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-zinc-500">
             Project-wise view shows income allocations only. Expenses, net and
             running balance are company-level workbook figures — not per project.
             Allocations after June 2027 remain project data but are not counted
@@ -1179,7 +1179,7 @@ function AllocMonthsTable({
           <tbody>
             {allocLoading && (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
+                <td colSpan={3} className="py-6 text-center text-sm text-zinc-500">
                   <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                   Loading allocation schedule…
                 </td>
@@ -1187,7 +1187,7 @@ function AllocMonthsTable({
             )}
             {!allocLoading && pageRows.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-zinc-400">
+                <td colSpan={3} className="py-6 text-center text-sm text-zinc-500">
                   {view === "entered"
                     ? "No entered months yet — switch to All 24 Months to plan."
                     : "No allocation data."}
@@ -1211,7 +1211,7 @@ function AllocMonthsTable({
                     ) : a.amount != null ? (
                       fmt2(a.amount)
                     ) : (
-                      <span className="italic text-zinc-400">Not entered</span>
+                      <span className="italic text-zinc-500">Not entered</span>
                     )}
                   </td>
                   <td className="py-1.5 pr-3 text-xs text-zinc-500">
@@ -1261,7 +1261,7 @@ function AllocMonthsTable({
         </div>
       )}
       {rows.length > 0 && rows.length <= ALLOC_PAGE_SIZE && !allocLoading && (
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-zinc-500">
           Showing all {rows.length} {view === "entered" ? "entered" : ""} months
         </p>
       )}

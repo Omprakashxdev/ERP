@@ -144,7 +144,7 @@ export function ContractorProjectsDialog({
         <div className="max-h-[65vh] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
             </div>
           ) : (
             <div className="space-y-4">
@@ -216,7 +216,7 @@ export function ContractorProjectsDialog({
                 <div className="space-y-2 border-t pt-4">
                   <h4 className="text-sm font-medium">Available projects</h4>
                   <div className="relative">
-                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
                     <Input
                       placeholder="Search projects..."
                       value={search}

@@ -224,7 +224,7 @@ export function TaskFormDialog({ staff, projects }: { staff: StaffOption[]; proj
                     {staff.find((s) => s.id === sid)?.name ?? sid}
                     <button
                       type="button"
-                      className="text-zinc-400 hover:text-zinc-700"
+                      className="text-zinc-500 hover:text-zinc-700"
                       onClick={() =>
                         setCoAssigneeIds((prev) => prev.filter((x) => x !== sid))
                       }
@@ -551,7 +551,7 @@ export function TaskEditForm({
                       {staff.find((s) => s.id === sid)?.name ?? sid}
                       <button
                         type="button"
-                        className="text-zinc-400 hover:text-zinc-700"
+                        className="text-zinc-500 hover:text-zinc-700"
                         onClick={() =>
                           updateField(
                             "coAssigneeIds",
@@ -935,7 +935,7 @@ function TaskAttachments({ taskId }: { taskId: string }) {
                 {a.filename}
               </a>
               {a.size != null && (
-                <span className="text-xs text-zinc-400">
+                <span className="text-xs text-zinc-500">
                   ({Math.max(1, Math.round(a.size / 1024))} KB)
                 </span>
               )}

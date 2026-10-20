@@ -95,7 +95,7 @@ export function ClientsTable({ clients, canManage }: ClientsTableProps) {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-zinc-400">
+                  <TableCell colSpan={6} className="py-8 text-center text-zinc-500">
                     No clients found.
                   </TableCell>
                 </TableRow>

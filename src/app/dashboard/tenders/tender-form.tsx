@@ -568,7 +568,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                             updateField("serviceType", t);
                             if (!form.workType) updateField("workType", t);
                           }}
-                          className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
                             form.serviceType === t
                               ? "bg-zinc-900 text-white border-zinc-900"
                               : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200"
@@ -606,7 +606,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                     }
                   />
                   {form.preBidMeetingDate && form.biddingLastDate && form.preBidMeetingDate > form.biddingLastDate && (
-                    <p className="text-[11px] text-red-600 font-medium">
+                    <p className="text-xs text-red-600 font-medium">
                       ⚠️ Pre-bid meeting must be on or before bidding deadline ({form.biddingLastDate})
                     </p>
                   )}
@@ -653,7 +653,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                     }
                   />
                   {form.dateOfOpening && form.biddingLastDate && form.dateOfOpening < form.biddingLastDate && (
-                    <p className="text-[11px] text-red-600 font-medium">
+                    <p className="text-xs text-red-600 font-medium">
                       ⚠️ Opening date must be on or after bidding deadline ({form.biddingLastDate})
                     </p>
                   )}
@@ -740,7 +740,7 @@ export function TenderForm({ tender, mode, masters, onClose }: TenderFormProps) 
                     }
                   />
                   {form.emdReturnCollectionDate && form.emdDate && form.emdReturnCollectionDate < form.emdDate && (
-                    <p className="text-[11px] text-red-600 font-medium">
+                    <p className="text-xs text-red-600 font-medium">
                       ⚠️ Return date cannot be earlier than EMD deposit date ({form.emdDate})
                     </p>
                   )}

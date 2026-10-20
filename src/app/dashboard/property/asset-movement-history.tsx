@@ -97,7 +97,7 @@ export function AssetMovementHistory({
         <div className="max-h-[60vh] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
             </div>
           ) : movements.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">

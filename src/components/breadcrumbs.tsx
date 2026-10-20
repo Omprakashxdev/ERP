@@ -82,7 +82,7 @@ function BreadcrumbsContent() {
   }
 
   return (
-    <nav className="flex items-center gap-1 text-xs text-zinc-400">
+    <nav className="flex items-center gap-1 text-xs text-zinc-500">
       <Link
         href="/dashboard"
         className="flex items-center gap-1 transition-colors hover:text-zinc-600"

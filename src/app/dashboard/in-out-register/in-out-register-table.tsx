@@ -248,7 +248,7 @@ export function InOutRegisterTable({
                       <span>{row.documentRefNo}</span>
                       {row.direction === "INWARD" && row.replies && row.replies.length > 0 && (
                         <div
-                          className="flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+                          className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
                           onClick={async (e) => {
                             e.stopPropagation();
                             const rep = row.replies![0];
@@ -269,7 +269,7 @@ export function InOutRegisterTable({
                       )}
                       {row.direction === "OUTWARD" && row.parentInward && (
                         <div
-                          className="flex items-center gap-1 text-[11px] text-blue-700 hover:text-blue-900 hover:underline cursor-pointer"
+                          className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 hover:underline cursor-pointer"
                           onClick={async (e) => {
                             e.stopPropagation();
                             const parentRow = typedRows.find((r) => r.id === row.parentInward!.id);

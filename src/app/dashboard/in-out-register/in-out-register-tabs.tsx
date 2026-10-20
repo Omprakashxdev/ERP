@@ -123,13 +123,13 @@ export function InOutRegisterTabs({ counts }: InOutRegisterTabsProps) {
                   ? "text-amber-600 group-hover:text-amber-700"
                   : tab.key === "unclassified" && counts.unclassified > 0
                   ? "text-orange-600 group-hover:text-orange-700"
-                  : "text-zinc-400 group-hover:text-zinc-600"
+                  : "text-zinc-500 group-hover:text-zinc-600"
               )}
             />
             <span>{tab.label}</span>
             <span
               className={cn(
-                "inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums min-w-[20px]",
+                "inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums min-w-[20px]",
                 isActive
                   ? "bg-zinc-800 text-zinc-100"
                   : tab.key === "pending" && counts.pending > 0

@@ -331,7 +331,7 @@ function JourneyLogViewDialog({
                       <span className="text-sm font-bold text-zinc-900">{formatMoney(journey.fuelExpense)}</span>
                     </div>
                     {((journey as any).fuelLitre || (journey as any).fuelRate) && (
-                      <p className="text-[11px] text-zinc-500 pt-1">
+                      <p className="text-xs text-zinc-500 pt-1">
                         {(journey as any).fuelLitre ? `${(journey as any).fuelLitre} Litres` : ""}{" "}
                         {(journey as any).fuelRate ? `@ ₹${(journey as any).fuelRate}/L` : ""}
                       </p>
@@ -348,7 +348,7 @@ function JourneyLogViewDialog({
                       <span className="text-sm font-bold text-zinc-900">{formatMoney(journey.serviceExpense)}</span>
                     </div>
                     {journey.serviceParticulars && (
-                      <p className="text-[11px] text-zinc-500 pt-1 truncate" title={journey.serviceParticulars}>
+                      <p className="text-xs text-zinc-500 pt-1 truncate" title={journey.serviceParticulars}>
                         {journey.serviceParticulars}
                       </p>
                     )}
@@ -364,7 +364,7 @@ function JourneyLogViewDialog({
                       <span className="text-sm font-bold text-zinc-900">{formatMoney(journey.maintenanceExpense)}</span>
                     </div>
                     {journey.maintenanceParticulars && (
-                      <p className="text-[11px] text-zinc-500 pt-1 truncate" title={journey.maintenanceParticulars}>
+                      <p className="text-xs text-zinc-500 pt-1 truncate" title={journey.maintenanceParticulars}>
                         {journey.maintenanceParticulars}
                       </p>
                     )}
@@ -380,7 +380,7 @@ function JourneyLogViewDialog({
                       <span className="text-sm font-bold text-zinc-900">{formatMoney(journey.taxExpense)}</span>
                     </div>
                     {((journey as any).taxParticulars || (journey as any).fastagBalance) && (
-                      <div className="text-[11px] text-zinc-500 pt-1 space-y-0.5">
+                      <div className="text-xs text-zinc-500 pt-1 space-y-0.5">
                         {(journey as any).taxParticulars && <p>{(journey as any).taxParticulars}</p>}
                         {(journey as any).fastagBalance && <p>Fastag Balance: {formatMoney((journey as any).fastagBalance)}</p>}
                       </div>
@@ -410,18 +410,18 @@ function JourneyLogViewDialog({
                           {isUploaded ? (
                             <FileCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
                           ) : (
-                            <FileX className="h-4 w-4 text-zinc-400 flex-shrink-0" />
+                            <FileX className="h-4 w-4 text-zinc-500 flex-shrink-0" />
                           )}
                           <div>
                             <span className="text-xs font-semibold text-zinc-800 block">
                               {doc.label}
                             </span>
-                            <span className="text-[10px] text-zinc-400 block font-medium">
+                            <span className="text-xs text-zinc-500 block font-medium">
                               {doc.category}
                             </span>
                             {isUploaded && (
                               <span
-                                className="text-[11px] text-zinc-500 block truncate max-w-[200px]"
+                                className="text-xs text-zinc-500 block truncate max-w-[200px]"
                                 title={doc.path || ""}
                               >
                                 {doc.path?.split("/").pop() || doc.path}
@@ -433,8 +433,8 @@ function JourneyLogViewDialog({
                           variant="outline"
                           className={
                             isUploaded
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0 px-1.5"
-                              : "bg-zinc-100 text-zinc-500 border-zinc-200 text-[10px] py-0 px-1.5"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 text-xs py-0 px-1.5"
+                              : "bg-zinc-100 text-zinc-500 border-zinc-200 text-xs py-0 px-1.5"
                           }
                         >
                           {isUploaded ? "Uploaded" : "Missing"}
@@ -634,8 +634,8 @@ function VehicleViewDialog({
                           variant="outline"
                           className={
                             isUploaded
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"
-                              : "bg-zinc-100 text-zinc-500 border-zinc-200 text-[10px]"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 text-xs"
+                              : "bg-zinc-100 text-zinc-500 border-zinc-200 text-xs"
                           }
                         >
                           {isUploaded ? "Uploaded" : "Missing"}
@@ -813,7 +813,7 @@ export function VehicleLogBookTable({
                 >
                   <TableCell className="whitespace-nowrap font-medium">
                     <span className="font-semibold text-zinc-900 flex items-center gap-1.5">
-                      <Car className="h-3.5 w-3.5 text-zinc-400" />
+                      <Car className="h-3.5 w-3.5 text-zinc-500" />
                       {row.registrationNumber}
                     </span>
                   </TableCell>
@@ -910,7 +910,7 @@ export function VehicleLogBookTable({
                 >
                   <TableCell className="whitespace-nowrap">
                     <span className="font-medium text-zinc-900 flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+                      <Calendar className="h-3.5 w-3.5 text-zinc-500" />
                       {formatDate(row.journeyDate)}
                     </span>
                   </TableCell>
@@ -919,7 +919,7 @@ export function VehicleLogBookTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <span className="font-medium text-zinc-900">{row.fromLocation}</span>
-                    <span className="text-zinc-400 mx-1">→</span>
+                    <span className="text-zinc-500 mx-1">→</span>
                     <span className="font-medium text-zinc-900">{row.toLocation}</span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right font-mono">

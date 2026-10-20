@@ -125,7 +125,7 @@ export function FileUploadField({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 text-zinc-400 hover:text-zinc-700"
+            className="h-7 w-7 p-0 text-zinc-500 hover:text-zinc-700"
             onClick={() => onChange("")}
             title="Remove document"
           >
@@ -150,7 +150,7 @@ export function FileUploadField({
             )}
             Upload
           </Button>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-zinc-500">
             {placeholder ?? acceptHint}
           </span>
         </div>

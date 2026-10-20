@@ -12,7 +12,7 @@ export function SidebarNav() {
     <nav className="flex-1 overflow-y-auto px-3 py-4">
       {navGroups.map((group) => (
         <div key={group.label} className="mb-4">
-          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+          <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wider text-white/40">
             {group.label}
           </p>
           <div className="space-y-0.5">

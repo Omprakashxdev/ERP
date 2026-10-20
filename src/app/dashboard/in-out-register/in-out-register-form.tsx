@@ -326,7 +326,7 @@ export function InOutRegisterForm({
                 {linkedInward.details && <span className="text-emerald-700 ml-1">({linkedInward.details})</span>}
               </span>
             </div>
-            <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
               Outward Reply
             </span>
           </div>
@@ -338,7 +338,7 @@ export function InOutRegisterForm({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="direction">Direction</Label>
-                  <span className="text-[10px] text-zinc-500 font-medium">
+                  <span className="text-xs text-zinc-500 font-medium">
                     {isOutward ? "Outward Dispatch" : "Inward Register"}
                   </span>
                 </div>
@@ -357,7 +357,7 @@ export function InOutRegisterForm({
                     )}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-xs text-zinc-500">
                   {isOutward
                     ? "Direction is fixed to Outward for dispatch entries."
                     : "Direction is fixed to Inward for received documents."}
@@ -374,7 +374,7 @@ export function InOutRegisterForm({
                       type="button"
                       onClick={() => fetchNextRefNo(form.direction, form.documentDate)}
                       disabled={loadingRefNo}
-                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                      className="text-xs text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1 cursor-pointer transition-colors"
                       title="Generate next sequential serial number for this financial year"
                     >
                       <Sparkles className={`h-3 w-3 ${loadingRefNo ? "animate-spin" : ""}`} />
@@ -541,7 +541,7 @@ export function InOutRegisterForm({
                       <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
                         Reply Due Date (Deadline)
                       </Label>
-                      <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
+                      <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
                     </div>
                     <Input
                       id="replyDueDate"
@@ -551,7 +551,7 @@ export function InOutRegisterForm({
                       min={form.documentDate || undefined}
                       className="border-amber-300 focus-visible:ring-amber-500"
                     />
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-xs text-zinc-500">
                       When must the reply be submitted by? (Stays Pending until answered)
                     </p>
                     {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (

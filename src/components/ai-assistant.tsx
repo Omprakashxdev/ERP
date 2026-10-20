@@ -102,7 +102,7 @@ export function AiAssistant() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">AI Assistant</p>
-                  <p className="text-[10px] text-muted-foreground">Ask about your ERP data</p>
+                  <p className="text-xs text-muted-foreground">Ask about your ERP data</p>
                 </div>
               </div>
               <Button

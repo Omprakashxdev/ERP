@@ -110,7 +110,7 @@ export function NotificationBell() {
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -143,7 +143,7 @@ export function NotificationBell() {
         <div className="max-h-80 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
             </div>
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -162,11 +162,11 @@ export function NotificationBell() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium ${priorityColor(notif.priority)}`}
+                        className={`inline-flex items-center rounded px-1 py-0.5 text-xs font-medium ${priorityColor(notif.priority)}`}
                       >
                         {notif.priority}
                       </span>
-                      <span className="text-[10px] text-zinc-400">
+                      <span className="text-xs text-zinc-500">
                         {timeAgo(notif.createdAt)}
                       </span>
                     </div>
@@ -182,7 +182,7 @@ export function NotificationBell() {
                       <button
                         onClick={() => handleMarkRead(notif.id)}
                         disabled={actionLoading === notif.id}
-                        className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                        className="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
                         title="Mark as read"
                       >
                         {actionLoading === notif.id ? (
@@ -195,7 +195,7 @@ export function NotificationBell() {
                     <button
                       onClick={() => handleDelete(notif.id)}
                       disabled={actionLoading === `del-${notif.id}`}
-                      className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
+                      className="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-red-600"
                       title="Delete"
                     >
                       {actionLoading === `del-${notif.id}` ? (

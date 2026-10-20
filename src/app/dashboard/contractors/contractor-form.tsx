@@ -409,7 +409,7 @@ export function ContractorForm({
                               updateField("serviceType", t);
                               if (!form.workType) updateField("workType", t);
                             }}
-                            className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
                               form.serviceType === t
                                 ? "bg-zinc-900 text-white border-zinc-900"
                                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200"
@@ -962,14 +962,14 @@ function ContractorLinkedRaBillsPanel({ contractorId }: { contractorId: string }
                       {label}
                     </a>
                     <span
-                      className="truncate text-[11px] text-zinc-500"
+                      className="truncate text-xs text-zinc-500"
                       title={documentDisplayName(path)}
                     >
                       {documentDisplayName(path)}
                     </span>
                   </span>
                 ) : (
-                  <span key={label} className="text-xs text-zinc-400">
+                  <span key={label} className="text-xs text-zinc-500">
                     no {label.toLowerCase()}
                   </span>
                 )

@@ -43,7 +43,7 @@ export function MobileSidebar() {
                 </div>
                 <div>
                   <div className="font-bold tracking-tight text-sidebar-foreground">SAEC ERP</div>
-                  <div className="text-[10px] text-white/60">Enterprise Suite</div>
+                  <div className="text-xs text-white/60">Enterprise Suite</div>
                 </div>
               </div>
               <Button
@@ -59,7 +59,7 @@ export function MobileSidebar() {
             <nav className="flex flex-1 flex-col gap-3 overflow-y-auto">
               {navGroups.map((group) => (
                 <div key={group.label}>
-                  <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                  <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-white/40">
                     {group.label}
                   </p>
                   <div className="space-y-0.5">

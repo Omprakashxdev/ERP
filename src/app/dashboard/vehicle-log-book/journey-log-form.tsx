@@ -746,7 +746,7 @@ export function JourneyLogForm({
                           {st?.name ?? sid}
                           <button
                             type="button"
-                            className="text-zinc-400 hover:text-zinc-700"
+                            className="text-zinc-500 hover:text-zinc-700"
                             onClick={() =>
                               updateField(
                                 "travellerStaffIds",

@@ -82,7 +82,7 @@ export function TadaClaimTable({
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
         <p className="text-sm text-zinc-500">No TADA claims found.</p>
-        <p className="mt-1 text-xs text-zinc-400">
+        <p className="mt-1 text-xs text-zinc-500">
           Create a new claim to get started.
         </p>
       </div>
@@ -144,7 +144,7 @@ export function TadaClaimTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <span
-                      className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColors[claim.status] ?? "bg-zinc-100 text-zinc-600"}`}
+                      className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${statusColors[claim.status] ?? "bg-zinc-100 text-zinc-600"}`}
                     >
                       {statusLabels[claim.status] ?? claim.status}
                     </span>

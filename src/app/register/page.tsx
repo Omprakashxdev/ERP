@@ -183,7 +183,7 @@ export default function RegisterPage() {
                 <Label className="text-sm font-medium">Region</Label>
                 {dataLoading ? (
                   <div className="flex h-11 items-center px-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
                   </div>
                 ) : (
                   <Select value={regionId} onValueChange={(v) => setRegionId(v ?? "")}>
@@ -204,7 +204,7 @@ export default function RegisterPage() {
                 <Label className="text-sm font-medium">Reporting Manager</Label>
                 {dataLoading ? (
                   <div className="flex h-11 items-center px-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
                   </div>
                 ) : (
                   <Select value={reportingManagerId} onValueChange={(v) => setReportingManagerId(v ?? "")}>

@@ -128,9 +128,9 @@ export function BillSummaryView({ groups }: { groups: ClientGroup[] }) {
                       >
                         <TableCell className="w-8">
                           {isOpen ? (
-                            <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
+                            <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
                           ) : (
-                            <ChevronRight className="h-3.5 w-3.5 text-zinc-400" />
+                            <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
                           )}
                         </TableCell>
                         <TableCell className="font-medium">{group.clientName}</TableCell>
@@ -157,7 +157,7 @@ export function BillSummaryView({ groups }: { groups: ClientGroup[] }) {
                             <TableCell className="text-right text-zinc-600">{fmt(bill.itTds)}</TableCell>
                             <TableCell className="text-center">
                               <span
-                                className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColors[bill.status] ?? "bg-zinc-100 text-zinc-600"}`}
+                                className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${statusColors[bill.status] ?? "bg-zinc-100 text-zinc-600"}`}
                               >
                                 {bill.status}
                               </span>

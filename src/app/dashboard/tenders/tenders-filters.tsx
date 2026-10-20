@@ -85,7 +85,7 @@ export function TendersFilters({ initialFilter, masters }: TendersFiltersProps) 
           Search
         </label>
         <div className="relative">
-          <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
           <Input
             id="tender-search"
             placeholder="Search tender…"

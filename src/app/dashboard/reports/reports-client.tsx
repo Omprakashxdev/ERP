@@ -170,7 +170,7 @@ export function ReportsClient({
       {/* Sidebar: Categories (Only shown in Global Reports view, hidden when filtered by specific module) */}
       {!isModuleFiltered && (
         <div className="space-y-1">
-          <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+          <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Report Modules
           </p>
           {categories.map((cat) => (
@@ -233,7 +233,7 @@ export function ReportsClient({
                       className={`h-4 w-4 shrink-0 ${
                         selectedReportId === report.id
                           ? "text-emerald-600"
-                          : "text-zinc-400"
+                          : "text-zinc-500"
                       }`}
                     />
                   </div>
@@ -247,7 +247,7 @@ export function ReportsClient({
         </div>
 
         {reports.length === 0 && (
-          <div className="rounded-lg border border-dashed py-12 text-center text-sm text-zinc-400">
+          <div className="rounded-lg border border-dashed py-12 text-center text-sm text-zinc-500">
             No reports available for this module.
           </div>
         )}
@@ -440,7 +440,7 @@ export function ReportsClient({
                     <TableRow>
                       <TableCell
                         colSpan={result.columns.length}
-                        className="py-8 text-center text-zinc-400"
+                        className="py-8 text-center text-zinc-500"
                       >
                         No data found.
                       </TableCell>

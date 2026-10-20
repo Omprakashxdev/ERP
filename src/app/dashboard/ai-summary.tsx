@@ -179,7 +179,7 @@ function RenderInline({ text }: { text: string }) {
         if (part === "[CRITICAL]" || part === "[HIGH]" || part === "[MEDIUM]" || part === "[LOW]") {
           const label = part.slice(1, -1);
           return (
-            <span key={i} className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${severityColors[label]}`}>
+            <span key={i} className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${severityColors[label]}`}>
               {label}
             </span>
           );

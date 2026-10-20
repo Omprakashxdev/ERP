@@ -166,7 +166,7 @@ export function ForwardDialog({
             <div className="flex items-center justify-between">
               <Label>Forward To</Label>
               {autoManager && toStaffId === autoManager.id && (
-                <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600">
+                <span className="flex items-center gap-1 text-xs font-medium text-blue-600">
                   <UserCog className="h-3 w-3" />
                   Reporting Manager
                 </span>
@@ -190,7 +190,7 @@ export function ForwardDialog({
               </SelectContent>
             </Select>
             {autoManager && (
-              <p className="text-[10px] text-zinc-400">
+              <p className="text-xs text-zinc-500">
                 Auto-selected reporting manager. Change if needed.
               </p>
             )}
@@ -240,7 +240,7 @@ export function ForwardDialog({
           {history && (
             <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
               {history.length === 0 ? (
-                <p className="text-center text-xs text-zinc-400">No forwarding records yet</p>
+                <p className="text-center text-xs text-zinc-500">No forwarding records yet</p>
               ) : (
                 history.map((rec) => {
                   const cfg = statusConfig[rec.status] ?? statusConfig.PENDING;
@@ -264,7 +264,7 @@ export function ForwardDialog({
                         <div className="mt-1 text-zinc-600">{rec.remarks}</div>
                       )}
                       {rec.acknowledgedAt && (
-                        <div className="mt-0.5 text-zinc-400">
+                        <div className="mt-0.5 text-zinc-500">
                           Acknowledged: {new Date(rec.acknowledgedAt).toLocaleString("en-IN")}
                         </div>
                       )}
@@ -274,7 +274,7 @@ export function ForwardDialog({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-[10px]"
+                            className="h-6 px-2 text-xs"
                             onClick={() => handleAcknowledge(rec.id, "ACKNOWLEDGED")}
                           >
                             <Check className="mr-1 h-3 w-3" />
@@ -284,7 +284,7 @@ export function ForwardDialog({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-[10px]"
+                            className="h-6 px-2 text-xs"
                             onClick={() => handleAcknowledge(rec.id, "ACTIONED")}
                           >
                             <CheckCircle className="mr-1 h-3 w-3" />
@@ -294,7 +294,7 @@ export function ForwardDialog({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-[10px]"
+                            className="h-6 px-2 text-xs"
                             onClick={() => handleAcknowledge(rec.id, "RETURNED")}
                           >
                             <RotateCcw className="mr-1 h-3 w-3" />
@@ -324,7 +324,7 @@ export function ForwardBadge({
   if (!status) return null;
   const cfg = statusConfig[status] ?? statusConfig.PENDING;
   return (
-    <Badge variant="outline" className={`text-[10px] ${cfg.className}`}>
+    <Badge variant="outline" className={`text-xs ${cfg.className}`}>
       {cfg.label}{toStaffName ? ` → ${toStaffName}` : ""}
     </Badge>
   );

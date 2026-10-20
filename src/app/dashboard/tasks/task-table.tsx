@@ -102,7 +102,7 @@ export function TaskTable({
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
         <p className="text-sm text-zinc-500">No tasks found.</p>
-        <p className="mt-1 text-xs text-zinc-400">
+        <p className="mt-1 text-xs text-zinc-500">
           Create a new task to get started.
         </p>
       </div>
@@ -154,7 +154,7 @@ export function TaskTable({
                       {task.assignedTo.name}
                       {task.coAssignees.length > 0 && (
                         <span
-                          className="ml-1 text-[10px] text-zinc-400"
+                          className="ml-1 text-xs text-zinc-500"
                           title={task.coAssignees
                             .map((c) => c.staff?.name ?? c.staffId)
                             .join(", ")}
@@ -165,14 +165,14 @@ export function TaskTable({
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span
-                        className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${statusColors[task.status] ?? "bg-zinc-100 text-zinc-600"}`}
+                        className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${statusColors[task.status] ?? "bg-zinc-100 text-zinc-600"}`}
                       >
                         {statusLabels[task.status] ?? task.status}
                       </span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span
-                        className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${priorityColors[task.priority] ?? "bg-zinc-50 text-zinc-600"}`}
+                        className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${priorityColors[task.priority] ?? "bg-zinc-50 text-zinc-600"}`}
                       >
                         {task.priority}
                       </span>
@@ -185,7 +185,7 @@ export function TaskTable({
                             style={{ width: `${task.percentageCompletion}%` }}
                           />
                         </div>
-                        <span className="text-[10px] text-zinc-500">{task.percentageCompletion}%</span>
+                        <span className="text-xs text-zinc-500">{task.percentageCompletion}%</span>
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -195,12 +195,12 @@ export function TaskTable({
                             {new Date(task.dueDate).toLocaleDateString("en-IN")}
                           </span>
                           {isOverdue && (
-                            <span className="text-[10px] font-semibold text-red-600">
+                            <span className="text-xs font-semibold text-red-600">
                               Overdue
                             </span>
                           )}
                           {isDueToday && (
-                            <span className="text-[10px] font-semibold text-amber-600">
+                            <span className="text-xs font-semibold text-amber-600">
                               Due today
                             </span>
                           )}
@@ -214,13 +214,11 @@ export function TaskTable({
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {task.sourceModule ? (
-                        <span className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
-                          {task.sourceModule === "PAYMENT_SCHEDULE"
-                            ? "Payment schedule"
-                            : task.sourceModule.toLowerCase().replace(/_/g, " ")}
+                        <span className="inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-indigo-600">
+                          {{ FUND_FLOW: "Fund Flow", DUE_BILL: "Due Bill", WIP: "Work in Progress", TENDER: "Tender", IN_OUT_REGISTER: "In-Out Register", PAYMENT_SCHEDULE: "Payment Schedule", CONTRACTOR: "Contractor", VEHICLE: "Vehicle Log Book", ASSET: "Property", TADA: "TADA Bill" }[task.sourceModule] ?? task.sourceModule.toLowerCase().replace(/_/g, " ")}
                         </span>
                       ) : (
-                        <span className="text-zinc-400">Manual</span>
+                        <span className="text-zinc-500">Manual</span>
                       )}
                     </TableCell>
                     <TableCell

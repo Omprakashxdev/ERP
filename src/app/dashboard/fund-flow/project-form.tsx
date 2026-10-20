@@ -380,7 +380,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
         {masterLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
           </div>
         ) : (
           <form
@@ -432,7 +432,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                       <a
                         href="/dashboard/masters?tab=clients"
                         target="_blank"
-                        className="text-[10px] text-zinc-500 hover:text-zinc-900 hover:underline"
+                        className="text-xs text-zinc-500 hover:text-zinc-900 hover:underline"
                       >
                         Manage clients →
                       </a>
@@ -517,7 +517,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                             key={t}
                             type="button"
                             onClick={() => updateField("serviceType", t)}
-                            className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                            className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${
                               form.serviceType === t
                                 ? "bg-zinc-900 text-white border-zinc-900"
                                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200"

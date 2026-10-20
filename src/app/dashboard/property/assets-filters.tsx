@@ -60,7 +60,7 @@ export function AssetsFilters({ initialFilter }: AssetsFiltersProps) {
           Search
         </label>
         <div className="relative">
-          <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
           <Input
             id="asset-search"
             placeholder="Search item code, name, make, model…"

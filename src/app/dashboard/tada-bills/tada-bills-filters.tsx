@@ -52,7 +52,7 @@ export function TadaBillsFilters({ staff }: { staff: StaffOption[] }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-48 flex-1">
-        <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+        <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
         <Input
           placeholder="Search claims…"
           defaultValue={searchParams.get("search") ?? ""}

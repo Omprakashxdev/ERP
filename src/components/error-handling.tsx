@@ -83,7 +83,7 @@ export function ErrorBanner({ error, onAskAi, askingAi, aiResponse }: ErrorBanne
             type="button"
             variant="ghost"
             size="sm"
-            className="h-5 px-2 text-[10px] text-red-700 hover:bg-red-100"
+            className="h-5 px-2 text-xs text-red-700 hover:bg-red-100"
             onClick={() => {
               setShowAi(!showAi);
               if (!showAi) onAskAi(error);

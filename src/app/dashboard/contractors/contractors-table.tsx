@@ -123,7 +123,7 @@ function DocumentCard({
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
               isUploaded
                 ? "bg-emerald-600 text-white"
-                : "bg-zinc-200 text-zinc-400"
+                : "bg-zinc-200 text-zinc-500"
             }`}
           >
             {isUploaded ? (
@@ -134,12 +134,12 @@ function DocumentCard({
           </div>
           <div>
             <h4 className="text-xs font-semibold text-zinc-900">{title}</h4>
-            <p className="text-[11px] text-zinc-500 line-clamp-1">{description}</p>
+            <p className="text-xs text-zinc-500 line-clamp-1">{description}</p>
           </div>
         </div>
         <Badge
           variant={isUploaded ? "default" : "secondary"}
-          className={`shrink-0 text-[10px] font-medium ${
+          className={`shrink-0 text-xs font-medium ${
             isUploaded
               ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
               : "bg-zinc-100 text-zinc-500 hover:bg-zinc-100"
@@ -150,7 +150,7 @@ function DocumentCard({
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-zinc-200/60 pt-2.5">
-        <span className="text-[11px] text-zinc-400 truncate max-w-[140px]">
+        <span className="text-xs text-zinc-500 truncate max-w-[140px]">
           {isUploaded ? path?.split("/").pop() || "Attached" : "No file attached"}
         </span>
         <div className="flex items-center gap-1.5">
@@ -159,7 +159,7 @@ function DocumentCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[11px] font-medium gap-1 text-zinc-700 bg-white hover:bg-zinc-50"
+                className="h-7 px-2 text-xs font-medium gap-1 text-zinc-700 bg-white hover:bg-zinc-50"
                 onClick={() => window.open(withBasePath(path!), "_blank")}
                 title="View document"
               >
@@ -175,7 +175,7 @@ function DocumentCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 px-2 text-[11px] font-medium gap-1 text-zinc-700 bg-white hover:bg-zinc-50"
+                  className="h-7 px-2 text-xs font-medium gap-1 text-zinc-700 bg-white hover:bg-zinc-50"
                   title="Download document"
                 >
                   <Download className="h-3 w-3" />
@@ -187,7 +187,7 @@ function DocumentCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[11px] text-zinc-400"
+              className="h-7 px-2 text-xs text-zinc-500"
               disabled
             >
               Not uploaded
@@ -308,7 +308,7 @@ function ContractorViewDialog({
           {/* Quick Info Bar */}
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-lg bg-zinc-50 p-3 border border-zinc-200/80 text-xs">
             <div>
-              <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-semibold">
+              <span className="text-zinc-500 block text-xs uppercase tracking-wider font-semibold">
                 Contract Amount
               </span>
               <span className="font-bold text-zinc-900 text-sm">
@@ -316,7 +316,7 @@ function ContractorViewDialog({
               </span>
             </div>
             <div>
-              <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-semibold">
+              <span className="text-zinc-500 block text-xs uppercase tracking-wider font-semibold">
                 Client Authority
               </span>
               <span className="font-medium text-zinc-800 truncate block">
@@ -324,7 +324,7 @@ function ContractorViewDialog({
               </span>
             </div>
             <div>
-              <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-semibold">
+              <span className="text-zinc-500 block text-xs uppercase tracking-wider font-semibold">
                 Tender ID
               </span>
               <span className="font-medium text-zinc-800 truncate block">
@@ -332,7 +332,7 @@ function ContractorViewDialog({
               </span>
             </div>
             <div>
-              <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-semibold">
+              <span className="text-zinc-500 block text-xs uppercase tracking-wider font-semibold">
                 Work Type / Service
               </span>
               <span className="font-medium text-zinc-800 truncate block">
@@ -376,19 +376,19 @@ function ContractorViewDialog({
                   <h4 className="font-semibold text-zinc-800 border-b pb-1">Contract Particulars</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Detailed Order</span>
+                      <span className="text-zinc-500 block text-xs">Detailed Order</span>
                       <span className="font-medium text-zinc-900">{contractor.detailedOrder || "—"}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Work Name</span>
+                      <span className="text-zinc-500 block text-xs">Work Name</span>
                       <span className="font-medium text-zinc-900">{contractor.workName || "—"}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Work Type</span>
+                      <span className="text-zinc-500 block text-xs">Work Type</span>
                       <span className="font-medium text-zinc-900">{formatEnum(contractor.workType)}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Service Type</span>
+                      <span className="text-zinc-500 block text-xs">Service Type</span>
                       <span className="font-medium text-zinc-900">{formatEnum(contractor.serviceType)}</span>
                     </div>
                   </div>
@@ -398,19 +398,19 @@ function ContractorViewDialog({
                   <h4 className="font-semibold text-zinc-800 border-b pb-1">Tender & Agreement</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Tender ID</span>
+                      <span className="text-zinc-500 block text-xs">Tender ID</span>
                       <span className="font-medium text-zinc-900">{contractor.tenderId || "—"}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Approved Amount</span>
+                      <span className="text-zinc-500 block text-xs">Approved Amount</span>
                       <span className="font-medium text-zinc-900">{formatMoney(contractor.contractAmount)}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Agreement Date</span>
+                      <span className="text-zinc-500 block text-xs">Agreement Date</span>
                       <span className="font-medium text-zinc-900">{formatDate(contractor.agreementDate)}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Work Order Date</span>
+                      <span className="text-zinc-500 block text-xs">Work Order Date</span>
                       <span className="font-medium text-zinc-900">{formatDate(contractor.workOrderDate)}</span>
                     </div>
                   </div>
@@ -440,11 +440,11 @@ function ContractorViewDialog({
                 <h4 className="font-semibold text-zinc-800 border-b pb-1">Technical Sanction References</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <span className="text-zinc-400 block text-[11px]">DPR Reference Number</span>
+                    <span className="text-zinc-500 block text-xs">DPR Reference Number</span>
                     <span className="font-medium text-zinc-900 text-sm">{contractor.dprReference || "—"}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block text-[11px]">TS / AA Reference Number</span>
+                    <span className="text-zinc-500 block text-xs">TS / AA Reference Number</span>
                     <span className="font-medium text-zinc-900 text-sm">{contractor.tsAaReference || "—"}</span>
                   </div>
                 </div>
@@ -478,37 +478,37 @@ function ContractorViewDialog({
                 <h4 className="font-semibold text-zinc-800 border-b pb-1">Communication Directory</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex items-start gap-2">
-                    <Building className="h-4 w-4 text-zinc-400 mt-0.5" />
+                    <Building className="h-4 w-4 text-zinc-500 mt-0.5" />
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Contractor Firm Name</span>
+                      <span className="text-zinc-500 block text-xs">Contractor Firm Name</span>
                       <span className="font-semibold text-zinc-900">{contractor.name}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <HardHat className="h-4 w-4 text-zinc-400 mt-0.5" />
+                    <HardHat className="h-4 w-4 text-zinc-500 mt-0.5" />
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Contact Person / Representative</span>
+                      <span className="text-zinc-500 block text-xs">Contact Person / Representative</span>
                       <span className="font-semibold text-zinc-900">{contractor.contactPerson || "—"}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Phone className="h-4 w-4 text-zinc-400 mt-0.5" />
+                    <Phone className="h-4 w-4 text-zinc-500 mt-0.5" />
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Phone / Mobile</span>
+                      <span className="text-zinc-500 block text-xs">Phone / Mobile</span>
                       <span className="font-semibold text-zinc-900">{contractor.phone || "—"}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Mail className="h-4 w-4 text-zinc-400 mt-0.5" />
+                    <Mail className="h-4 w-4 text-zinc-500 mt-0.5" />
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Email Address</span>
+                      <span className="text-zinc-500 block text-xs">Email Address</span>
                       <span className="font-semibold text-zinc-900">{contractor.email || "—"}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-2 sm:col-span-2">
-                    <MapPin className="h-4 w-4 text-zinc-400 mt-0.5 shrink-0" />
+                    <MapPin className="h-4 w-4 text-zinc-500 mt-0.5 shrink-0" />
                     <div>
-                      <span className="text-zinc-400 block text-[11px]">Registered Office Address</span>
+                      <span className="text-zinc-500 block text-xs">Registered Office Address</span>
                       <span className="font-normal text-zinc-800">{contractor.address || "—"}</span>
                     </div>
                   </div>
@@ -531,22 +531,22 @@ function ContractorViewDialog({
             <TabsContent value="billing" className="space-y-4 mt-0">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div className="rounded-lg border p-3 bg-white space-y-1">
-                  <span className="text-zinc-400 block text-[11px]">Schedule B Amount (₹)</span>
+                  <span className="text-zinc-500 block text-xs">Schedule B Amount (₹)</span>
                   <span className="font-bold text-zinc-900 text-sm">{formatMoney(contractor.scheduleBAmount)}</span>
                 </div>
                 <div className="rounded-lg border p-3 bg-white space-y-1">
-                  <span className="text-zinc-400 block text-[11px]">Final Progress Amount (₹)</span>
+                  <span className="text-zinc-500 block text-xs">Final Progress Amount (₹)</span>
                   <span className="font-bold text-zinc-900 text-sm">{formatMoney(contractor.finalProgressAmount)}</span>
                 </div>
                 <div className="rounded-lg border p-3 bg-white space-y-1">
-                  <span className="text-zinc-400 block text-[11px]">Project Expense (₹)</span>
+                  <span className="text-zinc-500 block text-xs">Project Expense (₹)</span>
                   <span className="font-bold text-zinc-900 text-sm">{formatMoney(contractor.finalProgressProjectExpense)}</span>
                 </div>
               </div>
 
               {contractor.raBillDetails && (
                 <div className="rounded-lg border p-3 bg-white text-xs space-y-1">
-                  <span className="text-zinc-400 block text-[11px] font-semibold uppercase">RA Bill Details / Notes (A/c.)</span>
+                  <span className="text-zinc-500 block text-xs font-semibold uppercase">RA Bill Details / Notes (A/c.)</span>
                   <p className="text-zinc-700 whitespace-pre-wrap">{contractor.raBillDetails}</p>
                 </div>
               )}
@@ -708,7 +708,7 @@ export function ContractorsTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <HardHat className="h-3.5 w-3.5 text-zinc-400" />
+                      <HardHat className="h-3.5 w-3.5 text-zinc-500" />
                       {row.projectCount ?? row._count.projects}
                     </div>
                   </TableCell>

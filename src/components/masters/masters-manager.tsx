@@ -361,7 +361,7 @@ export function MastersManager({
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
                 <Input
                   placeholder="Search..."
                   value={search}
@@ -382,12 +382,12 @@ export function MastersManager({
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
             </div>
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="text-sm text-zinc-500">No {activeConfig.label.toLowerCase()} found</p>
-              <p className="text-xs text-zinc-400 mt-1">Click &quot;Add {activeConfig.singularLabel}&quot; to create one</p>
+              <p className="text-xs text-zinc-500 mt-1">Click &quot;Add {activeConfig.singularLabel}&quot; to create one</p>
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-auto">

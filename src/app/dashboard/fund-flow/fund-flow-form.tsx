@@ -564,7 +564,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             <h4 className="text-sm font-medium">
               Reconciliation summary
               {detailLoading && (
-                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
+                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
               )}
             </h4>
 
@@ -630,7 +630,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             <h4 className="text-sm font-medium">
               Monthly Income Plan (Apr 2026 – Mar 2028)
               {monthlyLoading && (
-                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-400" />
+                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
               )}
             </h4>
             <p className="text-xs text-zinc-500">
@@ -815,7 +815,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                                   <span className="font-mono text-xs text-amber-800">
                                     calculated {formatDecimalAsCurrency(item.plannedAmount)}
                                   </span>
-                                  <span className="text-xs text-zinc-400">
+                                  <span className="text-xs text-zinc-500">
                                     ({item.calcNote})
                                   </span>
                                 </div>
@@ -867,7 +867,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                               >
                                 {item.note}
                                 {planPreview.schedule !== "EVEN" && (
-                                  <span className="block text-zinc-400">
+                                  <span className="block text-zinc-500">
                                     {item.calcNote}
                                   </span>
                                 )}
@@ -944,7 +944,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 const isUnavailable = monthlyUnavailable[key] != null;
                 return (
                   <div key={`i-${year}-${month}`} className="space-y-0.5">
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                       {label}
                     </div>
                     <input
@@ -953,7 +953,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                       disabled={monthlySaving || isUnavailable}
                       className={
                         isUnavailable
-                          ? "h-8 w-full cursor-not-allowed rounded border border-zinc-200 bg-zinc-100 px-1 text-center text-xs text-zinc-400"
+                          ? "h-8 w-full cursor-not-allowed rounded border border-zinc-200 bg-zinc-100 px-1 text-center text-xs text-zinc-500"
                           : "h-8 w-full rounded border border-zinc-200 px-1 text-right font-mono text-xs focus:border-zinc-400 focus:outline-none disabled:bg-zinc-100"
                       }
                       value={

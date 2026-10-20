@@ -143,14 +143,14 @@ export function SmartAlerts() {
                     <p className="text-sm font-medium text-foreground">
                       {alert.title}
                     </p>
-                    <Badge variant={config.badge} className="text-[10px] px-1.5 py-0">
+                    <Badge variant={config.badge} className="text-xs px-1.5 py-0">
                       {alert.severity}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2">
                     {alert.description}
                   </p>
-                  <p className="text-[10px] text-muted-foreground/70">
+                  <p className="text-xs text-muted-foreground/70">
                     {alert.category}
                   </p>
                 </div>

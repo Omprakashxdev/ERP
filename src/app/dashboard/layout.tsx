@@ -34,7 +34,7 @@ export default async function DashboardLayout({
             <div className="text-base font-bold tracking-tight text-sidebar-foreground">
               SAEC ERP
             </div>
-            <div className="text-[11px] text-white/60">
+            <div className="text-xs text-white/60">
               Enterprise Suite
             </div>
           </div>
@@ -57,7 +57,7 @@ export default async function DashboardLayout({
               <p className="truncate text-sm font-medium text-white">
                 {session.user?.name ?? "User"}
               </p>
-              <p className="truncate text-[11px] text-white/60">
+              <p className="truncate text-xs text-white/60">
                 {session.user?.email}
               </p>
             </div>

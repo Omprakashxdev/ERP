@@ -191,7 +191,7 @@ export function AssetsTable({
                         {row.assignee || "—"}
                       </span>
                       {row.assigneeType && (
-                        <span className="text-[10px] text-zinc-400">
+                        <span className="text-xs text-zinc-500">
                           {formatEnum(row.assigneeType)}
                         </span>
                       )}
@@ -227,7 +227,7 @@ export function AssetsTable({
                         </a>
                       </span>
                     ) : (
-                      <span className="text-xs text-zinc-400">No doc</span>
+                      <span className="text-xs text-zinc-500">No doc</span>
                     )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
