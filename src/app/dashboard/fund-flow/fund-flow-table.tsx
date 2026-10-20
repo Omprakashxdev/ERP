@@ -3,6 +3,7 @@
 import { useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { Decimal } from "@prisma/client/runtime/library";
+import { formatMoney } from "@/lib/format-money";
 import {
   ProjectStatus,
   ProjectRole,
@@ -57,25 +58,6 @@ function formatDate(value: Date | string | null | undefined): string {
     month: "short",
     year: "numeric",
   });
-}
-
-function formatMoney(
-  value: Decimal | string | number | null | undefined,
-  maxDecimals = 2
-): string {
-  if (value === null || value === undefined) return "—";
-  const s = String(value);
-  // String-based fractional formatting to preserve Decimal(23,6) values
-  // without Number() precision loss on large magnitudes.
-  const negative = s.startsWith("-");
-  const [intStr, fracStr = ""] = (negative ? s.slice(1) : s).split(".");
-  const frac = fracStr.length <= 2 ? fracStr.padEnd(2, "0") : fracStr.slice(0, maxDecimals);
-  const intDigits = intStr.replace(/^0+/, "") || "0";
-  const grouped =
-    intDigits.length <= 3
-      ? intDigits
-      : `${intDigits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",")},${intDigits.slice(-3)}`;
-  return `${negative ? "-" : ""}₹${grouped}.${frac}`;
 }
 
 function formatMonths(value: Decimal | string | number | null | undefined): string {
