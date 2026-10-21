@@ -128,7 +128,6 @@ function getInitialForm(project?: FundFlowWithComputed) {
       stipulatedCompletionDate: "",
       targetCompletionDate: "",
       estimatedCost: "",
-      totalFee: "",
       status: ProjectStatus.ACTIVE,
       workType: "",
       serviceType: "",
@@ -148,7 +147,6 @@ function getInitialForm(project?: FundFlowWithComputed) {
     stipulatedCompletionDate: toInputDate(project.stipulatedCompletionDate),
     targetCompletionDate: toInputDate(project.targetCompletionDate),
     estimatedCost: toMoneyString(project.estimatedCost),
-    totalFee: toHighPrecisionMoneyString(project.totalFee),
     status: project.status,
     workType: project.workType,
     serviceType: project.serviceType,
@@ -302,7 +300,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
       prev.map((row, i) => {
         if (i !== index) return row;
         const next = { ...row, ...patch };
-        const totalFeeNum = parseFloat(form.totalFee);
+        const totalFeeNum = parseFloat(project?.totalFee?.toString() ?? "");
         if (!isNaN(totalFeeNum) && totalFeeNum > 0) {
           if ("percentage" in patch && patch.percentage !== undefined && patch.percentage !== "") {
             const pct = parseFloat(patch.percentage);
@@ -339,7 +337,6 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
       stipulatedCompletionDate: shownStipulatedDate || null,
       targetCompletionDate: shownTargetDate || null,
       estimatedCost: form.estimatedCost || undefined,
-      totalFee: form.totalFee || undefined,
       status: form.status,
       workType: form.workType,
       serviceType: form.serviceType,
@@ -690,16 +687,6 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="totalFee">Total fee (₹)</Label>
-                    <Input
-                      id="totalFee"
-                      type="number"
-                      step="0.000001"
-                      value={form.totalFee}
-                      onChange={(e) => updateField("totalFee", e.target.value)}
-                    />
-                  </div>
                 </div>
               </TabsContent>
 
@@ -930,7 +917,9 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                         <div className="text-zinc-500">
                           Project Total Fee:{" "}
                           <span className="font-mono font-medium text-zinc-800">
-                            ₹{formatHighPrecisionMoney(form.totalFee || "0")}
+                            ₹{formatHighPrecisionMoney(
+                              project?.totalFee?.toString() || "0"
+                            )}
                           </span>
                         </div>
                       </div>

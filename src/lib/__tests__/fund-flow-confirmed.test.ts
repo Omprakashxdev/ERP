@@ -60,6 +60,15 @@ describe("confirmed Fund Flow calculations", () => {
     expect(computeRemainingFee("49.9994", 10).toString()).toBe("39.9994");
   });
 
+  it("second example: 22000 × 0.2% = 44.00 → 18 × 2.444444", () => {
+    expect(computeTotalFee(22000, "0.2").toString()).toBe("44");
+    expect(computeRemainingFee("44", 0).toString()).toBe("44");
+    const m = computeMonthlyDistribution("44", 18);
+    expect(m.toString()).toBe("2.444444"); // 44/18 = 2.4444444… → 6dp
+    const residual = new Decimal("44").minus(m.mul(18));
+    expect(residual.toString()).toBe("0.000008");
+  });
+
   it("monthly distribution = remaing fee ÷ Target TL, 6dp", () => {
     const m = computeMonthlyDistribution("49.9994", 18);
     // 49.9994/18 = 2.777744444… → 2.777744

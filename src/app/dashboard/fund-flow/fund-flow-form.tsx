@@ -204,11 +204,6 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
   const [monthlySaving, setMonthlySaving] = useState(false);
 
   // Monthly income plan (Phase 1) state
-  type PlanMethod =
-    | PlanBasis
-    | "REMAINING_FIRST"
-    | "RECEIVED_THEN_REMAINDER";
-  const [planMethod, setPlanMethod] = useState<PlanMethod>("REMAINING_FEE");
   const [planInstallments, setPlanInstallments] = useState(() =>
     String(project.targetTimeLimitMonths ?? "18")
   );
@@ -398,12 +393,10 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
   function planInput() {
     const [startYear, startMonth] = planStart.split("-").map(Number);
-    const isSchedule =
-      planMethod === "REMAINING_FIRST" || planMethod === "RECEIVED_THEN_REMAINDER";
     return {
       projectId: project.id,
-      basis: (isSchedule ? "TOTAL_FEE" : planMethod) as PlanBasis,
-      schedule: isSchedule ? planMethod : "EVEN",
+      basis: "REMAINING_FEE" as PlanBasis,
+      schedule: "EVEN",
       installments: Math.max(1, Math.min(24, Number(planInstallments) || 1)),
       startMonth,
       startYear,
@@ -411,11 +404,61 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     };
   }
 
+  // The monthly plan must reflect SAVED figures — the preview reads the
+  // persisted Fund Flow record, so any unsaved financial edit would
+  // silently generate a schedule from stale values.
+  const unsavedFinancialChanges = useMemo(() => {
+    const ff = project.fundFlow;
+    const num = (v: string) => {
+      const t = v.trim();
+      return /^\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+    };
+    const moneyKeys = [
+      "teamLeaderExp",
+      "residentialEngineerExp",
+      "designEngineerExp",
+      "siteEngineerExp",
+      "miscExp",
+      "totalProjectCost",
+      "completedWorkAmt",
+      "proposedDueBillAmount",
+      "feeReceived",
+    ] as const;
+    if (ff == null) {
+      return (
+        moneyKeys.some((k) => form[k].trim() !== "") ||
+        form.feePercentage.trim() !== "" ||
+        form.startMonth.trim() !== ""
+      );
+    }
+    for (const k of moneyKeys) {
+      const formV = num(form[k]) ?? 0;
+      const storedV = Number(toMoneyString(ff[k])) || 0;
+      if (Math.abs(formV - storedV) > 1e-9) return true;
+    }
+    const pct = form.feePercentage.trim();
+    const formPct = pct === "" ? null : Number(pct);
+    const storedPct = ff.feePercentage == null ? null : Number(ff.feePercentage);
+    if (formPct !== storedPct) return true;
+    const storedStart =
+      ff.distributionStartYear != null && ff.distributionStartMonth != null
+        ? `${ff.distributionStartYear}-${ff.distributionStartMonth}`
+        : "";
+    if ((form.startMonth.trim() || "") !== storedStart) return true;
+    return false;
+  }, [form, project.fundFlow]);
+
   async function handlePreviewPlan() {
-    setPlanLoading(true);
     setPlanPreview(null);
     setPlanReplace({});
     setError("");
+    if (unsavedFinancialChanges) {
+      setError(
+        "Save the Fund Flow changes first — the monthly plan is generated from the saved remaining fee."
+      );
+      return;
+    }
+    setPlanLoading(true);
     try {
       const result = await previewMonthlyPlan(planInput());
       if (!result.success) {
@@ -881,47 +924,20 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             {/* Plan inputs */}
             <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-basis">How should it be spread?</Label>
-                  <select
-                    id="plan-basis"
-                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
-                    value={planMethod}
-                    onChange={(e) => {
-                      setPlanMethod(e.target.value as PlanMethod);
-                      setPlanPreview(null);
-                    }}
-                  >
-                    <option value="TOTAL_FEE">
-                      Total fee — same amount every month
-                    </option>
-                    <option value="REMAINING_FEE">
-                      Remaining fee — same amount every month
-                    </option>
-                    <option value="LEGACY_FEE_RECEIVED">
-                      Fee already received — same amount every month
-                    </option>
-                    <option value="REMAINING_FIRST">
-                      First month from remaining fee, rest from total fee
-                    </option>
-                    <option value="RECEIVED_THEN_REMAINDER">
-                      Fee received evenly, remainder in last month
-                    </option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-months">Number of months</Label>
-                  <Input
-                    id="plan-months"
-                    type="number"
-                    min={1}
-                    max={24}
-                    value={planInstallments}
-                    onChange={(e) => {
-                      setPlanInstallments(e.target.value);
-                      setPlanPreview(null);
-                    }}
-                  />
+                <div className="space-y-1.5 sm:col-span-2">
+                  <p className="text-sm text-zinc-500">
+                    remaing fee ÷ Target Time Limit (In Month):{" "}
+                    <span className="font-mono font-medium text-zinc-800">
+                      {formatDecimalAsCurrency(remainingFee)} ÷{" "}
+                      {planInstallments}
+                    </span>{" "}
+                    per month
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Remaining fee is split equally over the Target Time Limit
+                    (In Month) consecutive months from the selected start
+                    month.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="plan-start">Start month</Label>
