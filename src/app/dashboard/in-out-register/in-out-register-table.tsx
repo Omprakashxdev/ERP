@@ -16,7 +16,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InOutRegisterFilterInput } from "@/lib/schemas/in-out-register";
 import { InOutRegisterWithComputed } from "@/types/in-out-register";
-import { getInOutRegisterById } from "@/lib/actions/in-out-register";
+import {
+  getInOutRegisterById,
+  deleteInOutRegister,
+} from "@/lib/actions/in-out-register";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { InOutRegisterForm } from "./in-out-register-form";
 import {
   ChevronLeft,
@@ -28,6 +39,7 @@ import {
   ArrowUpRight,
   Send,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 
 interface InOutRegisterTableProps {
@@ -40,6 +52,7 @@ interface InOutRegisterTableProps {
   clients: { id: string; name: string; abbreviation: string | null }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
+  canDelete?: boolean;
 }
 
 function formatDate(value: Date | string | null | undefined): string {
@@ -66,6 +79,7 @@ export function InOutRegisterTable({
   clients,
   departments,
   staff,
+  canDelete,
 }: InOutRegisterTableProps) {
   const router = useRouter();
   const [selectedEntry, setSelectedEntry] =
@@ -80,6 +94,24 @@ export function InOutRegisterTable({
     department?: string | null;
     details?: string | null;
   } | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<InOutRegisterWithComputed | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const res = await deleteInOutRegister(deleteTarget.id);
+    setDeleting(false);
+    if (res.success) {
+      setDeleteTarget(null);
+      router.refresh();
+    } else {
+      setDeleteError(res.error ?? "Could not delete this entry.");
+    }
+  }
 
   const typedRows = rows as InOutRegisterWithComputed[];
 
@@ -401,6 +433,22 @@ export function InOutRegisterTable({
                       >
                         Edit
                       </Button>
+                      {canDelete && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2.5 text-red-700 border-red-200 hover:bg-red-50 hover:text-red-800"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteError(null);
+                            setDeleteTarget(row);
+                          }}
+                          title="Delete entry"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          Delete
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -468,6 +516,55 @@ export function InOutRegisterTable({
           }}
         />
       )}
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete register entry?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove entry{" "}
+              <span className="font-medium text-zinc-900">
+                {deleteTarget?.serialNo || deleteTarget?.documentRefNo || "—"}
+              </span>{" "}
+              ({deleteTarget?.direction === "OUTWARD" ? "Outward" : "Inward"} —
+              {" "}{deleteTarget?.details ? truncate(deleteTarget.details, 60) : "no details"}).
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              {deleteError}
+            </p>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Delete Entry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

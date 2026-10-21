@@ -153,6 +153,7 @@ export default async function InOutRegisterPage({
           clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
           departments={serialize(departments) as { id: string; name: string }[]}
           staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
+          canDelete={session.user.role === "ADMIN"}
         />
       ) : (
         <Card className="shadow-sm">
