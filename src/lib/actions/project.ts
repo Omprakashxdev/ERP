@@ -13,6 +13,7 @@ import {
   ProjectFilterInput,
 } from "@/lib/schemas/project";
 import { addExcelMonths } from "@/lib/date-utils";
+import { computeTotalFee } from "@/lib/fund-flow-calcs";
 import { withAuth, checkRateLimit, audit, sanitizeForAudit, ActionResult } from "./wrapper";
 
 const mutationRoles = [Role.ADMIN, Role.MANAGER];
@@ -121,7 +122,25 @@ export async function updateProject(
 ): Promise<ActionResult<{ id: string }>> {
   return withAuth(async (user) => {
     const parsed = projectUpdateSchema.parse(input);
-    const { id, assignments, feeStages, ...data } = parsed;
+    const { id, assignments, feeStages } = parsed;
+    // projectUpdateSchema derives via .partial(), but Zod keeps .default()
+    // values (estimatedCost/totalFee → 0.00, status → ACTIVE) — absent keys
+    // would be spread into the update and clobber stored values. Keep only
+    // keys the caller actually sent.
+    const data: Partial<Omit<typeof parsed, "id" | "assignments" | "feeStages">> =
+      {};
+    for (const k of Object.keys(input as Record<string, unknown>)) {
+      const key = k as keyof typeof data;
+      if (
+        (key as string) !== "id" &&
+        (key as string) !== "assignments" &&
+        (key as string) !== "feeStages" &&
+        parsed[key as keyof typeof parsed] !== undefined
+      ) {
+        (data as Record<string, unknown>)[key] =
+          parsed[key as keyof typeof parsed];
+      }
+    }
     await checkRateLimit(user.id);
 
     const project = await prisma.$transaction(async (tx) => {
@@ -134,25 +153,40 @@ export async function updateProject(
       const timeLimitMonths =
         data.timeLimitMonths ?? existing.timeLimitMonths;
       const additionalTimeMonths =
-        data.additionalTimeMonths ?? existing.additionalTimeMonths;
+        data.additionalTimeMonths !== undefined
+          ? data.additionalTimeMonths
+          : existing.additionalTimeMonths;
+      // Recompute only when a date-driving input was supplied — an unrelated
+      // edit must not invent target dates for legacy records. No invented
+      // grace: NULL Grace period counts as 0, never TL×0.5.
+      const datesTouched =
+        data.workOrderDate !== undefined ||
+        data.timeLimitMonths !== undefined ||
+        data.additionalTimeMonths !== undefined;
       const targetTimeLimitMonths =
-        data.targetTimeLimitMonths ??
-        new Decimal(
-          (
-            timeLimitMonths.toNumber() +
-            (additionalTimeMonths?.toNumber() ?? timeLimitMonths.toNumber() * 0.5)
-          ).toFixed(4)
-        );
+        data.targetTimeLimitMonths !== undefined
+          ? data.targetTimeLimitMonths
+          : datesTouched
+            ? new Decimal(
+                (
+                  timeLimitMonths.toNumber() +
+                  (additionalTimeMonths?.toNumber() ?? 0)
+                ).toFixed(4)
+              )
+            : existing.targetTimeLimitMonths;
 
       const stipulatedCompletionDate =
         data.stipulatedCompletionDate ??
-        (data.workOrderDate || data.timeLimitMonths
+        (datesTouched
           ? addExcelMonths(workOrderDate, timeLimitMonths)
           : existing.stipulatedCompletionDate);
       const targetCompletionDate =
         data.targetCompletionDate ??
-        (data.workOrderDate || data.timeLimitMonths || data.additionalTimeMonths
-          ? addExcelMonths(workOrderDate, targetTimeLimitMonths)
+        (datesTouched
+          ? addExcelMonths(
+              workOrderDate,
+              targetTimeLimitMonths ?? timeLimitMonths
+            )
           : existing.targetCompletionDate);
 
       const updated = await tx.project.update({
@@ -196,6 +230,20 @@ export async function updateProject(
           where: { projectId: id },
           data: { totalProjectCost: data.estimatedCost },
         });
+        // Keep Total Fee consistent — Total Project Cost × stored Fee
+        // percentage / 100. Records without a percentage keep their fee.
+        const ff = await tx.fundFlow.findUnique({
+          where: { projectId: id },
+          select: { feePercentage: true },
+        });
+        if (ff?.feePercentage != null) {
+          await tx.project.update({
+            where: { id },
+            data: {
+              totalFee: computeTotalFee(data.estimatedCost, ff.feePercentage),
+            },
+          });
+        }
       }
 
       return updated;

@@ -17,6 +17,13 @@ vi.mock("../actions/wrapper", () => ({
       return { success: false, error: (e as Error).message };
     }
   },
+  withAuth: async (fn: (u: { id: string }) => unknown) => {
+    try {
+      return { success: true, data: await fn({ id: "int-test" }) };
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  },
   checkRateLimit: async () => {},
   audit: async () => {},
   sanitizeForAudit: async (v: unknown) => v,
@@ -25,6 +32,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
 import { prisma } from "@/lib/prisma";
 import { upsertFundFlow } from "../actions/fund-flow";
+import { updateProject } from "../actions/project";
 
 const SKIP = !process.env.RUN_INTEGRATION_TESTS;
 let regionId = "";
@@ -283,5 +291,93 @@ let projectId = "";
     });
     expect(rows.length).toBe(1);
     expect(rows[0].income.toString()).toBe("7.5");
+  });
+});
+
+(SKIP ? describe.skip : describe)("updateProject — no clobbering, no invented grace", () => {
+  let pId = "";
+  let pRegionId = "";
+  let pClientId = "";
+  beforeAll(async () => {
+    const region = await prisma.region.create({ data: { name: "FF UP-Test Region" } });
+    pRegionId = region.id;
+    const client = await prisma.client.create({ data: { name: "FF UP-Test Client", abbreviation: "UPC" } });
+    pClientId = client.id;
+    const project = await prisma.project.create({
+      data: {
+        regionId: region.id,
+        clientId: client.id,
+        name: "UP Legacy Project",
+        abbreviation: "UPLP",
+        workOrderDate: new Date("2019-01-15T00:00:00Z"),
+        timeLimitMonths: 12,
+        additionalTimeMonths: null,      // NULL grace — legacy
+        targetTimeLimitMonths: null,     // NULL legacy target TL
+        stipulatedCompletionDate: null,  // NULL legacy dates
+        targetCompletionDate: null,
+        estimatedCost: "8000000",
+        totalFee: "11800.000000",
+        workType: "BUILDING",
+        serviceType: "SUPERVISION",
+        fundFlow: {
+          create: {
+            staffExp: "2000.00",
+            miscExp: "500.00",
+            totalProjectCost: "2500.00",
+            feeReceived: "11800.00",
+          },
+        },
+      },
+    });
+    pId = project.id;
+  });
+  afterAll(async () => {
+    await prisma.project.delete({ where: { id: pId } }).catch(() => {});
+    await prisma.client.delete({ where: { id: pClientId } }).catch(() => {});
+    await prisma.region.delete({ where: { id: pRegionId } }).catch(() => {});
+  });
+
+  it("unrelated edit preserves totalFee, estimatedCost, NULL grace and dates", async () => {
+    const res = await updateProject({ id: pId, address: "New address" } as never);
+    expect(res.success).toBe(true);
+    const p = await prisma.project.findUnique({ where: { id: pId } });
+    expect(p!.totalFee.toString()).toBe("11800");
+    expect(p!.estimatedCost.toString()).toBe("8000000");
+    expect(p!.additionalTimeMonths).toBeNull();          // NULL grace preserved — no invented 0.5×
+    expect(p!.targetTimeLimitMonths).toBeNull();          // no invented target TL
+    expect(p!.stipulatedCompletionDate).toBeNull();       // no invented dates
+    expect(p!.targetCompletionDate).toBeNull();
+    const ff = await prisma.fundFlow.findUnique({ where: { projectId: pId } });
+    expect(ff!.staffExp.toString()).toBe("2000");
+    expect(ff!.totalProjectCost.toString()).toBe("2500"); // no sync on absent estimatedCost
+  });
+
+  it("estimatedCost change syncs fundFlow cost AND recomputes fee from stored pct", async () => {
+    // first: set a stored Fee percentage via fund flow path
+    await prisma.fundFlow.update({
+      where: { projectId: pId },
+      data: { feePercentage: "0.22727" },
+    });
+    const res = await updateProject({ id: pId, estimatedCost: "11000" } as never);
+    expect(res.success).toBe(true);
+    const p = await prisma.project.findUnique({ where: { id: pId } });
+    const ff = await prisma.fundFlow.findUnique({ where: { projectId: pId } });
+    expect(ff!.totalProjectCost.toString()).toBe("11000");
+    // 11000 × 0.22727 / 100 = 24.9997 — never left stale
+    expect(p!.totalFee.toString()).toBe("24.9997");
+  });
+
+  it("Grace period edit recomputes dates via Excel method — no ×0.5 fallback", async () => {
+    const res = await updateProject({
+      id: pId,
+      additionalTimeMonths: "6",
+    } as never);
+    expect(res.success).toBe(true);
+    const p = await prisma.project.findUnique({ where: { id: pId } });
+    // TL 12 + grace 6 = 18 — NOT 12 + 6 (0.5×12) invented path
+    expect(p!.targetTimeLimitMonths.toString()).toBe("18");
+    // WO 2019-01-15 + 12×30.416d ≈ 2020-01-14 / +18×30.416d ≈ 2020-07-14
+    expect(p!.stipulatedCompletionDate).not.toBeNull();
+    expect(p!.targetCompletionDate).not.toBeNull();
   });
 });
