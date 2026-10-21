@@ -156,15 +156,27 @@ export async function updateProject(
         data.additionalTimeMonths !== undefined
           ? data.additionalTimeMonths
           : existing.additionalTimeMonths;
-      // Recompute only when a date-driving input was supplied — an unrelated
-      // edit must not invent target dates for legacy records. No invented
-      // grace: NULL Grace period counts as 0, never TL×0.5.
+      // Recompute only when a date-driving value actually CHANGED — the
+      // form submits all fields, so "was supplied" is meaningless; compare
+      // against stored values. An unchanged or unrelated save must not
+      // convert NULL legacy dates into computed ones. No invented grace:
+      // NULL Grace period counts as 0, never TL×0.5.
+      const decEq = (
+        a: Decimal | null | undefined,
+        b: Decimal | null | undefined
+      ) =>
+        a == null
+          ? b == null
+          : b != null && new Decimal(a.toString()).equals(b.toString());
       const datesTouched =
-        data.workOrderDate !== undefined ||
-        data.timeLimitMonths !== undefined ||
-        data.additionalTimeMonths !== undefined;
+        (data.workOrderDate !== undefined &&
+          data.workOrderDate.getTime() !== existing.workOrderDate.getTime()) ||
+        (data.timeLimitMonths !== undefined &&
+          !decEq(data.timeLimitMonths, existing.timeLimitMonths)) ||
+        (data.additionalTimeMonths !== undefined &&
+          !decEq(data.additionalTimeMonths, existing.additionalTimeMonths));
       const targetTimeLimitMonths =
-        data.targetTimeLimitMonths !== undefined
+        data.targetTimeLimitMonths != null
           ? data.targetTimeLimitMonths
           : datesTouched
             ? new Decimal(
@@ -176,18 +188,20 @@ export async function updateProject(
             : existing.targetTimeLimitMonths;
 
       const stipulatedCompletionDate =
-        data.stipulatedCompletionDate ??
-        (datesTouched
-          ? addExcelMonths(workOrderDate, timeLimitMonths)
-          : existing.stipulatedCompletionDate);
+        data.stipulatedCompletionDate != null
+          ? data.stipulatedCompletionDate
+          : datesTouched
+            ? addExcelMonths(workOrderDate, timeLimitMonths)
+            : existing.stipulatedCompletionDate;
       const targetCompletionDate =
-        data.targetCompletionDate ??
-        (datesTouched
-          ? addExcelMonths(
-              workOrderDate,
-              targetTimeLimitMonths ?? timeLimitMonths
-            )
-          : existing.targetCompletionDate);
+        data.targetCompletionDate != null
+          ? data.targetCompletionDate
+          : datesTouched
+            ? addExcelMonths(
+                workOrderDate,
+                targetTimeLimitMonths ?? timeLimitMonths
+              )
+            : existing.targetCompletionDate;
 
       const updated = await tx.project.update({
         where: { id },

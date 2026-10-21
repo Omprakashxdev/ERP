@@ -367,6 +367,50 @@ let projectId = "";
     expect(p!.totalFee.toString()).toBe("24.9997");
   });
 
+  it("full-payload unchanged save (as the real form sends) preserves everything", async () => {
+    // Simulate the form: every field submitted, none changed.
+    const before = await prisma.project.findUnique({ where: { id: pId } });
+    const res = await updateProject({
+      id: pId,
+      clientId: before!.clientId,
+      name: before!.name,
+      abbreviation: before!.abbreviation,
+      address: before!.address,
+      agreementDate: before!.agreementDate?.toISOString(),
+      workOrderDate: before!.workOrderDate.toISOString(),
+      timeLimitMonths: before!.timeLimitMonths.toString(),
+      additionalTimeMonths: null, // NULL grace echoed back
+      targetTimeLimitMonths: null, // NULL echoed back
+      stipulatedCompletionDate: null,
+      targetCompletionDate: null,
+      estimatedCost: before!.estimatedCost.toString(),
+      status: before!.status,
+      workType: before!.workType,
+      serviceType: before!.serviceType,
+    } as never);
+    expect(res.success).toBe(true);
+    const p = await prisma.project.findUnique({ where: { id: pId } });
+    expect(p!.totalFee.toString()).toBe(before!.totalFee.toString());
+    expect(p!.estimatedCost.toString()).toBe(before!.estimatedCost.toString());
+    expect(p!.additionalTimeMonths).toBeNull();
+    expect(p!.targetTimeLimitMonths).toBeNull();
+    expect(p!.stipulatedCompletionDate).toBeNull(); // NOT converted to computed
+    expect(p!.targetCompletionDate).toBeNull();
+  });
+
+  it("changing Date of Work Order recomputes dates via the Excel method", async () => {
+    const res = await updateProject({
+      id: pId,
+      workOrderDate: "2026-04-01T00:00:00Z",
+    } as never);
+    expect(res.success).toBe(true);
+    const p = await prisma.project.findUnique({ where: { id: pId } });
+    // TL 12, NULL grace → stipulated = target ≈ 2027-03-31, targetTL 12
+    expect(p!.stipulatedCompletionDate!.toISOString().slice(0, 10)).toBe("2027-03-31");
+    expect(p!.targetCompletionDate!.toISOString().slice(0, 10)).toBe("2027-03-31");
+    expect(p!.targetTimeLimitMonths!.toString()).toBe("12");
+  });
+
   it("Grace period edit recomputes dates via Excel method — no ×0.5 fallback", async () => {
     const res = await updateProject({
       id: pId,
@@ -375,7 +419,7 @@ let projectId = "";
     expect(res.success).toBe(true);
     const p = await prisma.project.findUnique({ where: { id: pId } });
     // TL 12 + grace 6 = 18 — NOT 12 + 6 (0.5×12) invented path
-    expect(p!.targetTimeLimitMonths.toString()).toBe("18");
+    expect(p!.targetTimeLimitMonths!.toString()).toBe("18");
     // WO 2019-01-15 + 12×30.416d ≈ 2020-01-14 / +18×30.416d ≈ 2020-07-14
     expect(p!.stipulatedCompletionDate).not.toBeNull();
     expect(p!.targetCompletionDate).not.toBeNull();
