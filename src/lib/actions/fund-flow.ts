@@ -14,36 +14,174 @@ import {
   reconcileProject,
   ReconciliationSourceRecords,
 } from "@/lib/fund-flow/reconciliation";
+import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
+import {
+  computeStaffExp,
+  computeTotalFee,
+  computeMonthlyDistribution,
+} from "@/lib/fund-flow-calcs";
 import { withPermission, checkRateLimit, audit, sanitizeForAudit, ActionResult } from "./wrapper";
+
+const windowKeys = new Set(
+  MONTHLY_ALLOCATION_WINDOW.map((m) => `${m.year}-${m.month}`)
+);
 
 export async function upsertFundFlow(
   input: FundFlowUpdateInput
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{
+  id: string;
+  createdAllocations?: number;
+  skippedOutsideWindow?: number;
+  roundingResidual?: string;
+}>> {
   return withPermission("fundFlow", "update", async (user) => {
     const parsed = fundFlowUpdateSchema.parse(input);
     const { projectId, ...data } = parsed;
     await checkRateLimit(user.id);
 
-    const fundFlow = await prisma.fundFlow.upsert({
-      where: { projectId },
-      create: {
-        projectId,
-        miscExp: data.miscExp ?? new Decimal("0.00"),
-        staffExp: data.staffExp ?? new Decimal("0.00"),
-        totalProjectCost: data.totalProjectCost ?? new Decimal("0.00"),
-        completedWorkAmt: data.completedWorkAmt ?? new Decimal("0.00"),
-        proposedDueBillAmount: data.proposedDueBillAmount ?? new Decimal("0.00"),
-        feeReceived: data.feeReceived ?? new Decimal("0.00"),
-      },
-      update: data,
+    const result = await prisma.$transaction(async (tx) => {
+      // Staff Exp. is recomputed server-side from its five confirmed
+      // component fields whenever any component is supplied — never trust a
+      // client-supplied total. When no component is touched, preserve the
+      // stored total (legacy records predate the component fields).
+      const existing = await tx.fundFlow.findUnique({
+        where: { projectId },
+        include: { monthlyData: true },
+      });
+      const merged = { ...(existing ?? {}), ...data } as typeof data;
+      const componentKeys = [
+        "teamLeaderExp",
+        "residentialEngineerExp",
+        "designEngineerExp",
+        "siteEngineerExp",
+        "miscExp",
+      ] as const;
+      const componentsProvided = componentKeys.some((k) => data[k] !== undefined);
+      const staffExp = componentsProvided
+        ? computeStaffExp({
+            teamLeaderExp: merged.teamLeaderExp ?? 0,
+            residentialEngineerExp: merged.residentialEngineerExp ?? 0,
+            designEngineerExp: merged.designEngineerExp ?? 0,
+            siteEngineerExp: merged.siteEngineerExp ?? 0,
+            miscExp: merged.miscExp ?? 0,
+          })
+        : existing
+          ? existing.staffExp
+          : (data.staffExp ?? new Decimal("0.00"));
+
+      const { distributionStartMonth, distributionStartYear, feePercentage, ...rest } = data;
+      const fundFlow = await tx.fundFlow.upsert({
+        where: { projectId },
+        create: {
+          projectId,
+          miscExp: merged.miscExp ?? new Decimal("0.00"),
+          staffExp,
+          teamLeaderExp: merged.teamLeaderExp ?? new Decimal("0.00"),
+          residentialEngineerExp: merged.residentialEngineerExp ?? new Decimal("0.00"),
+          designEngineerExp: merged.designEngineerExp ?? new Decimal("0.00"),
+          siteEngineerExp: merged.siteEngineerExp ?? new Decimal("0.00"),
+          totalProjectCost: merged.totalProjectCost ?? new Decimal("0.00"),
+          completedWorkAmt: merged.completedWorkAmt ?? new Decimal("0.00"),
+          feePercentage: feePercentage ?? null,
+          proposedDueBillAmount: merged.proposedDueBillAmount ?? new Decimal("0.00"),
+          feeReceived: merged.feeReceived ?? new Decimal("0.00"),
+          distributionStartMonth: distributionStartMonth ?? null,
+          distributionStartYear: distributionStartYear ?? null,
+        },
+        update: {
+          ...rest,
+          staffExp,
+          ...(feePercentage !== undefined ? { feePercentage } : {}),
+          ...(distributionStartMonth !== undefined ? { distributionStartMonth } : {}),
+          ...(distributionStartYear !== undefined ? { distributionStartYear } : {}),
+        },
+      });
+
+      // Total Fee = Total Project Cost × Fee percentage / 100 — synced onto
+      // Project.totalFee only when the percentage is provided. Legacy
+      // records without a percentage keep their stored Total Fee.
+      if (feePercentage != null) {
+        const totalFee = computeTotalFee(fundFlow.totalProjectCost, feePercentage);
+        await tx.project.update({
+          where: { id: projectId },
+          data: { totalFee },
+        });
+      }
+
+      // Initial remaing-fee distribution: only when the employee picked a
+      // Start month, no saved allocations exist yet, and there is a
+      // remaining fee to spread over Target Time Limit (In Month).
+      let createdAllocations = 0;
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { targetTimeLimitMonths: true },
+      });
+      const startM = fundFlow.distributionStartMonth;
+      const startY = fundFlow.distributionStartYear;
+      const targetTl = project?.targetTimeLimitMonths;
+      const existingCount = existing?.monthlyData.length ?? 0;
+      if (
+        startM != null && startY != null && existingCount === 0 &&
+        targetTl != null && targetTl.gt(0)
+      ) {
+        const totalFee = (await tx.project.findUnique({
+          where: { id: projectId },
+          select: { totalFee: true },
+        }))!.totalFee;
+        const remainingFee = new Decimal(totalFee.toString()).minus(
+          fundFlow.feeReceived.toString()
+        );
+        if (remainingFee.gt(0)) {
+          const perMonth = computeMonthlyDistribution(
+            remainingFee,
+            targetTl.toNumber()
+          );
+          let cursor = { y: startY, m: startM };
+          const n = Math.floor(targetTl.toNumber());
+          let skippedOutside = 0;
+          for (let i = 0; i < n; i++) {
+            if (windowKeys.has(`${cursor.y}-${cursor.m}`)) {
+              await tx.fundFlowMonthly.create({
+                data: {
+                  fundFlowId: fundFlow.id,
+                  month: cursor.m,
+                  year: cursor.y,
+                  income: perMonth,
+                },
+              });
+              createdAllocations++;
+            } else {
+              skippedOutside++;
+            }
+            cursor = cursor.m === 12 ? { y: cursor.y + 1, m: 1 } : { y: cursor.y, m: cursor.m + 1 };
+          }
+          // Rounding residual of the full plan (perMonth rounded to 6dp × n),
+          // reported separately from months skipped outside the window.
+          const residual = remainingFee.minus(perMonth.mul(n));
+          return {
+            fundFlow,
+            createdAllocations,
+            skippedOutside,
+            roundingResidual: residual.toString(),
+          };
+        }
+      }
+
+      return { fundFlow, createdAllocations };
     });
 
-    await audit(user.id, "upsert", "FundFlow", fundFlow.id, {
+    await audit(user.id, "upsert", "FundFlow", result.fundFlow.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
     revalidatePath("/dashboard/fund-flow");
-    return { id: fundFlow.id };
+    return {
+      id: result.fundFlow.id,
+      createdAllocations: result.createdAllocations,
+      skippedOutsideWindow: (result as { skippedOutside?: number }).skippedOutside ?? 0,
+      roundingResidual:
+        (result as { roundingResidual?: string }).roundingResidual ?? "0",
+    };
   });
 }
 

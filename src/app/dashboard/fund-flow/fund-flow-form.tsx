@@ -106,6 +106,37 @@ function addDecimals(a: string, b: string): string {
   return fracLen > 0 ? `${intPart}.${fracPart}` : intPart;
 }
 
+/** Multiply two non-negative decimal strings exactly (BigInt, string output). */
+function multiplyDecimals(a: string, b: string): string {
+  const parse = (v: string) => {
+    const s = /^\d+(\.\d+)?$/.test(v) ? v : "0";
+    const [i, f = ""] = s.split(".");
+    return { i, f };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  const scale = pa.f.length + pb.f.length;
+  const ai = BigInt(pa.i + pa.f) * BigInt(pb.i + pb.f);
+  const raw = ai.toString().padStart(scale + 1, "0");
+  const intPart = raw.slice(0, raw.length - scale);
+  const fracPart = raw.slice(raw.length - scale).replace(/0+$/, "");
+  return fracPart === "" ? intPart : `${intPart}.${fracPart}`;
+}
+
+/** Divide a non-negative decimal string by 100 exactly (string output).
+    a = D / 10^|f|  →  a/100 = D / 10^(|f|+2), so shift the point two places left. */
+function divideDecimalBy100(a: string): string {
+  const s = /^\d+(\.\d+)?$/.test(a) ? a : "0";
+  const [i, f = ""] = s.split(".");
+  const all = i + f;
+  const L = Math.max(all.length, f.length + 3);
+  const padded = all.padStart(L, "0");
+  const point = L - f.length - 2;
+  const intOut = (padded.slice(0, point) || "0").replace(/^0+/, "") || "0";
+  const fracOut = padded.slice(point).replace(/0+$/, "");
+  return fracOut === "" ? intOut : `${intOut}.${fracOut}`;
+}
+
 /** Format a decimal-string as Indian-locale currency without Number() precision loss.
     Preserves up to 6 fractional digits (DECIMAL(23,6) allocation values). */
 function formatDecimalAsCurrency(value: unknown): string {
@@ -129,16 +160,32 @@ function formatDecimalAsCurrency(value: unknown): string {
 export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) {
   const router = useRouter();
   const [form, setForm] = useState({
+    teamLeaderExp: toMoneyString(project.fundFlow?.teamLeaderExp),
+    residentialEngineerExp: toMoneyString(
+      project.fundFlow?.residentialEngineerExp
+    ),
+    designEngineerExp: toMoneyString(project.fundFlow?.designEngineerExp),
+    siteEngineerExp: toMoneyString(project.fundFlow?.siteEngineerExp),
     miscExp: toMoneyString(project.fundFlow?.miscExp),
-    staffExp: toMoneyString(project.fundFlow?.staffExp),
     totalProjectCost: toMoneyString(
       project.fundFlow?.totalProjectCost ?? project.estimatedCost
     ),
     completedWorkAmt: toMoneyString(project.fundFlow?.completedWorkAmt),
+    feePercentage:
+      project.fundFlow?.feePercentage != null
+        ? String(project.fundFlow.feePercentage)
+        : "",
     proposedDueBillAmount: toMoneyString(
       project.fundFlow?.proposedDueBillAmount
     ),
     feeReceived: toMoneyString(project.fundFlow?.feeReceived),
+    startMonth:
+      project.fundFlow?.distributionStartYear != null &&
+      project.fundFlow?.distributionStartMonth != null
+        ? `${project.fundFlow.distributionStartYear}-${String(
+            project.fundFlow.distributionStartMonth
+          ).padStart(2, "0")}`
+        : "",
   });
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
@@ -161,11 +208,17 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     | PlanBasis
     | "REMAINING_FIRST"
     | "RECEIVED_THEN_REMAINDER";
-  const [planMethod, setPlanMethod] = useState<PlanMethod>("TOTAL_FEE");
-  const [planInstallments, setPlanInstallments] = useState("18");
-  const [planStart, setPlanStart] = useState(
-    `${MONTHLY_ALLOCATION_WINDOW[0].year}-${MONTHLY_ALLOCATION_WINDOW[0].month}`
+  const [planMethod, setPlanMethod] = useState<PlanMethod>("REMAINING_FEE");
+  const [planInstallments, setPlanInstallments] = useState(() =>
+    String(project.targetTimeLimitMonths ?? "18")
   );
+  const [planStart, setPlanStart] = useState(() => {
+    const sm = project.fundFlow?.distributionStartMonth;
+    const sy = project.fundFlow?.distributionStartYear;
+    return sy != null && sm != null
+      ? `${sy}-${sm}`
+      : `${MONTHLY_ALLOCATION_WINDOW[0].year}-${MONTHLY_ALLOCATION_WINDOW[0].month}`;
+  });
   const [planPreview, setPlanPreview] = useState<MonthlyPlanPreview | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
@@ -242,14 +295,37 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     return total - completed;
   }, [form.totalProjectCost, form.completedWorkAmt]);
 
+  // Staff Exp. = Team Leader/PM + Residential + Design + Site + Misc (string-sum)
+  const staffExpTotal = useMemo(() => {
+    let t = "0";
+    for (const k of [
+      "teamLeaderExp",
+      "residentialEngineerExp",
+      "designEngineerExp",
+      "siteEngineerExp",
+      "miscExp",
+    ] as const) {
+      const v = form[k].trim();
+      if (/^\d+(\.\d+)?$/.test(v)) t = addDecimals(t, v);
+    }
+    return t;
+  }, [form]);
+
+  // Total Fee = Total Project Cost × Fee percentage / 100 — exact
+  // string-decimal preview; the server recomputes and stores the Decimal.
+  const totalFee = useMemo(() => {
+    const pct = form.feePercentage.trim();
+    if (!/^\d+(\.\d+)?$/.test(pct)) return String(project.totalFee ?? "0");
+    return divideDecimalBy100(multiplyDecimals(form.totalProjectCost || "0", pct));
+  }, [form.feePercentage, form.totalProjectCost, project.totalFee]);
+
   const remainingFee = useMemo(() => {
     // String-based decimal subtraction — totalFee is DECIMAL(23,6);
     // Number() loses precision beyond 15 significant digits.
-    const total = String(project.totalFee ?? "0");
     const rawReceived = form.feeReceived.trim() || "0";
     const received = /^-?\d+(\.\d+)?$/.test(rawReceived) ? rawReceived : "0";
-    return subtractDecimals(total, received);
-  }, [project.totalFee, form.feeReceived]);
+    return subtractDecimals(totalFee, received);
+  }, [totalFee, form.feeReceived]);
 
   function updateField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -414,14 +490,26 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     setError(null);
 
     try {
+      const [startY, startM] = form.startMonth
+        ? form.startMonth.split("-").map(Number)
+        : [null, null];
       const payload = {
         projectId: project.id,
+        teamLeaderExp: Number(form.teamLeaderExp) || 0,
+        residentialEngineerExp: Number(form.residentialEngineerExp) || 0,
+        designEngineerExp: Number(form.designEngineerExp) || 0,
+        siteEngineerExp: Number(form.siteEngineerExp) || 0,
         miscExp: Number(form.miscExp) || 0,
-        staffExp: Number(form.staffExp) || 0,
         totalProjectCost: Number(form.totalProjectCost) || 0,
         completedWorkAmt: Number(form.completedWorkAmt) || 0,
+        feePercentage:
+          form.feePercentage.trim() !== ""
+            ? Number(form.feePercentage)
+            : undefined,
         proposedDueBillAmount: Number(form.proposedDueBillAmount) || 0,
         feeReceived: Number(form.feeReceived) || 0,
+        distributionStartMonth: startM ?? undefined,
+        distributionStartYear: startY ?? undefined,
       };
 
       const result = await upsertFundFlow(
@@ -463,10 +551,50 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Workbook figures</h4>
+            <h4 className="text-sm font-medium">Staff Exp.</h4>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="miscExp">Misc exp (₹)</Label>
+              <Label htmlFor="teamLeaderExp">Team Leader/Project Manager (₹)</Label>
+              <Input
+                id="teamLeaderExp"
+                type="number"
+                step="0.01"
+                value={form.teamLeaderExp}
+                onChange={(e) => updateField("teamLeaderExp", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="residentialEngineerExp">Residential Engineer (₹)</Label>
+              <Input
+                id="residentialEngineerExp"
+                type="number"
+                step="0.01"
+                value={form.residentialEngineerExp}
+                onChange={(e) => updateField("residentialEngineerExp", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="designEngineerExp">Design Engineer (₹)</Label>
+              <Input
+                id="designEngineerExp"
+                type="number"
+                step="0.01"
+                value={form.designEngineerExp}
+                onChange={(e) => updateField("designEngineerExp", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="siteEngineerExp">Site Engineer (₹)</Label>
+              <Input
+                id="siteEngineerExp"
+                type="number"
+                step="0.01"
+                value={form.siteEngineerExp}
+                onChange={(e) => updateField("siteEngineerExp", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="miscExp">Misc Exp (₹)</Label>
               <Input
                 id="miscExp"
                 type="number"
@@ -475,20 +603,24 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 onChange={(e) => updateField("miscExp", e.target.value)}
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label htmlFor="staffExp">Staff exp (₹)</Label>
+              <Label htmlFor="staffExp">Staff Exp. (₹) — automatic</Label>
               <Input
                 id="staffExp"
-                type="number"
-                step="0.01"
-                value={form.staffExp}
-                onChange={(e) => updateField("staffExp", e.target.value)}
+                value={staffExpTotal}
+                disabled
+                readOnly
+                className="font-mono bg-zinc-50"
               />
             </div>
+          </div>
+          </div>
 
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Work amounts</h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="totalProjectCost">Total project cost (₹)</Label>
+              <Label htmlFor="totalProjectCost">Total Project Cost (₹)</Label>
               <Input
                 id="totalProjectCost"
                 type="number"
@@ -497,9 +629,8 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 onChange={(e) => updateField("totalProjectCost", e.target.value)}
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label htmlFor="completedWorkAmt">Completed work (₹)</Label>
+              <Label htmlFor="completedWorkAmt">completed work amt (₹)</Label>
               <Input
                 id="completedWorkAmt"
                 type="number"
@@ -508,9 +639,27 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 onChange={(e) => updateField("completedWorkAmt", e.target.value)}
               />
             </div>
+          </div>
+          </div>
 
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Fee</h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="proposedDueBillAmount">Proposed / due (₹)</Label>
+              <Label htmlFor="feePercentage">Fee percentage (%)</Label>
+              <Input
+                id="feePercentage"
+                type="number"
+                step="0.000001"
+                min="0"
+                max="100"
+                value={form.feePercentage}
+                onChange={(e) => updateField("feePercentage", e.target.value)}
+                placeholder="e.g. 0.22727"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="proposedDueBillAmount">Proposed / Due Bill Amount (₹)</Label>
               <Input
                 id="proposedDueBillAmount"
                 type="number"
@@ -519,17 +668,23 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 onChange={(e) => updateField("proposedDueBillAmount", e.target.value)}
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label htmlFor="feeReceived">
-                Legacy recorded received amount — unverified (₹)
-              </Label>
+              <Label htmlFor="feeReceived">fee recvd (₹)</Label>
               <Input
                 id="feeReceived"
                 type="number"
                 step="0.01"
                 value={form.feeReceived}
                 onChange={(e) => updateField("feeReceived", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="startMonth">Start month</Label>
+              <Input
+                id="startMonth"
+                type="month"
+                value={form.startMonth}
+                onChange={(e) => updateField("startMonth", e.target.value)}
               />
             </div>
           </div>
@@ -539,9 +694,9 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
           <div className="space-y-2">
             <h4 className="text-sm font-medium">Calculated (read-only)</h4>
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
             <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">Remaining work</p>
+              <p className="text-xs text-zinc-500">remaining work amt</p>
               <p className="font-mono font-medium">
                 ₹{remainingWorkAmt.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
@@ -550,7 +705,13 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
               </p>
             </div>
             <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">Legacy remaining fee — unverified</p>
+              <p className="text-xs text-zinc-500">Total Fee</p>
+              <p className="font-mono font-medium">
+                {formatDecimalAsCurrency(totalFee)}
+              </p>
+            </div>
+            <div className="rounded-md bg-zinc-50 p-3">
+              <p className="text-xs text-zinc-500">remaing fee</p>
               <p className="font-mono font-medium">
                 {formatDecimalAsCurrency(remainingFee)}
               </p>

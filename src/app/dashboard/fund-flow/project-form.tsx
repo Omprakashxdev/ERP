@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ProjectStatus,
@@ -174,6 +174,14 @@ function getInitialFeeStages(project?: FundFlowWithComputed): FeeStageRow[] {
   }));
 }
 
+/** Excel Fund Flow method: WO + (months × 30.416 days), truncated to date. */
+function excelDatePlusMonths(dateStr: string, months: number): string {
+  if (!dateStr || !Number.isFinite(months)) return "";
+  const base = new Date(`${dateStr}T00:00:00Z`);
+  const shifted = new Date(base.getTime() + months * 30.416 * 86400000);
+  return shifted.toISOString().slice(0, 10);
+}
+
 export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormProps) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -186,6 +194,40 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
   const [masterLoading, setMasterLoading] = useState(true);
 
   const [form, setForm] = useState(() => getInitialForm(project));
+  const [initialForm] = useState(() => getInitialForm(project));
+
+  // Automatic fields (Excel-confirmed): Grace period is manual;
+  // Target Time Limit = TL + Grace; both completion dates use the
+  // 30.416-days-per-month method. Recomputed only when the driver
+  // fields change — editing unrelated fields never re-dates history.
+  const driversChanged =
+    form.workOrderDate !== initialForm.workOrderDate ||
+    form.timeLimitMonths !== initialForm.timeLimitMonths ||
+    form.additionalTimeMonths !== initialForm.additionalTimeMonths;
+  const autoFields = useMemo(() => {
+    const tl = parseFloat(form.timeLimitMonths);
+    const grace = parseFloat(form.additionalTimeMonths || "0") || 0;
+    if (!form.workOrderDate || !Number.isFinite(tl)) return null;
+    const targetTl = tl + grace;
+    return {
+      targetTimeLimitMonths: String(Number(targetTl.toFixed(4))),
+      stipulatedCompletionDate: excelDatePlusMonths(form.workOrderDate, tl),
+      targetCompletionDate: excelDatePlusMonths(form.workOrderDate, targetTl),
+    };
+  }, [form.workOrderDate, form.timeLimitMonths, form.additionalTimeMonths]);
+
+  const shownTargetTimeLimit =
+    driversChanged && autoFields
+      ? autoFields.targetTimeLimitMonths
+      : form.targetTimeLimitMonths;
+  const shownStipulatedDate =
+    driversChanged && autoFields
+      ? autoFields.stipulatedCompletionDate
+      : form.stipulatedCompletionDate;
+  const shownTargetDate =
+    driversChanged && autoFields
+      ? autoFields.targetCompletionDate
+      : form.targetCompletionDate;
   const [assignments, setAssignments] = useState(() =>
     getInitialAssignments(project)
   );
@@ -293,9 +335,9 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
       workOrderDate: form.workOrderDate || null,
       timeLimitMonths: form.timeLimitMonths || undefined,
       additionalTimeMonths: form.additionalTimeMonths || null,
-      targetTimeLimitMonths: form.targetTimeLimitMonths || null,
-      stipulatedCompletionDate: form.stipulatedCompletionDate || null,
-      targetCompletionDate: form.targetCompletionDate || null,
+      targetTimeLimitMonths: shownTargetTimeLimit || null,
+      stipulatedCompletionDate: shownStipulatedDate || null,
+      targetCompletionDate: shownTargetDate || null,
       estimatedCost: form.estimatedCost || undefined,
       totalFee: form.totalFee || undefined,
       status: form.status,
@@ -537,7 +579,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="workOrderDate">Work order date</Label>
+                    <Label htmlFor="workOrderDate">Date of Work Order</Label>
                     <Input
                       id="workOrderDate"
                       type="date"
@@ -563,7 +605,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
                   <div className="space-y-1.5">
                     <Label htmlFor="timeLimitMonths">
-                      Time limit (months)
+                      Time Limit (in Month)
                     </Label>
                     <Input
                       id="timeLimitMonths"
@@ -579,7 +621,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
                   <div className="space-y-1.5">
                     <Label htmlFor="additionalTimeMonths">
-                      Additional time (months)
+                      Grace period (months)
                     </Label>
                     <Input
                       id="additionalTimeMonths"
@@ -594,47 +636,44 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
                   <div className="space-y-1.5">
                     <Label htmlFor="targetTimeLimitMonths">
-                      Target time limit (months)
+                      Target Time Limit (In Month) — automatic
                     </Label>
                     <Input
                       id="targetTimeLimitMonths"
                       type="number"
                       step="0.01"
-                      value={form.targetTimeLimitMonths}
-                      onChange={(e) =>
-                        handleNumberInput(
-                          "targetTimeLimitMonths",
-                          e.target.value
-                        )
-                      }
+                      value={shownTargetTimeLimit}
+                      readOnly
+                      disabled
+                      className="font-mono bg-zinc-50"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="stipulatedCompletionDate">
-                      Stipulated completion
+                      Stipulated Date of Completion — automatic
                     </Label>
                     <Input
                       id="stipulatedCompletionDate"
                       type="date"
-                      value={form.stipulatedCompletionDate}
-                      onChange={(e) =>
-                        updateField("stipulatedCompletionDate", e.target.value)
-                      }
+                      value={shownStipulatedDate}
+                      readOnly
+                      disabled
+                      className="font-mono bg-zinc-50"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="targetCompletionDate">
-                      Target completion
+                      Target Date of Completion — automatic
                     </Label>
                     <Input
                       id="targetCompletionDate"
                       type="date"
-                      value={form.targetCompletionDate}
-                      onChange={(e) =>
-                        updateField("targetCompletionDate", e.target.value)
-                      }
+                      value={shownTargetDate}
+                      readOnly
+                      disabled
+                      className="font-mono bg-zinc-50"
                     />
                   </div>
 

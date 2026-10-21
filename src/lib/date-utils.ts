@@ -16,6 +16,28 @@ export function addMonths(date: Date, months: Decimal): Date {
   return result;
 }
 
+/**
+ * Customer-confirmed Fund Flow date method: Date of Work Order +
+ * (months × 30.416 days), fractional part truncated to the calendar date
+ * (matches the Excel serial-float behaviour in the Fund Flow sheet).
+ * e.g. 2026-04-01 + 12 × 30.416d → 2027-03-31; + 18 × 30.416d → 2027-09-30.
+ */
+const EXCEL_DAYS_PER_MONTH = 30.416;
+
+export function addExcelMonths(date: Date, months: Decimal | number): Date {
+  const value = typeof months === "number" ? months : months.toNumber();
+  const shifted = new Date(
+    date.getTime() + value * EXCEL_DAYS_PER_MONTH * 24 * 60 * 60 * 1000
+  );
+  return new Date(
+    Date.UTC(
+      shifted.getUTCFullYear(),
+      shifted.getUTCMonth(),
+      shifted.getUTCDate()
+    )
+  );
+}
+
 export const IST_TIMEZONE = "Asia/Kolkata";
 
 /**

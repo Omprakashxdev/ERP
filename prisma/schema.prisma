@@ -721,10 +721,21 @@ model FundFlow {
   projectId             String   @unique
   miscExp               Decimal  @db.Decimal(19, 2) @default("0.00")
   staffExp              Decimal  @db.Decimal(19, 2) @default("0.00")
+  // Staff Exp. component fields (Excel Fund Flow cols I–L) — staffExp is
+  // their computed sum including miscExp (Excel col N = I+J+K+L+M).
+  teamLeaderExp         Decimal  @db.Decimal(19, 2) @default("0.00")
+  residentialEngineerExp Decimal @db.Decimal(19, 2) @default("0.00")
+  designEngineerExp     Decimal  @db.Decimal(19, 2) @default("0.00")
+  siteEngineerExp       Decimal  @db.Decimal(19, 2) @default("0.00")
   totalProjectCost      Decimal  @db.Decimal(19, 2) @default("0.00")
   completedWorkAmt      Decimal  @db.Decimal(19, 2) @default("0.00")
+  // Manual "Fee percentage" — Total Fee = totalProjectCost * feePercentage/100
+  feePercentage         Decimal? @db.Decimal(10, 6)
   proposedDueBillAmount Decimal  @db.Decimal(19, 2) @default("0.00")
   feeReceived           Decimal  @db.Decimal(19, 2) @default("0.00")
+  // Manual "Start month" for the initial remaing-fee distribution
+  distributionStartMonth Int?
+  distributionStartYear  Int?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

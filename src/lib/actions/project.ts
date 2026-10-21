@@ -12,7 +12,7 @@ import {
   ProjectUpdateInput,
   ProjectFilterInput,
 } from "@/lib/schemas/project";
-import { addMonths } from "@/lib/date-utils";
+import { addExcelMonths } from "@/lib/date-utils";
 import { withAuth, checkRateLimit, audit, sanitizeForAudit, ActionResult } from "./wrapper";
 
 const mutationRoles = [Role.ADMIN, Role.MANAGER];
@@ -20,20 +20,21 @@ const mutationRoles = [Role.ADMIN, Role.MANAGER];
 function computeProjectDates(input: ProjectCreateInput) {
   const workOrderDate = input.workOrderDate;
   const timeLimitMonths = input.timeLimitMonths;
+  // "Grace period" is a manual field — no invented default.
   const additionalTimeMonths =
-    input.additionalTimeMonths ??
-    new Decimal((timeLimitMonths.toNumber() * 0.5).toFixed(4));
+    input.additionalTimeMonths ?? new Decimal(0);
   const targetTimeLimitMonths =
     input.targetTimeLimitMonths ??
     new Decimal(
       (timeLimitMonths.toNumber() + additionalTimeMonths.toNumber()).toFixed(4)
     );
 
+  // Customer-confirmed Excel method: WO + (months × 30.416 days).
   const stipulatedCompletionDate =
-    input.stipulatedCompletionDate ?? addMonths(workOrderDate, timeLimitMonths);
+    input.stipulatedCompletionDate ?? addExcelMonths(workOrderDate, timeLimitMonths);
   const targetCompletionDate =
     input.targetCompletionDate ??
-    addMonths(workOrderDate, targetTimeLimitMonths);
+    addExcelMonths(workOrderDate, targetTimeLimitMonths);
 
   return {
     additionalTimeMonths,
@@ -146,12 +147,12 @@ export async function updateProject(
       const stipulatedCompletionDate =
         data.stipulatedCompletionDate ??
         (data.workOrderDate || data.timeLimitMonths
-          ? addMonths(workOrderDate, timeLimitMonths)
+          ? addExcelMonths(workOrderDate, timeLimitMonths)
           : existing.stipulatedCompletionDate);
       const targetCompletionDate =
         data.targetCompletionDate ??
         (data.workOrderDate || data.timeLimitMonths || data.additionalTimeMonths
-          ? addMonths(workOrderDate, targetTimeLimitMonths)
+          ? addExcelMonths(workOrderDate, targetTimeLimitMonths)
           : existing.targetCompletionDate);
 
       const updated = await tx.project.update({

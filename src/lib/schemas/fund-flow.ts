@@ -6,10 +6,17 @@ export const fundFlowCreateSchema = z.object({
   projectId: z.string().cuid(),
   miscExp: money.default(new Prisma.Decimal("0.00")),
   staffExp: money.default(new Prisma.Decimal("0.00")),
+  teamLeaderExp: money.default(new Prisma.Decimal("0.00")),
+  residentialEngineerExp: money.default(new Prisma.Decimal("0.00")),
+  designEngineerExp: money.default(new Prisma.Decimal("0.00")),
+  siteEngineerExp: money.default(new Prisma.Decimal("0.00")),
   totalProjectCost: money.default(new Prisma.Decimal("0.00")),
   completedWorkAmt: money.default(new Prisma.Decimal("0.00")),
+  feePercentage: z.number().min(0).max(100).optional().nullable(),
   proposedDueBillAmount: money.default(new Prisma.Decimal("0.00")),
   feeReceived: money.default(new Prisma.Decimal("0.00")),
+  distributionStartMonth: z.number().int().min(1).max(12).optional().nullable(),
+  distributionStartYear: z.number().int().min(2020).max(2100).optional().nullable(),
 });
 
 export const fundFlowUpdateSchema = fundFlowCreateSchema

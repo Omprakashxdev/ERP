@@ -446,7 +446,7 @@ export function MonthlyIncomeSummary() {
           <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
             {(
               [
-                ["all", "All Projects"],
+                ["all", "Total Income"],
                 ["project", "Project Wise"],
               ] as const
             ).map(([value, label]) => (
@@ -678,7 +678,7 @@ export function MonthlyIncomeSummary() {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-medium text-zinc-800">
-              Monthly Overview (All Projects Combined)
+              Total Income per Month
             </h3>
             <div className="flex items-center gap-2 text-xs text-zinc-500">
               {overviewSlice.length > 0 && (
