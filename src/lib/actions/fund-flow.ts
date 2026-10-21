@@ -79,17 +79,22 @@ export async function upsertFundFlow(
           miscExp: merged.miscExp ?? 0,
         });
       // Existing record: full recompute only on an explicit complete
-      // breakdown (all four supplied) or on a record already managed by
+      // breakdown (all four supplied AND at least one non-zero — the form
+      // always sends all four, so "all zero" is an unchanged legacy form,
+      // not an entered breakdown) or on a record already managed by
       // component fields. A lone Misc Exp edit adjusts the stored total by
       // the delta — never destroys a legacy total. Otherwise preserved.
       const hasStoredBreakdown =
         existing != null &&
         newComponentKeys.some((k) => new Decimal(existing[k].toString()).gt(0));
+      const fullBreakdownEntered =
+        newComponentKeys.every((k) => data[k] !== undefined) &&
+        newComponentKeys.some((k) => !new Decimal((data[k] as Decimal).toString()).isZero());
       const staffExp = existing == null
         ? allComponentKeys.some((k) => data[k] !== undefined)
           ? computeFromMerged()
           : (data.staffExp ?? new Decimal("0.00"))
-        : newComponentKeys.every((k) => data[k] !== undefined) ||
+        : fullBreakdownEntered ||
             (hasStoredBreakdown && allComponentKeys.some((k) => data[k] !== undefined))
           ? computeFromMerged()
           : data.miscExp !== undefined

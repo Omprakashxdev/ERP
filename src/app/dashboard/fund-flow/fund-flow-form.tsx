@@ -295,8 +295,35 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     return total - completed;
   }, [form.totalProjectCost, form.completedWorkAmt]);
 
-  // Staff Exp. = Team Leader/PM + Residential + Design + Site + Misc (string-sum)
+  // Staff Exp. = Team Leader/PM + Residential + Design + Site + Misc.
+  // For legacy records with no stored breakdown and none entered, show the
+  // preserved stored total adjusted by the Misc Exp delta — mirroring the
+  // server-side rule so the display never suggests a different total.
   const staffExpTotal = useMemo(() => {
+    const ff = project.fundFlow;
+    const componentKeys = [
+      "teamLeaderExp",
+      "residentialEngineerExp",
+      "designEngineerExp",
+      "siteEngineerExp",
+    ] as const;
+    const storedBreakdown =
+      ff != null &&
+      componentKeys.some((k) => {
+        const v = toMoneyString(ff[k]);
+        return v !== "" && Number(v) !== 0;
+      });
+    const enteredBreakdown = componentKeys.some((k) => {
+      const v = form[k].trim();
+      return /^\d+(\.\d+)?$/.test(v) && Number(v) !== 0;
+    });
+    if (!storedBreakdown && !enteredBreakdown && ff != null) {
+      const storedStaff = toMoneyString(ff.staffExp) || "0";
+      const storedMisc = toMoneyString(ff.miscExp) || "0";
+      const miscV = form.miscExp.trim();
+      const miscIn = /^\d+(\.\d+)?$/.test(miscV) ? miscV : storedMisc;
+      return subtractDecimals(addDecimals(storedStaff, miscIn), storedMisc);
+    }
     let t = "0";
     for (const k of [
       "teamLeaderExp",
@@ -309,7 +336,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
       if (/^\d+(\.\d+)?$/.test(v)) t = addDecimals(t, v);
     }
     return t;
-  }, [form]);
+  }, [form, project]);
 
   // Total Fee = Total Project Cost × Fee percentage / 100 — exact
   // string-decimal preview; the server recomputes and stores the Decimal.
