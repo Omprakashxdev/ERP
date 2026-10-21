@@ -36,7 +36,17 @@ export async function upsertFundFlow(
 }>> {
   return withPermission("fundFlow", "update", async (user) => {
     const parsed = fundFlowUpdateSchema.parse(input);
-    const { projectId, ...data } = parsed;
+    const { projectId } = parsed;
+    // fundFlowUpdateSchema derives via .partial(), but Zod keeps the
+    // .default("0.00") on money fields — absent keys would parse to 0.00
+    // and silently clobber stored values. Keep only keys the caller sent.
+    const data: Partial<Omit<typeof parsed, "projectId">> = {};
+    for (const k of Object.keys(input as Record<string, unknown>)) {
+      const key = k as keyof typeof data;
+      if ((key as string) !== "projectId" && parsed[key as keyof typeof parsed] !== undefined) {
+        (data as Record<string, unknown>)[key] = parsed[key as keyof typeof parsed];
+      }
+    }
     await checkRateLimit(user.id);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -49,25 +59,34 @@ export async function upsertFundFlow(
         include: { monthlyData: true },
       });
       const merged = { ...(existing ?? {}), ...data } as typeof data;
-      const componentKeys = [
+      const newComponentKeys = [
         "teamLeaderExp",
         "residentialEngineerExp",
         "designEngineerExp",
         "siteEngineerExp",
-        "miscExp",
       ] as const;
-      const componentsProvided = componentKeys.some((k) => data[k] !== undefined);
-      const staffExp = componentsProvided
-        ? computeStaffExp({
-            teamLeaderExp: merged.teamLeaderExp ?? 0,
-            residentialEngineerExp: merged.residentialEngineerExp ?? 0,
-            designEngineerExp: merged.designEngineerExp ?? 0,
-            siteEngineerExp: merged.siteEngineerExp ?? 0,
-            miscExp: merged.miscExp ?? 0,
-          })
-        : existing
-          ? existing.staffExp
-          : (data.staffExp ?? new Decimal("0.00"));
+      // On an existing record only a supplied NEW component triggers
+      // recomputation — a lone miscExp edit must not collapse a legacy
+      // staffExp whose component breakdown was never recorded.
+      const staffExp = existing == null
+        ? [...newComponentKeys, "miscExp" as const].some((k) => data[k] !== undefined)
+          ? computeStaffExp({
+              teamLeaderExp: merged.teamLeaderExp ?? 0,
+              residentialEngineerExp: merged.residentialEngineerExp ?? 0,
+              designEngineerExp: merged.designEngineerExp ?? 0,
+              siteEngineerExp: merged.siteEngineerExp ?? 0,
+              miscExp: merged.miscExp ?? 0,
+            })
+          : (data.staffExp ?? new Decimal("0.00"))
+        : newComponentKeys.some((k) => data[k] !== undefined)
+          ? computeStaffExp({
+              teamLeaderExp: merged.teamLeaderExp ?? 0,
+              residentialEngineerExp: merged.residentialEngineerExp ?? 0,
+              designEngineerExp: merged.designEngineerExp ?? 0,
+              siteEngineerExp: merged.siteEngineerExp ?? 0,
+              miscExp: merged.miscExp ?? 0,
+            })
+          : existing.staffExp;
 
       const { distributionStartMonth, distributionStartYear, feePercentage, ...rest } = data;
       const fundFlow = await tx.fundFlow.upsert({
@@ -97,11 +116,14 @@ export async function upsertFundFlow(
         },
       });
 
-      // Total Fee = Total Project Cost × Fee percentage / 100 — synced onto
-      // Project.totalFee only when the percentage is provided. Legacy
-      // records without a percentage keep their stored Total Fee.
-      if (feePercentage != null) {
-        const totalFee = computeTotalFee(fundFlow.totalProjectCost, feePercentage);
+      // Total Fee = Total Project Cost × Fee percentage / 100 — recomputed
+      // from the EFFECTIVE percentage (request value or the stored one), so
+      // a Total Project Cost change alone keeps Total Fee and remaing fee
+      // correct. Records with no percentage anywhere keep their stored fee.
+      const effectivePct =
+        feePercentage !== undefined ? feePercentage : existing?.feePercentage ?? null;
+      if (effectivePct != null) {
+        const totalFee = computeTotalFee(fundFlow.totalProjectCost, effectivePct);
         await tx.project.update({
           where: { id: projectId },
           data: { totalFee },
