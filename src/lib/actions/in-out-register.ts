@@ -19,6 +19,7 @@ import {
   ActionResult,
 } from "./wrapper";
 import { createInOutRegisterLinkedTasks, deleteLinkedTasks } from "./task-linking";
+import { issueRegisterSerialNo } from "@/lib/register-serial";
 import {
   computeAgeInDaysIST,
   toInputDateIST,
@@ -88,21 +89,22 @@ export async function createInOutRegister(
     const { ccStaffIds, documents, ...data } = parsed;
     await checkRateLimit(user.id);
 
-    let serialNo = data.serialNo;
-    if (!serialNo || String(serialNo).trim() === "") {
-      const nextRes = await getNextRegisterRefNo(data.direction || "INWARD", data.documentDate || data.receivedDate);
-      if (nextRes.success && nextRes.data) {
-        serialNo = nextRes.data.refNo;
-      }
-    }
-
-    const entry = await prisma.inOutRegister.create({
-      data: {
-        ...data,
-        serialNo,
-        documents: buildDocumentCreateInput(documents),
-        ccStaff: buildCcStaffCreateInput(ccStaffIds),
-      },
+    // Client-supplied serialNo is ignored — serials are server-authoritative,
+    // issued from a monotonic per-scope counter inside the same transaction
+    // as the row insert. A rollback returns the number unissued.
+    const entry = await prisma.$transaction(async (tx) => {
+      const serialNo = await issueRegisterSerialNo(
+        tx,
+        data.direction || "INWARD"
+      );
+      return tx.inOutRegister.create({
+        data: {
+          ...data,
+          serialNo,
+          documents: buildDocumentCreateInput(documents),
+          ccStaff: buildCcStaffCreateInput(ccStaffIds),
+        },
+      });
     });
 
     await audit(user.id, "create", "InOutRegister", entry.id, {
@@ -328,18 +330,26 @@ export async function getNextRegisterRefNo(
     const fy = getIndianFinancialYear(dateInput || new Date());
     const prefix = direction === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
 
-    const records = await prisma.inOutRegister.findMany({
-      where: {
-        direction,
-        OR: [
-          { serialNo: { startsWith: prefix, mode: "insensitive" } },
-          { documentRefNo: { startsWith: prefix, mode: "insensitive" } },
-        ],
-      },
-      select: { serialNo: true, documentRefNo: true },
-    });
+    // Non-authoritative preview for the form — the real serial is issued
+    // server-side at create time. Reads the monotonic counter too so a
+    // deleted record doesn't preview a recycled number.
+    const [records, counter] = await Promise.all([
+      prisma.inOutRegister.findMany({
+        where: {
+          direction,
+          OR: [
+            { serialNo: { startsWith: prefix, mode: "insensitive" } },
+            { documentRefNo: { startsWith: prefix, mode: "insensitive" } },
+          ],
+        },
+        select: { serialNo: true, documentRefNo: true },
+      }),
+      prisma.registerSerialCounter
+        .findUnique({ where: { scope: prefix.slice(0, -1) } })
+        .catch(() => null),
+    ]);
 
-    let maxSeq = 0;
+    let maxSeq = counter?.lastSeq ?? 0;
     for (const rec of records) {
       for (const val of [rec.serialNo, rec.documentRefNo]) {
         if (val && val.toUpperCase().startsWith(prefix.toUpperCase())) {

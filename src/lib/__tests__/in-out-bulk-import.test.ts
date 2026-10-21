@@ -16,9 +16,30 @@ vi.mock("@/lib/actions/wrapper", () => ({
   sanitizeForAudit: async (x: unknown) => x,
 }));
 
+// FY of "now" for expectations (issuance uses server clock, IST)
+function currentFy(): string {
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const fyStart =
+    now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
+}
+
 describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Route $transaction(cb) through the mocked prisma as the tx handle,
+    // and stub the raw issuance queries (real behavior covered by the
+    // integration suite on a disposable DB).
+    (vi.spyOn(prisma, "$transaction") as any).mockImplementation(
+      async (fn: any) => fn(prisma)
+    );
+    // $queryRaw returns the post-increment counter value (issuance)
+    (vi.spyOn(prisma, "$queryRaw") as any).mockResolvedValue([
+      { lastSeq: 6 },
+    ]);
+    (vi.spyOn(prisma, "$executeRaw") as any).mockResolvedValue(1);
   });
 
   it("imports inward records and automatically links outward replies via parentInwardRefNo", async () => {
@@ -110,8 +131,8 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
 
     expect(res.success).toBe(true);
     expect(createdRecords).toHaveLength(1);
-    // Sequence was 005, so next must be auto-generated as INW/2026-27/006
-    expect(createdRecords[0].serialNo).toBe("INW/2026-27/006");
+    // Counter at 5 (mocked $queryRaw) → issued INW/<currentFY>/006
+    expect(createdRecords[0].serialNo).toBe(`INW/${currentFy()}/006`);
   });
 
   it("auto-heals when parentInwardRefNo is placed in replyDueDate column on outward row", async () => {

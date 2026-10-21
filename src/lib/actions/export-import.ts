@@ -2,6 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { addMonths, getIndianFinancialYear } from "@/lib/date-utils";
+import {
+  issueRegisterSerialNo,
+  bumpRegisterSerialCounter,
+} from "@/lib/register-serial";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
   withPermission,
@@ -624,50 +628,25 @@ export async function importModule(
               cleanData.documentDate = (cleanData.receivedDate as Date) || new Date();
             }
 
-            // Auto-generate standard sequential serialNo if not provided in CSV
-            if (!cleanData.serialNo || String(cleanData.serialNo).trim() === "") {
-              if (
-                cleanData.documentRefNo &&
-                /^(INW|OUT)\//i.test(String(cleanData.documentRefNo).trim())
-              ) {
-                cleanData.serialNo = String(cleanData.documentRefNo).trim();
+            // Serial issuance is server-authoritative: a CSV-supplied
+            // serialNo is kept and bumps the counter so future issues
+            // never collide; a blank one is issued from the counter.
+            await prisma.$transaction(async (tx) => {
+              if (cleanData.serialNo && String(cleanData.serialNo).trim() !== "") {
+                await bumpRegisterSerialCounter(
+                  tx,
+                  String(cleanData.serialNo).trim()
+                );
               } else {
-                const dir = (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
-                const dateVal = (cleanData.documentDate as Date) || (cleanData.receivedDate as Date) || new Date();
-                const fy = getIndianFinancialYear(dateVal);
-                const prefix = dir === "INWARD" ? `INW/${fy}/` : `OUT/${fy}/`;
-
-                const existing = await prisma.inOutRegister.findMany({
-                  where: {
-                    direction: dir,
-                    OR: [
-                      { serialNo: { startsWith: prefix, mode: "insensitive" } },
-                      { documentRefNo: { startsWith: prefix, mode: "insensitive" } },
-                    ],
-                  },
-                  select: { serialNo: true, documentRefNo: true },
-                });
-
-                let maxSeq = 0;
-                for (const rec of existing) {
-                  for (const val of [rec.serialNo, rec.documentRefNo]) {
-                    if (val && val.toUpperCase().startsWith(prefix.toUpperCase())) {
-                      const parts = val.split("/");
-                      const last = parseInt(parts[parts.length - 1], 10);
-                      if (!isNaN(last) && last > maxSeq) maxSeq = last;
-                    }
-                  }
-                }
-
-                const nextSeq = maxSeq + 1;
-                cleanData.serialNo = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+                const dir =
+                  (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
+                cleanData.serialNo = await issueRegisterSerialNo(tx, dir);
                 corrections.push(
                   `Row ${i + 1}: Auto-generated ${dir} serial number "${cleanData.serialNo}"`
                 );
               }
-            }
-
-            await prisma.inOutRegister.create({ data: cleanData as never });
+              await tx.inOutRegister.create({ data: cleanData as never });
+            });
             break;
           }
           case "tadaBills": {

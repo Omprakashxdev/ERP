@@ -571,7 +571,7 @@ enum InOutDirection {
 model InOutRegister {
   id                     String                  @id @default(cuid())
   direction              InOutDirection?         @default(INWARD)
-  serialNo               String?
+  serialNo               String?                 @unique
   documentDate           DateTime
   receivedDate           DateTime
   documentRefNo          String?
@@ -598,7 +598,6 @@ model InOutRegister {
 
   @@index([clientId])
   @@index([direction])
-  @@index([serialNo])
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
@@ -606,6 +605,17 @@ model InOutRegister {
   @@index([replyDueDate])
   @@index([replyDate])
   @@index([parentInwardId])
+}
+
+// Monotonic serial counter for In-Out Register — one row per
+// direction + financial-year scope ("INW/2026-27", "OUT/2026-27").
+// Issued numbers are permanent: counters never decrease and are
+// incremented atomically inside the create transaction.
+model RegisterSerialCounter {
+  scope    String @id
+  lastSeq  Int    @default(0)
+
+  @@map("RegisterSerialCounter")
 }
 
 model InOutRegisterDocument {
