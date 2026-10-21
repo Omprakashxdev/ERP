@@ -137,6 +137,19 @@ let projectId = "";
     expect(rows.length).toBe(18); // allocations never silently replaced
   });
 
+  it("lone Misc Exp edit adjusts Staff Exp. by the delta (1.60 → 1.65) and persists", async () => {
+    const res = await upsertFundFlow({ projectId, miscExp: "0.10" } as never);
+    expect(res.success).toBe(true);
+    let ff = await prisma.fundFlow.findUnique({ where: { projectId } });
+    expect(ff!.miscExp.toString()).toBe("0.1");
+    expect(ff!.staffExp.toString()).toBe("1.65");
+    // restore + re-verify persistence (simulates save → reopen)
+    await upsertFundFlow({ projectId, miscExp: "0.05" } as never);
+    ff = await prisma.fundFlow.findUnique({ where: { projectId } });
+    expect(ff!.staffExp.toString()).toBe("1.6");
+    expect(ff!.miscExp.toString()).toBe("0.05");
+  });
+
   it("Total Project Cost change alone recomputes Total Fee from the saved percentage", async () => {
     const res = await upsertFundFlow({
       projectId,
@@ -220,15 +233,42 @@ let projectId = "";
     expect(ff!.distributionStartMonth).toBeNull();
   });
 
-  it("lone miscExp edit on a legacy record preserves stored staffExp", async () => {
+  it("lone miscExp edit on a legacy record adjusts the stored total by the delta", async () => {
     const res = await upsertFundFlow({
       projectId: legacyProjectId,
       miscExp: "0.99",
     } as never);
     expect(res.success).toBe(true);
     const ff = await prisma.fundFlow.findUnique({ where: { projectId: legacyProjectId } });
-    expect(ff!.staffExp.toString()).toBe("1.6"); // NOT collapsed to miscExp
+    // 1.60 + (0.99 − 0.05) = 2.54 — total preserved, delta applied, no collapse
+    expect(ff!.staffExp.toString()).toBe("2.54");
     expect(ff!.miscExp.toString()).toBe("0.99");
+  });
+
+  it("partial breakdown edit on a legacy record preserves the stored total", async () => {
+    // Only ONE component supplied — not an explicit five-field replacement.
+    const res = await upsertFundFlow({
+      projectId: legacyProjectId,
+      teamLeaderExp: "0.75",
+    } as never);
+    expect(res.success).toBe(true);
+    const ff = await prisma.fundFlow.findUnique({ where: { projectId: legacyProjectId } });
+    expect(ff!.staffExp.toString()).toBe("2.54"); // untouched (from prior delta test)
+    expect(ff!.teamLeaderExp.toString()).toBe("0.75"); // value itself saved
+  });
+
+  it("complete five-field breakdown explicitly replaces the legacy total", async () => {
+    const res = await upsertFundFlow({
+      projectId: legacyProjectId,
+      teamLeaderExp: "0.50",
+      residentialEngineerExp: "0.40",
+      designEngineerExp: "0.30",
+      siteEngineerExp: "0.35",
+      miscExp: "0.05",
+    } as never);
+    expect(res.success).toBe(true);
+    const ff = await prisma.fundFlow.findUnique({ where: { projectId: legacyProjectId } });
+    expect(ff!.staffExp.toString()).toBe("1.6"); // explicit recomputed total
   });
 
   it("fee recvd change recalculates only remaing fee — no generation, no overwrite", async () => {

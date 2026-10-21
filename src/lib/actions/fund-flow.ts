@@ -65,28 +65,38 @@ export async function upsertFundFlow(
         "designEngineerExp",
         "siteEngineerExp",
       ] as const;
-      // On an existing record only a supplied NEW component triggers
-      // recomputation — a lone miscExp edit must not collapse a legacy
-      // staffExp whose component breakdown was never recorded.
+      // On an existing record only a supplied NEW component triggers a full
+      // recomputation — Misc Exp alone never collapses a legacy staffExp
+      // whose breakdown was never recorded; it adjusts the stored total by
+      // the miscExp delta (identical result for component-managed records).
+      const allComponentKeys = [...newComponentKeys, "miscExp" as const];
+      const computeFromMerged = () =>
+        computeStaffExp({
+          teamLeaderExp: merged.teamLeaderExp ?? 0,
+          residentialEngineerExp: merged.residentialEngineerExp ?? 0,
+          designEngineerExp: merged.designEngineerExp ?? 0,
+          siteEngineerExp: merged.siteEngineerExp ?? 0,
+          miscExp: merged.miscExp ?? 0,
+        });
+      // Existing record: full recompute only on an explicit complete
+      // breakdown (all four supplied) or on a record already managed by
+      // component fields. A lone Misc Exp edit adjusts the stored total by
+      // the delta — never destroys a legacy total. Otherwise preserved.
+      const hasStoredBreakdown =
+        existing != null &&
+        newComponentKeys.some((k) => new Decimal(existing[k].toString()).gt(0));
       const staffExp = existing == null
-        ? [...newComponentKeys, "miscExp" as const].some((k) => data[k] !== undefined)
-          ? computeStaffExp({
-              teamLeaderExp: merged.teamLeaderExp ?? 0,
-              residentialEngineerExp: merged.residentialEngineerExp ?? 0,
-              designEngineerExp: merged.designEngineerExp ?? 0,
-              siteEngineerExp: merged.siteEngineerExp ?? 0,
-              miscExp: merged.miscExp ?? 0,
-            })
+        ? allComponentKeys.some((k) => data[k] !== undefined)
+          ? computeFromMerged()
           : (data.staffExp ?? new Decimal("0.00"))
-        : newComponentKeys.some((k) => data[k] !== undefined)
-          ? computeStaffExp({
-              teamLeaderExp: merged.teamLeaderExp ?? 0,
-              residentialEngineerExp: merged.residentialEngineerExp ?? 0,
-              designEngineerExp: merged.designEngineerExp ?? 0,
-              siteEngineerExp: merged.siteEngineerExp ?? 0,
-              miscExp: merged.miscExp ?? 0,
-            })
-          : existing.staffExp;
+        : newComponentKeys.every((k) => data[k] !== undefined) ||
+            (hasStoredBreakdown && allComponentKeys.some((k) => data[k] !== undefined))
+          ? computeFromMerged()
+          : data.miscExp !== undefined
+            ? new Decimal(existing.staffExp.toString())
+                .plus(data.miscExp as Decimal)
+                .minus(existing.miscExp.toString())
+            : existing.staffExp;
 
       const { distributionStartMonth, distributionStartYear, feePercentage, ...rest } = data;
       const fundFlow = await tx.fundFlow.upsert({
