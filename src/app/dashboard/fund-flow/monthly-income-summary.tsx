@@ -37,12 +37,23 @@ import {
 import { ChevronsUpDown, Check } from "lucide-react";
 import { FundFlowEditor } from "./fund-flow-editor";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   getMonthlyIncomeSummary,
   getMonthlyIncomeBreakdown,
   getMonthlyExpenses,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
   getProjectMonthlyReport,
+  getCumulativeReport,
 } from "@/lib/actions/fund-flow-monthly";
 import type {
   MonthlyReportRow,
@@ -141,6 +152,31 @@ interface ProjectReport {
   expenseSpanWarnings: ExpenseSpanWarning[];
 }
 
+interface CumulativeMonthRow {
+  month: number;
+  year: number;
+  label: string;
+  income: string | null;
+  incomeUnavailableCount: number;
+  expense: string;
+  net: string | null;
+  cumulativeBalance: string;
+  incomplete: boolean;
+  cumulativeProvisional: boolean;
+}
+
+interface CumulativeReport {
+  months: CumulativeMonthRow[];
+  openingBalance: string;
+  totalIncome: string | null;
+  totalExpense: string;
+  closingBalance: string;
+  closingProvisional: boolean;
+  hasData: boolean;
+  missingExpenseConfig: MissingExpenseConfigEntry[];
+  expenseSpanWarnings: ExpenseSpanWarning[];
+}
+
 /** Display a decimal string at 2 places — display only; stored precision
     stays DECIMAL(23,6). No unit suffix: workbook units are unverified. */
 function fmt2(value: unknown): string | null {
@@ -182,13 +218,15 @@ export function MonthlyIncomeSummary() {
   const [overviewPage, setOverviewPage] = useState(0);
   const [editorProject, setEditorProject] = useState<FundFlowWithComputed | null>(null);
 
-  // Project-wise mode
-  const [scope, setScope] = useState<"all" | "project">("all");
+  // Report view: company summary | single project | company cumulative
+  const [scope, setScope] = useState<"all" | "project" | "cumulative">("all");
   const [projects, setProjects] = useState<ProjectOption[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [cumulative, setCumulative] = useState<CumulativeReport | null>(null);
+  const [cumulativeLoading, setCumulativeLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -313,6 +351,28 @@ export function MonthlyIncomeSummary() {
     };
   }, [scope, projectId]);
 
+  // Lazy-load the company cumulative report the first time it is chosen.
+  useEffect(() => {
+    if (scope !== "cumulative" || cumulative !== null) return;
+    let cancelled = false;
+    setCumulativeLoading(true);
+    getCumulativeReport()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setCumulative(res.data as CumulativeReport);
+        } else {
+          toast.error(res.error ?? "Could not load the cumulative report.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCumulativeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, cumulative]);
+
   const selectedProject = projects?.find((p) => p.id === projectId) ?? null;
 
   async function openEditor(projectId: string) {
@@ -376,56 +436,41 @@ export function MonthlyIncomeSummary() {
 
   return (
     <Card className="shadow-sm">
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-3">
-          <CardTitle className="text-base font-medium">
-            Monthly Fund Flow Report
-          </CardTitle>
-          <span className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs text-zinc-500">
-            {scope === "all"
-              ? "All projects (combined)"
-              : (selectedProject?.name ?? "Single project")}
-          </span>
-        </div>
-        <p className="text-xs text-zinc-500">
-          {scope === "all"
-            ? "Monthly income, expenses, net and cumulative balance across all projects."
-            : "Monthly income, staff expenses, net and cumulative balance for the selected project."}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Info banner */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
-          <span className="inline-flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5" />
-            Planned figures only — not actual bank balance.
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5" />
-            Expenses are calculated automatically from each project&apos;s Staff
-            Exp. across its Start month and Target Time Limit.
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5" />
-            Amounts shown in workbook units as entered (2 decimals).
-          </span>
-        </div>
-
-        {/* Scope toggle */}
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-zinc-700">Scope</span>
-          <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+      <CardHeader className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg font-semibold tracking-tight">
+              {scope === "all"
+                ? "Monthly Summary"
+                : scope === "project"
+                  ? "Project Wise"
+                  : "Cumulative Balance"}
+            </CardTitle>
+            <p className="mt-0.5 text-sm text-zinc-500">
+              Apr 2026 – Mar 2028 ·{" "}
+              {scope === "project"
+                ? (selectedProject?.name ?? "Select a project")
+                : "All projects"}
+            </p>
+          </div>
+          <div
+            className="inline-flex flex-wrap rounded-lg border border-zinc-200 p-0.5"
+            role="group"
+            aria-label="Report view"
+          >
             {(
               [
-                ["all", "Total Income"],
+                ["all", "Monthly Summary"],
                 ["project", "Project Wise"],
+                ["cumulative", "Cumulative Balance"],
               ] as const
             ).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setScope(value)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                aria-pressed={scope === value}
+                className={`min-h-[44px] rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   scope === value
                     ? "bg-teal-600 text-white"
                     : "text-zinc-600 hover:bg-zinc-100"
@@ -435,34 +480,53 @@ export function MonthlyIncomeSummary() {
               </button>
             ))}
           </div>
-          <span className="text-xs text-zinc-500">
-            {scope === "all"
-              ? "Combined company figures (Rows 12–18)"
-              : "One project's income, staff expenses and running balance"}
-          </span>
         </div>
-
-        {/* Month selector */}
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-zinc-700">Selected Month</span>
-          <Select
-            value={String(selectedIdx)}
-            onValueChange={(v) => setSelectedIdx(Number(v ?? 0))}
-          >
-            <SelectTrigger className="w-40" size="sm">
-              <SelectValue>
-                {() => (selMonth ? selMonth.label : "Select month")}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {summary.map((m, i) => (
-                <SelectItem key={`${m.year}-${m.month}`} value={String(i)}>
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Concise meaning; methodology on demand */}
+        <div className="text-xs text-zinc-500">
+          <p className="flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Planned figures · not a bank balance · amounts in workbook units
+            as entered (2 decimals)
+          </p>
+          <details>
+            <summary className="mt-0.5 inline-flex min-h-[44px] cursor-pointer select-none items-center font-medium text-blue-700 hover:underline sm:min-h-0">
+              How expenses are calculated
+            </summary>
+            <p className="mt-1 max-w-prose rounded-md bg-zinc-50 px-3 py-2 text-zinc-600">
+              Monthly expenses are derived automatically — every project
+              contributes its saved Staff Exp. in each month of its schedule
+              (Start month through Start month + Target Time Limit − 1). They
+              are never entered manually.
+            </p>
+          </details>
         </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Month selector — meaningful for the monthly views only */}
+        {scope !== "cumulative" && (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-zinc-700">
+              Selected Month
+            </span>
+            <Select
+              value={String(selectedIdx)}
+              onValueChange={(v) => setSelectedIdx(Number(v ?? 0))}
+            >
+              <SelectTrigger className="w-40" size="sm">
+                <SelectValue>
+                  {() => (selMonth ? selMonth.label : "Select month")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {summary.map((m, i) => (
+                  <SelectItem key={`${m.year}-${m.month}`} value={String(i)}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {scope === "project" ? (
           <ProjectWisePanel
@@ -477,6 +541,12 @@ export function MonthlyIncomeSummary() {
             selMonth={selMonth}
             selectedIdx={selectedIdx}
             onOpenEditor={openEditor}
+          />
+        ) : scope === "cumulative" ? (
+          <CumulativeBalancePanel
+            report={cumulative}
+            loading={cumulativeLoading}
+            selectedIdx={selectedIdx}
           />
         ) : (
         <>
@@ -856,7 +926,7 @@ function SummaryCard({
   row: string;
   value: string | null;
   icon: React.ReactNode;
-  tone: "emerald" | "rose" | "zinc" | "blue";
+  tone: "emerald" | "rose" | "zinc" | "blue" | "amber" | "purple";
   provisional?: boolean;
   provisionalHint?: string;
   emptyHint?: string;
@@ -867,6 +937,8 @@ function SummaryCard({
     rose: "bg-rose-50 border-rose-100",
     zinc: "bg-zinc-50 border-zinc-200",
     blue: "bg-blue-50 border-blue-100",
+    amber: "bg-amber-50 border-amber-100",
+    purple: "bg-violet-50 border-violet-100",
   }[tone];
   return (
     <div className={`rounded-xl border p-4 ${toneClasses}`}>
@@ -1282,6 +1354,423 @@ function ProjectWisePanel({
             </p>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function CumulativeBalancePanel({
+  report,
+  loading,
+  selectedIdx,
+}: {
+  report: CumulativeReport | null;
+  loading: boolean;
+  selectedIdx: number;
+}) {
+  if (loading || !report) {
+    return (
+      <div className="rounded-lg border border-zinc-200 px-4 py-10 text-center text-sm text-zinc-500">
+        <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+        Loading cumulative balance…
+      </div>
+    );
+  }
+
+  const isNeg = (v: string | null) => v != null && Number(v) < 0;
+  const closingText = fmt2(report.closingBalance);
+  const closingNegative = isNeg(report.closingBalance);
+  const closingMonth = report.months[report.months.length - 1]?.label;
+
+  return (
+    <div className="space-y-5">
+      {!report.hasData ? (
+        <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500">
+          No monthly income or expense data exists yet for Apr 2026 – Mar
+          2028. The cumulative balance will appear once project allocations or
+          configured staff expenses are saved.
+        </p>
+      ) : (
+        <>
+          {/* One prominent balance summary */}
+          <div className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-5 sm:px-6">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-zinc-500">
+                  Closing Cumulative Balance
+                  <span className="text-zinc-400"> · as of {closingMonth}</span>
+                </p>
+                <p
+                  className={`mt-2 text-4xl font-semibold tracking-tight sm:text-5xl ${
+                    closingNegative ? "text-rose-700" : "text-zinc-900"
+                  }`}
+                >
+                  {closingNegative ? "−" : ""}
+                  {closingText?.replace("-", "")}
+                  {report.closingProvisional && (
+                    <sup
+                      className="ml-0.5 text-xl text-amber-600"
+                      title="Provisional — see details below"
+                    >
+                      *
+                    </sup>
+                  )}
+                </p>
+                <p className="mt-2 max-w-md text-sm text-zinc-500">
+                  Running planned balance, not actual bank balance.
+                </p>
+              </div>
+              <span
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${
+                  report.closingProvisional
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                }`}
+              >
+                {report.closingProvisional ? "Provisional" : "Verified"}
+              </span>
+            </div>
+
+            {/* Three smaller supporting metrics */}
+            <dl className="grid grid-cols-1 divide-y divide-zinc-100 border-t border-zinc-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              {(
+                [
+                  [
+                    "Opening Balance",
+                    fmt2(report.openingBalance) ?? "—",
+                    "Implied calculation baseline — not a bank balance",
+                  ],
+                  [
+                    "Total Income",
+                    fmt2(report.totalIncome) ?? "No verified income",
+                    "Verified saved allocations, 24 months",
+                  ],
+                  [
+                    "Total Expenses",
+                    fmt2(report.totalExpense) ?? "—",
+                    "Staff Exp. across project schedules, 24 months",
+                  ],
+                ] as const
+              ).map(([label, value, caption]) => (
+                <div key={label} className="px-5 py-3.5 sm:px-6">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    {label}
+                  </dt>
+                  <dd
+                    className={`mt-1 text-xl font-semibold tracking-tight ${
+                      value === "No verified income"
+                        ? "text-base font-normal italic text-zinc-500"
+                        : "text-zinc-900"
+                    }`}
+                  >
+                    {value}
+                  </dd>
+                  <dd className="mt-0.5 text-xs text-zinc-500">{caption}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          {/* Chart */}
+          <CumulativeChart months={report.months} />
+
+          {/* Provisional details — on demand */}
+          {report.closingProvisional && (
+            <details className="rounded-lg border border-amber-200 bg-amber-50/60">
+              <summary className="flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-50">
+                Why is this balance provisional?
+                <span className="ml-auto text-xs font-normal text-amber-600">
+                  click to expand
+                </span>
+              </summary>
+              <div className="space-y-2 border-t border-amber-200 px-4 py-3 text-sm text-amber-800">
+                {report.missingExpenseConfig.length > 0 && (
+                  <div>
+                    <p className="font-medium">
+                      Missing project timing — excluded from expenses:
+                    </p>
+                    <ul className="mt-1 list-inside list-disc">
+                      {report.missingExpenseConfig.map((mc) => (
+                        <li key={mc.projectName}>
+                          {mc.projectName} — missing{" "}
+                          {mc.missing.join(" and ")}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {report.months.some((m) => m.incomeUnavailableCount > 0) && (
+                  <p>
+                    Excluded or unverified income —{" "}
+                    {
+                      report.months.filter(
+                        (m) => m.incomeUnavailableCount > 0
+                      ).length
+                    }{" "}
+                    month(s) contain saved records without verified history,
+                    so they are not counted.
+                  </p>
+                )}
+                {report.expenseSpanWarnings.length > 0 && (
+                  <ul className="list-inside list-disc">
+                    {report.expenseSpanWarnings.map((w) => (
+                      <li key={w.projectName}>
+                        {w.projectName} — Target Time Limit{" "}
+                        {w.targetTimeLimitMonths} is not a whole number:{" "}
+                        {w.note}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Detailed monthly breakdown — on demand */}
+          <details className="rounded-lg border border-zinc-200 bg-white">
+            <summary className="flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50">
+              Monthly breakdown — all 24 months
+              <span className="ml-auto text-xs font-normal text-zinc-500">
+                click to expand
+              </span>
+            </summary>
+            <div className="border-t border-zinc-200 px-4 py-3">
+              <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                <div className="max-h-[26rem] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="sticky top-0 border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                        <th className="py-2 pl-3 pr-3">Month</th>
+                        <th className="py-2 pr-3 text-right">Monthly Income</th>
+                        <th className="py-2 pr-3 text-right">
+                          Monthly Expense
+                        </th>
+                        <th className="py-2 pr-3 text-right">Monthly Net</th>
+                        <th className="py-2 pr-3 text-right">
+                          Cumulative Balance
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.months.map((row, i) => (
+                        <tr
+                          key={`${row.year}-${row.month}`}
+                          className={`border-b last:border-0 ${
+                            i === selectedIdx ? "bg-teal-50/60" : ""
+                          }`}
+                        >
+                          <td className="py-2 pl-3 pr-3 font-medium text-zinc-800">
+                            {row.label}
+                            {i === selectedIdx && (
+                              <span className="ml-2 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
+                                selected
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {row.income != null ? fmt2(row.income) : "—"}
+                            {row.incomeUnavailableCount > 0 && (
+                              <sup
+                                className="ml-0.5 text-amber-600"
+                                title={`${row.incomeUnavailableCount} ambiguous record(s) excluded — not counted`}
+                              >
+                                *
+                              </sup>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {fmt2(row.expense)}
+                          </td>
+                          <td
+                            className={`py-2 pr-3 text-right font-mono ${
+                              isNeg(row.net) ? "text-rose-600" : ""
+                            }`}
+                          >
+                            {row.net != null ? (
+                              <>
+                                {fmt2(row.net)}
+                                {row.incomplete && (
+                                  <sup
+                                    className="ml-0.5 text-amber-600"
+                                    title="Provisional — missing or excluded inputs treated as 0"
+                                  >
+                                    *
+                                  </sup>
+                                )}
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td
+                            className={`py-2 pr-3 text-right font-mono font-medium ${
+                              isNeg(row.cumulativeBalance)
+                                ? "text-rose-600"
+                                : "text-zinc-800"
+                            }`}
+                          >
+                            {fmt2(row.cumulativeBalance)}
+                            {row.cumulativeProvisional && (
+                              <sup
+                                className="ml-0.5 text-amber-600"
+                                title="Provisional — carries months with missing or excluded inputs"
+                              >
+                                *
+                              </sup>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">
+                The first month&apos;s balance equals its net; every later
+                month carries the previous balance forward. A blank income
+                means no verified allocation was saved — a recorded zero is
+                shown as 0.00.
+              </p>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CumulativeChart({ months }: { months: CumulativeMonthRow[] }) {
+  const data = months.map((m) => ({
+    label: m.label,
+    balance: Number(m.cumulativeBalance),
+    provisional: m.cumulativeProvisional,
+    income: m.income != null ? Number(m.income) : null,
+    expense: Number(m.expense),
+    net: m.net != null ? Number(m.net) : null,
+  }));
+
+  return (
+    <div className="rounded-xl border border-zinc-200 p-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-1">
+        <h3 className="text-sm font-medium text-zinc-800">
+          Planned Cumulative Balance
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Apr 2026 – Mar 2028 · positive = planned surplus, negative = planned
+          shortfall
+        </p>
+      </div>
+      <ResponsiveContainer width="100%" height={280}>
+        <AreaChart
+          data={data}
+          margin={{ top: 8, right: 12, bottom: 4, left: 4 }}
+          accessibilityLayer
+        >
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: "#52525b" }}
+            interval="preserveStartEnd"
+            minTickGap={40}
+            tickLine={false}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: "#52525b" }}
+            tickFormatter={(v: number) => v.toLocaleString("en-IN")}
+            width={72}
+            tickLine={false}
+            axisLine={false}
+          />
+          <ReferenceLine
+            y={0}
+            stroke="#a1a1aa"
+            strokeDasharray="4 4"
+            label={{
+              value: "zero baseline",
+              fontSize: 10,
+              fill: "#71717a",
+              position: "insideBottomLeft",
+            }}
+          />
+          <Tooltip content={<CumulativeTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="balance"
+            name="Cumulative Balance"
+            stroke="#7c3aed"
+            strokeWidth={2}
+            fill="#7c3aed"
+            fillOpacity={0.12}
+            dot={<ProvisionalDot />}
+            activeDot={{ r: 5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      <p className="mt-1 text-xs text-zinc-500">
+        Amber points include provisional inputs (missing timing or excluded
+        records). Hover or focus a month for its figures.
+      </p>
+    </div>
+  );
+}
+
+function ProvisionalDot(props: {
+  cx?: number;
+  cy?: number;
+  payload?: { provisional?: boolean };
+}) {
+  const { cx, cy, payload } = props;
+  if (cx == null || cy == null) return null;
+  const provisional = payload?.provisional === true;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={3.5}
+      fill={provisional ? "#d97706" : "#7c3aed"}
+      stroke="#fff"
+      strokeWidth={1}
+    />
+  );
+}
+
+function CumulativeTooltip(props: {
+  active?: boolean;
+  label?: string;
+  payload?: { value?: number; payload?: Record<string, unknown> }[];
+}) {
+  const { active, payload, label } = props;
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload as
+    | {
+        balance?: number;
+        income?: number | null;
+        expense?: number;
+        net?: number | null;
+        provisional?: boolean;
+      }
+    | undefined;
+  if (!row) return null;
+  const fmt = (v: number | null | undefined) =>
+    v == null ? "—" : fmt2(v);
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="font-medium text-zinc-800">{label}</p>
+      <p className="mt-1 text-zinc-600">
+        Cumulative:{" "}
+        <span className="font-mono font-semibold text-zinc-900">
+          {fmt(row.balance)}
+        </span>
+      </p>
+      <p className="text-zinc-600">
+        Income: <span className="font-mono">{fmt(row.income)}</span>
+        {"  ·  "}Expense: <span className="font-mono">{fmt(row.expense)}</span>
+        {"  ·  "}Net: <span className="font-mono">{fmt(row.net)}</span>
+      </p>
+      {row.provisional && (
+        <p className="mt-1 font-medium text-amber-700">
+          Provisional — includes incomplete months
+        </p>
       )}
     </div>
   );

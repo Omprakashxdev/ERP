@@ -33,6 +33,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
 import { prisma } from "@/lib/prisma";
 import {
+  getCumulativeReport,
   getMonthlyExpenses,
   getMonthlyIncomeSummary,
   getMonthlyPlannedNet,
@@ -566,6 +567,65 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
     it("unknown project is rejected, not fabricated", async () => {
       const r = await getProjectMonthlyReport("clzzzzzzzzzzzzzzzzzzzzzzzz");
       expect(r.success).toBe(false);
+    });
+
+    // ── Company-wide Cumulative Balance (same fixtures as above) ──
+    // Expense per month: A 1.50 + B 0.50 + Frac 2.00 = 4.00 Sep–Dec 2026,
+    // Frac alone 2.00 Jan 2027. Income: 8.00 Sep, 1.00 Oct, Nov excluded.
+    it("cumulative: first month = income − expense; carry-forward exact", async () => {
+      const r = (await getCumulativeReport()).data as any;
+      const at = (m: number, y: number) => r.months[idx(m, y)];
+      expect(r.openingBalance).toBe("0");
+      // Apr–Aug 2026: no income or expense → balance stays on baseline
+      expect(Number(at(4, 2026).cumulativeBalance)).toBe(0);
+      expect(at(4, 2026).net).toBeNull();
+      // Sep 2026 = 8.00 − 4.00
+      expect(Number(at(9, 2026).income)).toBe(8); // A 1.00 + B 7.00
+      expect(Number(at(9, 2026).expense)).toBe(4);
+      expect(Number(at(9, 2026).net)).toBeCloseTo(4);
+      expect(Number(at(9, 2026).cumulativeBalance)).toBeCloseTo(4);
+      // carry-forward: Oct 1−4=−3 → 1.00; Nov 0−4=−4 → −3.00; Dec −4 → −7.00
+      expect(Number(at(10, 2026).net)).toBeCloseTo(-3);
+      expect(Number(at(10, 2026).cumulativeBalance)).toBeCloseTo(1);
+      expect(Number(at(12, 2026).cumulativeBalance)).toBeCloseTo(-7);
+      // Jan 2027: Frac only, −2.00 → −9.00, then flat
+      expect(Number(at(1, 2027).expense)).toBe(2);
+      expect(Number(at(1, 2027).cumulativeBalance)).toBeCloseTo(-9);
+      expect(Number(at(3, 2028).cumulativeBalance)).toBeCloseTo(-9);
+    });
+
+    it("cumulative: totals, closing and provisional flags", async () => {
+      const r = (await getCumulativeReport()).data as any;
+      expect(Number(r.totalIncome)).toBe(9); // 1 + 1 + 7
+      expect(Number(r.totalExpense)).toBe(18); // 4×4 + 2
+      expect(r.closingBalance).toBe(r.months[23].cumulativeBalance);
+      expect(Number(r.closingBalance)).toBeCloseTo(-9);
+      // missing timing (PW Legacy) makes the run provisional — a project
+      // with no fund flow record contributes no expense and is not flagged
+      // (it has no Staff Exp. to schedule)
+      expect(r.missingExpenseConfig.map((m: any) => m.projectName)).toEqual(
+        ["PW Legacy"]
+      );
+      expect(r.closingProvisional).toBe(true);
+      expect(r.months.every((m: any) => m.cumulativeProvisional)).toBe(true);
+      // ambiguous Nov record excluded but visibly counted, not fabricated
+      const nov = r.months[idx(11, 2026)];
+      expect(nov.income).toBeNull();
+      expect(nov.incomeUnavailableCount).toBe(1);
+      // fractional span warning preserved
+      expect(r.expenseSpanWarnings).toHaveLength(1);
+      expect(r.expenseSpanWarnings[0].monthsUsed).toBe(5);
+      expect(r.hasData).toBe(true);
+    });
+
+    it("cumulative matches the company running-balance report exactly", async () => {
+      const c = (await getCumulativeReport()).data as any;
+      const b = (await getMonthlyRunningBalance()).data as any;
+      for (let i = 0; i < 24; i++) {
+        expect(c.months[i].cumulativeBalance).toBe(
+          b.months[i].runningBalance
+        );
+      }
     });
   }
 );

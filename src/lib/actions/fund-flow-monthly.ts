@@ -1367,3 +1367,95 @@ export async function getProjectMonthlyReport(
     };
   });
 }
+
+// ─── Company-wide Cumulative Balance report (read-only) ────────
+// Same confirmed Rows 12–18 computation as the Monthly Summary — a thin
+// serialization over `loadReportComputation`, NOT a new formula:
+//   Opening Balance      = 0 — the implied calculation baseline for the
+//                          Apr 2026 – Mar 2028 window (not a bank balance)
+//   Cumulative (Row 18)  = prev + income − expense, first month = income −
+//                          expense; negative values are valid
+// Months whose source data is incomplete (missing project timing or
+// excluded ambiguous income) keep their flags — a provisional cumulative
+// figure is never presented as verified.
+
+export interface CumulativeReportMonth {
+  month: number;
+  year: number;
+  label: string;
+  /** verified Row 12 income for the month; null when none */
+  income: string | null;
+  /** ambiguous income records excluded this month */
+  incomeUnavailableCount: number;
+  /** derived Row 14 expense ("0" when no project is in-span) */
+  expense: string;
+  /** Row 16 net; null only when neither side has data */
+  net: string | null;
+  /** Row 18 running balance from the zero baseline */
+  cumulativeBalance: string;
+  /** this month's source data is incomplete */
+  incomplete: boolean;
+  /** the running balance at this month is affected by any incomplete
+      month up to and including it */
+  cumulativeProvisional: boolean;
+}
+
+export interface CumulativeReportResult {
+  months: CumulativeReportMonth[];
+  /** implied zero baseline — not a verified bank balance */
+  openingBalance: string;
+  /** Σ verified income over the window; null when none */
+  totalIncome: string | null;
+  /** Σ derived expenses over the window */
+  totalExpense: string;
+  /** final month's Row 18 */
+  closingBalance: string;
+  /** any incomplete month makes the closing figure provisional */
+  closingProvisional: boolean;
+  /** true when the window has any income or expense at all */
+  hasData: boolean;
+  missingExpenseConfig: MissingExpenseConfig[];
+  expenseSpanWarnings: ExpenseSpanWarning[];
+}
+
+export async function getCumulativeReport(): Promise<
+  ActionResult<CumulativeReportResult>
+> {
+  return withPermission("fundFlow", "read", async () => {
+    const report = await loadReportComputation();
+
+    let gap = false;
+    const months: CumulativeReportMonth[] = report.months.map((m) => {
+      if (m.incomplete) gap = true;
+      return {
+        month: m.month,
+        year: m.year,
+        label: m.label,
+        income: m.income,
+        incomeUnavailableCount: m.incomeUnavailableCount,
+        expense: m.expense,
+        net: m.net,
+        cumulativeBalance: m.cumulativeBalance,
+        incomplete: m.incomplete,
+        cumulativeProvisional: gap,
+      };
+    });
+
+    const closingBalance =
+      months[months.length - 1]?.cumulativeBalance ?? "0";
+
+    return {
+      months,
+      openingBalance: "0",
+      totalIncome: report.totalIncome,
+      totalExpense: report.totalExpense,
+      closingBalance,
+      closingProvisional: gap,
+      hasData:
+        report.totalIncome != null ||
+        !new Decimal(report.totalExpense).isZero(),
+      missingExpenseConfig: report.missingExpenseConfig,
+      expenseSpanWarnings: report.expenseSpanWarnings,
+    };
+  });
+}
