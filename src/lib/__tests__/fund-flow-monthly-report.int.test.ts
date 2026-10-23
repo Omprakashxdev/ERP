@@ -37,6 +37,7 @@ import {
   getMonthlyIncomeSummary,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
+  getProjectMonthlyReport,
   upsertMonthlyExpense,
 } from "../actions/fund-flow-monthly";
 import { upsertFundFlow } from "../actions/fund-flow";
@@ -365,6 +366,206 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
         expect(Number(r.income.toString())).toBeCloseTo(1.111111, 6); // untouched
       expect(Number(rows[17].income.toString())).toBeCloseTo(1.111113, 6); // residual month untouched
       expect(Number(ff!.staffExp.toString())).toBeCloseTo(1.65); // edit applied
+    });
+  }
+);
+
+(SKIP ? describe.skip : describe)(
+  "project-wise monthly report — disposable DB",
+  () => {
+    let pwA = "";
+    let pwB = "";
+    let pwLegacy = "";
+    let pwFrac = "";
+    let pwNoFF = "";
+
+    beforeAll(async () => {
+      regionId = (
+        (await prisma.region.findFirst({
+          where: { name: "PW Report Test" },
+        })) ??
+        (await prisma.region.create({ data: { name: "PW Report Test" } }))
+      ).id;
+      clientId = (
+        (await prisma.client.findFirst({
+          where: { name: "PW Test Client" },
+        })) ??
+        (await prisma.client.create({
+          data: { name: "PW Test Client", abbreviation: "PWT" },
+        }))
+      ).id;
+      const stale = await prisma.project.findMany({
+        where: { name: { startsWith: "PW " } },
+        select: { id: true },
+      });
+      for (const s of stale) {
+        const ff = await prisma.fundFlow.findUnique({
+          where: { projectId: s.id },
+        });
+        if (ff)
+          await prisma.fundFlowMonthly.deleteMany({
+            where: { fundFlowId: ff.id },
+          });
+        await prisma.project.delete({ where: { id: s.id } }).catch(() => {});
+      }
+
+      // A: Staff Exp 1.50, Sep 2026, 4 months → span Sep–Dec 2026
+      pwA = (await makeProject("PW Project A", 4)).id;
+      const ffA = await prisma.fundFlow.create({
+        data: {
+          projectId: pwA,
+          staffExp: "1.50",
+          distributionStartMonth: 9,
+          distributionStartYear: 2026,
+        },
+      });
+      // verified income 1.00 in Sep & Oct — deliberately below the 1.50
+      // expense so the project runs a negative balance
+      await alloc(ffA.id, 9, 2026, "1.00");
+      await alloc(ffA.id, 10, 2026, "1.00");
+      // ambiguous record — no audit provenance → excluded, never counted
+      await prisma.fundFlowMonthly.create({
+        data: { fundFlowId: ffA.id, month: 11, year: 2026, income: "9.99" },
+      });
+
+      // B: separate project whose income must never leak into A's report
+      pwB = (await makeProject("PW Project B", 4)).id;
+      const ffB = await prisma.fundFlow.create({
+        data: {
+          projectId: pwB,
+          staffExp: "0.50",
+          distributionStartMonth: 9,
+          distributionStartYear: 2026,
+        },
+      });
+      await alloc(ffB.id, 9, 2026, "7.00");
+
+      // Legacy: no timing config — unknown expense span
+      pwLegacy = (await makeProject("PW Legacy", null)).id;
+      await prisma.fundFlow.create({
+        data: { projectId: pwLegacy, staffExp: "5.00" },
+      });
+
+      // Fractional TTL 4.5 → provisional warning, span rounded to 5
+      pwFrac = (await makeProject("PW Frac", 4.5)).id;
+      await prisma.fundFlow.create({
+        data: {
+          projectId: pwFrac,
+          staffExp: "2.00",
+          distributionStartMonth: 9,
+          distributionStartYear: 2026,
+        },
+      });
+
+      // No fund flow record at all
+      pwNoFF = (await makeProject("PW No FundFlow", 4)).id;
+    });
+
+    afterAll(async () => {
+      const stale = await prisma.project.findMany({
+        where: { name: { startsWith: "PW " } },
+        select: { id: true },
+      });
+      for (const s of stale) {
+        const ff = await prisma.fundFlow.findUnique({
+          where: { projectId: s.id },
+        });
+        if (ff)
+          await prisma.fundFlowMonthly.deleteMany({
+            where: { fundFlowId: ff.id },
+          });
+        await prisma.project.delete({ where: { id: s.id } }).catch(() => {});
+      }
+      await prisma.client.delete({ where: { id: clientId } }).catch(() => {});
+      await prisma.region.delete({ where: { id: regionId } }).catch(() => {});
+      await prisma.$disconnect();
+    });
+
+    it("returns real project info — nothing invented", async () => {
+      const r = (await getProjectMonthlyReport(pwA)).data as any;
+      expect(r.project.name).toBe("PW Project A");
+      expect(r.project.startMonth).toBe(9);
+      expect(r.project.startYear).toBe(2026);
+      expect(r.project.startMonthLabel).toMatch(/2026/);
+      expect(r.project.targetTimeLimitMonths).toBe("4");
+      expect(Number(r.project.staffExp)).toBe(1.5);
+      expect(Number(r.project.totalFee)).toBe(0);
+      expect(Number(r.project.remainingFee)).toBe(0);
+      expect(r.hasFundFlow).toBe(true);
+      expect(r.months).toHaveLength(24);
+    });
+
+    it("income is this project's verified allocations only", async () => {
+      const r = (await getProjectMonthlyReport(pwA)).data as any;
+      expect(Number(r.months[idx(9, 2026)].income)).toBe(1);
+      expect(Number(r.months[idx(10, 2026)].income)).toBe(1);
+      // ambiguous record → excluded and flagged, never counted
+      expect(r.months[idx(11, 2026)].income).toBeNull();
+      expect(r.months[idx(11, 2026)].incomeUnavailableCount).toBe(1);
+      // every other month has no income — B's 7.00 never leaks in
+      for (const m of r.months) {
+        expect(Number(m.income ?? 0)).not.toBe(7);
+      }
+      const b = (await getProjectMonthlyReport(pwB)).data as any;
+      expect(Number(b.months[idx(9, 2026)].income)).toBe(7);
+      expect(b.months[idx(10, 2026)].income).toBeNull();
+    });
+
+    it("expense only inside the span; net & cumulative exact", async () => {
+      const r = (await getProjectMonthlyReport(pwA)).data as any;
+      const at = (m: number, y: number) => r.months[idx(m, y)];
+      // span Sep–Dec 2026
+      expect(Number(at(9, 2026).expense)).toBe(1.5);
+      expect(Number(at(12, 2026).expense)).toBe(1.5);
+      expect(Number(at(8, 2026).expense)).toBe(0); // before span → true zero
+      expect(Number(at(1, 2027).expense)).toBe(0); // after span → true zero
+      // net = income − expense (missing side counts as 0)
+      expect(Number(at(9, 2026).net)).toBeCloseTo(-0.5); // 1.00 − 1.50
+      expect(Number(at(11, 2026).net)).toBeCloseTo(-1.5); // no income − 1.50
+      expect(at(4, 2026).net).toBeNull(); // neither side has data
+      // cumulative carries forward from the zero baseline — negative OK
+      expect(Number(at(9, 2026).cumulativeBalance)).toBeCloseTo(-0.5);
+      expect(Number(at(10, 2026).cumulativeBalance)).toBeCloseTo(-1.0);
+      expect(Number(at(12, 2026).cumulativeBalance)).toBeCloseTo(-4.0);
+      expect(Number(at(3, 2028).cumulativeBalance)).toBeCloseTo(-4.0); // flat
+    });
+
+    it("missing timing is flagged — unknown span is not zero expense", async () => {
+      const r = (await getProjectMonthlyReport(pwLegacy)).data as any;
+      expect(r.missingExpenseConfig).toEqual([
+        {
+          projectName: "PW Legacy",
+          missing: ["Start month", "Target Time Limit (In Month)"],
+        },
+      ]);
+      // serialized expense is "0" only because the project is excluded;
+      // incomplete flags every month so the UI cannot present it as a real zero
+      expect(r.months.every((m: any) => m.incomplete)).toBe(true);
+    });
+
+    it("fractional Target Time Limit keeps the provisional warning", async () => {
+      const r = (await getProjectMonthlyReport(pwFrac)).data as any;
+      expect(r.expenseSpanWarnings).toHaveLength(1);
+      expect(r.expenseSpanWarnings[0].monthsUsed).toBe(5);
+      expect(r.expenseSpanWarnings[0].targetTimeLimitMonths).toBe("4.5");
+      // rounded span Sep 2026 – Jan 2027
+      expect(Number(r.months[idx(1, 2027)].expense)).toBe(2);
+      expect(Number(r.months[idx(2, 2027)].expense)).toBe(0);
+    });
+
+    it("project without a fund flow record is reported honestly", async () => {
+      const r = (await getProjectMonthlyReport(pwNoFF)).data as any;
+      expect(r.hasFundFlow).toBe(false);
+      expect(r.project.staffExp).toBeNull();
+      expect(r.project.remainingFee).toBeNull();
+      expect(r.project.startMonthLabel).toBeNull();
+      expect(r.missingExpenseConfig[0].missing).toContain("Start month");
+      expect(r.months.every((m: any) => m.income == null)).toBe(true);
+    });
+
+    it("unknown project is rejected, not fabricated", async () => {
+      const r = await getProjectMonthlyReport("clzzzzzzzzzzzzzzzzzzzzzzzz");
+      expect(r.success).toBe(false);
     });
   }
 );

@@ -26,6 +26,7 @@ import {
   type MissingExpenseConfig,
   type ExpenseContributor,
   type ExpenseSpanWarning,
+  type MonthlyReportRow,
 } from "@/lib/fund-flow-summary";
 import { computeEqualInstallments } from "@/lib/fund-flow-calcs";
 
@@ -1227,6 +1228,142 @@ export async function getMonthlyIncomeBreakdown(
       rows,
       total: total != null ? total.toString() : null,
       excluded,
+    };
+  });
+}
+
+// ─── Project-wise monthly report (read-only) ───────────────────
+// Same confirmed rules as the company-wide Rows 12–18, scoped to ONE
+// project by running it alone through `computeMonthlyReport`:
+//   Income     = this project's verified saved allocation for the month
+//   Expense    = this project's Staff Exp. while the month is inside its
+//                span [Start month … Start month + Target Time Limit − 1]
+//   Net        = Income − Expense (a missing side counts as 0)
+//   Cumulative = carry-forward from the window's zero baseline
+// A project missing Start month / Target Time Limit is flagged — an
+// unknown expense span is never silently treated as zero. Nothing here
+// writes to the database.
+
+export interface ProjectMonthlyReportResult {
+  project: {
+    id: string;
+    name: string;
+    clientName: string;
+    regionName: string;
+    startMonth: number | null;
+    startYear: number | null;
+    /** e.g. "Jul 2026"; null when Start month is not configured */
+    startMonthLabel: string | null;
+    /** serialized decimal — Project "Target Time Limit (In Month)" */
+    targetTimeLimitMonths: string | null;
+    /** serialized decimal — FundFlow "Staff Exp." */
+    staffExp: string | null;
+    /** serialized decimal — Project "Total Fee" */
+    totalFee: string | null;
+    /** serialized decimal — FundFlow "fee recvd" */
+    feeReceived: string | null;
+    /** Total Fee − fee recvd; null when no fund flow record exists */
+    remainingFee: string | null;
+  };
+  hasFundFlow: boolean;
+  months: MonthlyReportRow[];
+  missingExpenseConfig: MissingExpenseConfig[];
+  expenseSpanWarnings: ExpenseSpanWarning[];
+}
+
+export async function getProjectMonthlyReport(
+  projectId: string
+): Promise<ActionResult<ProjectMonthlyReportResult>> {
+  return withPermission("fundFlow", "read", async () => {
+    const parsedId = z.string().cuid().parse(projectId);
+
+    const project = await prisma.project.findUnique({
+      where: { id: parsedId },
+      select: {
+        id: true,
+        name: true,
+        totalFee: true,
+        targetTimeLimitMonths: true,
+        client: { select: { name: true } },
+        region: { select: { name: true } },
+      },
+    });
+    if (!project) throw new Error("Project not found.");
+
+    const fundFlow = await prisma.fundFlow.findUnique({
+      where: { projectId: parsedId },
+      select: {
+        staffExp: true,
+        feeReceived: true,
+        distributionStartMonth: true,
+        distributionStartYear: true,
+        monthlyData: {
+          select: {
+            id: true,
+            month: true,
+            year: true,
+            income: true,
+            expense: true,
+            net: true,
+            cumulative: true,
+          },
+        },
+      },
+    });
+
+    // Verified income for THIS project only — same provenance rules as
+    // the company Row 12 aggregation.
+    const incomeByMonth = await aggregateIncomeByMonth(
+      fundFlow ? [fundFlow] : []
+    );
+
+    const report = computeMonthlyReport(
+      [
+        {
+          name: project.name,
+          staffExp: fundFlow?.staffExp ?? null,
+          startMonth: fundFlow?.distributionStartMonth ?? null,
+          startYear: fundFlow?.distributionStartYear ?? null,
+          targetTimeLimitMonths: project.targetTimeLimitMonths,
+        },
+      ],
+      incomeByMonth
+    );
+
+    const totalFee = new Decimal(project.totalFee.toString());
+    const feeReceived =
+      fundFlow != null ? new Decimal(fundFlow.feeReceived.toString()) : null;
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        clientName: project.client.name,
+        regionName: project.region.name,
+        startMonth: fundFlow?.distributionStartMonth ?? null,
+        startYear: fundFlow?.distributionStartYear ?? null,
+        startMonthLabel:
+          fundFlow?.distributionStartMonth != null &&
+          fundFlow?.distributionStartYear != null
+            ? labelFor(
+                fundFlow.distributionStartMonth,
+                fundFlow.distributionStartYear
+              )
+            : null,
+        targetTimeLimitMonths:
+          project.targetTimeLimitMonths?.toString() ?? null,
+        staffExp: fundFlow?.staffExp.toString() ?? null,
+        totalFee: totalFee.toString(),
+        feeReceived: feeReceived?.toString() ?? null,
+        remainingFee:
+          feeReceived != null
+            ? totalFee.minus(feeReceived).toString()
+            : null,
+      },
+      hasFundFlow: fundFlow != null,
+      months: report.months,
+      missingExpenseConfig: report.missingExpenseConfig,
+      expenseSpanWarnings: report.expenseSpanWarnings,
     };
   });
 }

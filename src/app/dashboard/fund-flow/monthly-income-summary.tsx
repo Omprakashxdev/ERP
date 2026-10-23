@@ -42,8 +42,13 @@ import {
   getMonthlyExpenses,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
-  getMonthlyAllocations,
+  getProjectMonthlyReport,
 } from "@/lib/actions/fund-flow-monthly";
+import type {
+  MonthlyReportRow,
+  ExpenseSpanWarning,
+  MissingExpenseConfig as MissingExpenseConfigEntry,
+} from "@/lib/fund-flow-summary";
 import { getFundFlowByProjectId, getFundFlows } from "@/lib/actions/fund-flow";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
 
@@ -115,12 +120,25 @@ interface ProjectOption {
   regionName: string;
 }
 
-interface ProjectAllocation {
-  month: number;
-  year: number;
-  amount: string | null;
-  unavailable?: boolean;
-  unavailableReason?: string;
+interface ProjectReportInfo {
+  id: string;
+  name: string;
+  clientName: string;
+  regionName: string;
+  startMonthLabel: string | null;
+  targetTimeLimitMonths: string | null;
+  staffExp: string | null;
+  totalFee: string | null;
+  feeReceived: string | null;
+  remainingFee: string | null;
+}
+
+interface ProjectReport {
+  project: ProjectReportInfo;
+  hasFundFlow: boolean;
+  months: MonthlyReportRow[];
+  missingExpenseConfig: MissingExpenseConfigEntry[];
+  expenseSpanWarnings: ExpenseSpanWarning[];
 }
 
 /** Display a decimal string at 2 places — display only; stored precision
@@ -135,14 +153,6 @@ function fmt2(value: unknown): string | null {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-function monthLabel(month: number, year: number) {
-  return `${MONTH_LABELS[month - 1] ?? month} ${year}`;
 }
 
 const OVERVIEW_PAGE_SIZE = 6;
@@ -177,9 +187,8 @@ export function MonthlyIncomeSummary() {
   const [projects, setProjects] = useState<ProjectOption[] | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [allocations, setAllocations] = useState<ProjectAllocation[] | null>(null);
-  const [allocTotal, setAllocTotal] = useState<string | null>(null);
-  const [allocLoading, setAllocLoading] = useState(false);
+  const [projectReport, setProjectReport] = useState<ProjectReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -281,23 +290,23 @@ export function MonthlyIncomeSummary() {
 
   useEffect(() => {
     if (scope !== "project" || !projectId) {
-      setAllocations(null);
+      setProjectReport(null);
       return;
     }
     let cancelled = false;
-    setAllocLoading(true);
-    getMonthlyAllocations(projectId)
+    setReportLoading(true);
+    setProjectReport(null);
+    getProjectMonthlyReport(projectId)
       .then((res) => {
-        if (cancelled || !res.success || !res.data) return;
-        const d = res.data as {
-          allocations: ProjectAllocation[];
-          total: string | null;
-        };
-        setAllocations(d.allocations);
-        setAllocTotal(d.total);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setProjectReport(res.data as ProjectReport);
+        } else {
+          toast.error(res.error ?? "Could not load the project report.");
+        }
       })
       .finally(() => {
-        if (!cancelled) setAllocLoading(false);
+        if (!cancelled) setReportLoading(false);
       });
     return () => {
       cancelled = true;
@@ -305,12 +314,6 @@ export function MonthlyIncomeSummary() {
   }, [scope, projectId]);
 
   const selectedProject = projects?.find((p) => p.id === projectId) ?? null;
-  const selProjectAlloc = allocations?.[selectedIdx] ?? null;
-  const [allocView, setAllocView] = useState<"entered" | "all">("entered");
-  const [allocPage, setAllocPage] = useState(0);
-  useEffect(() => {
-    setAllocPage(0);
-  }, [projectId, allocView]);
 
   async function openEditor(projectId: string) {
     const res = await getFundFlowByProjectId(projectId);
@@ -379,11 +382,15 @@ export function MonthlyIncomeSummary() {
             Monthly Fund Flow Report
           </CardTitle>
           <span className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs text-zinc-500">
-            All projects (combined)
+            {scope === "all"
+              ? "All projects (combined)"
+              : (selectedProject?.name ?? "Single project")}
           </span>
         </div>
         <p className="text-xs text-zinc-500">
-          This report summarizes Rows 12–18 across all listed projects.
+          {scope === "all"
+            ? "Monthly income, expenses, net and cumulative balance across all projects."
+            : "Monthly income, staff expenses, net and cumulative balance for the selected project."}
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -431,7 +438,7 @@ export function MonthlyIncomeSummary() {
           <span className="text-xs text-zinc-500">
             {scope === "all"
               ? "Combined company figures (Rows 12–18)"
-              : "One project's saved monthly income plan"}
+              : "One project's income, staff expenses and running balance"}
           </span>
         </div>
 
@@ -465,15 +472,10 @@ export function MonthlyIncomeSummary() {
             setProjectId={setProjectId}
             pickerOpen={pickerOpen}
             setPickerOpen={setPickerOpen}
-            allocations={allocations}
-            allocTotal={allocTotal}
-            allocLoading={allocLoading}
+            report={projectReport}
+            reportLoading={reportLoading}
             selMonth={selMonth}
-            selProjectAlloc={selProjectAlloc}
-            allocView={allocView}
-            setAllocView={setAllocView}
-            allocPage={allocPage}
-            setAllocPage={setAllocPage}
+            selectedIdx={selectedIdx}
             onOpenEditor={openEditor}
           />
         ) : (
@@ -907,15 +909,10 @@ function ProjectWisePanel({
   setProjectId,
   pickerOpen,
   setPickerOpen,
-  allocations,
-  allocTotal,
-  allocLoading,
+  report,
+  reportLoading,
   selMonth,
-  selProjectAlloc,
-  allocView,
-  setAllocView,
-  allocPage,
-  setAllocPage,
+  selectedIdx,
   onOpenEditor,
 }: {
   projects: ProjectOption[] | null;
@@ -924,24 +921,34 @@ function ProjectWisePanel({
   setProjectId: (id: string) => void;
   pickerOpen: boolean;
   setPickerOpen: (v: boolean) => void;
-  allocations: ProjectAllocation[] | null;
-  allocTotal: string | null;
-  allocLoading: boolean;
+  report: ProjectReport | null;
+  reportLoading: boolean;
   selMonth: IncomeMonth | undefined;
-  selProjectAlloc: ProjectAllocation | null;
-  allocView: "entered" | "all";
-  setAllocView: (v: "entered" | "all") => void;
-  allocPage: number;
-  setAllocPage: (fn: (p: number) => number) => void;
+  selectedIdx: number;
   onOpenEditor: (projectId: string) => Promise<void> | void;
 }) {
+  const missingCfg = (report?.missingExpenseConfig.length ?? 0) > 0;
+  const monthRow = report?.months[selectedIdx];
+  const incomeText = monthRow?.income != null ? fmt2(monthRow.income) : null;
+  const hasAmbiguousIncome = (monthRow?.incomeUnavailableCount ?? 0) > 0;
+  // An unknown expense span is NOT zero — with missing timing the expense,
+  // net and cumulative figures are unknown, not "0.00".
+  const expenseText =
+    !missingCfg && monthRow ? fmt2(monthRow.expense) : null;
+  const netText = !missingCfg && monthRow ? fmt2(monthRow.net) : null;
+  const balText =
+    !missingCfg && monthRow ? fmt2(monthRow.cumulativeBalance) : null;
+
   return (
     <div className="space-y-4">
-      {/* Project picker */}
+      {/* Project picker — searchable */}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-zinc-700">Project</span>
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger className="inline-flex h-9 min-w-[16rem] items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-700 hover:bg-zinc-50">
+          <PopoverTrigger
+            className="inline-flex h-11 min-w-[16rem] max-w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-base font-normal text-zinc-700 hover:bg-zinc-50"
+            aria-label="Choose a project"
+          >
             {selectedProject ? (
               <span className="truncate">{selectedProject.name}</span>
             ) : (
@@ -949,7 +956,7 @@ function ProjectWisePanel({
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </PopoverTrigger>
-          <PopoverContent className="w-[24rem] p-0" align="start">
+          <PopoverContent className="w-[24rem] max-w-[90vw] p-0" align="start">
             <Command>
               <CommandInput placeholder="Type project, client or region…" />
               <CommandList>
@@ -990,6 +997,7 @@ function ProjectWisePanel({
           <Button
             variant="outline"
             size="sm"
+            className="h-11"
             onClick={() => void onOpenEditor(selectedProject.id)}
           >
             View / Edit Project
@@ -999,234 +1007,281 @@ function ProjectWisePanel({
 
       {!selectedProject ? (
         <p className="rounded-lg border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-500">
-          Choose a project above to see its saved monthly income plan.
+          Choose a project above to see its monthly income, staff expenses and
+          running balance.
         </p>
+      ) : reportLoading || !report ? (
+        <div className="rounded-lg border border-zinc-200 px-4 py-10 text-center text-sm text-zinc-500">
+          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+          Loading project report…
+        </div>
       ) : (
         <>
-          {/* Selected project header + compact summary */}
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
-            <p className="text-sm font-semibold text-zinc-800">
-              {selectedProject.name}
-            </p>
-            <p className="text-xs text-zinc-500">
-              {selectedProject.clientName} · {selectedProject.regionName}
-            </p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-xs text-zinc-500">
-                Planned income in {selMonth?.label ?? "selected month"}:
-              </span>
-              <span className="text-xl font-semibold text-zinc-900">
-                {selProjectAlloc?.amount != null
-                  ? fmt2(selProjectAlloc.amount)
-                  : selProjectAlloc?.unavailable
-                    ? "Unverified"
-                    : "Not entered"}
-              </span>
-            </div>
-            {allocations && (
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-zinc-600">
-                <span>
-                  Total entered planned income:{" "}
-                  <span className="font-mono font-medium text-zinc-800">
-                    {fmt2(allocTotal) ?? "—"}
-                  </span>
-                </span>
-                <span>
-                  Entered months:{" "}
-                  <span className="font-medium text-zinc-800">
-                    {
-                      allocations.filter(
-                        (a) => a.amount != null || a.unavailable
-                      ).length
-                    }
-                  </span>
-                </span>
-                <span>
-                  Blank months:{" "}
-                  <span className="font-medium text-zinc-800">
-                    {
-                      allocations.filter(
-                        (a) => a.amount == null && !a.unavailable
-                      ).length
-                    }
-                  </span>
-                </span>
-              </div>
-            )}
+          {/* Plain-language explanation */}
+          <div className="flex items-start gap-2 rounded-lg bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              These values show the monthly income and staff expenses of the
+              selected project. Cumulative Balance shows the project&apos;s
+              running planned balance, not its actual bank balance.
+            </span>
           </div>
 
-          {/* View toggle */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+          {/* Project information */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
+            <p className="text-base font-semibold text-zinc-800">
+              {report.project.name}
+            </p>
+            <p className="text-sm text-zinc-500">
+              {report.project.clientName} · {report.project.regionName}
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
               {(
                 [
-                  ["entered", "Entered Months"],
-                  ["all", "All 24 Months"],
+                  ["Start month", report.project.startMonthLabel ?? "Not configured"],
+                  [
+                    "Target Time Limit (In Month)",
+                    report.project.targetTimeLimitMonths ?? "Not configured",
+                  ],
+                  [
+                    "Staff Exp.",
+                    fmt2(report.project.staffExp) ?? "Not recorded",
+                  ],
+                  ["Total Fee", fmt2(report.project.totalFee) ?? "—"],
+                  [
+                    "remaing fee",
+                    fmt2(report.project.remainingFee) ?? "Not recorded",
+                  ],
                 ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setAllocView(value)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    allocView === value
-                      ? "bg-teal-600 text-white"
-                      : "text-zinc-600 hover:bg-zinc-100"
-                  }`}
-                >
-                  {label}
-                </button>
+              ).map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-xs font-medium text-zinc-500">{label}</dt>
+                  <dd
+                    className={`mt-0.5 text-base font-medium ${
+                      value === "Not configured" || value === "Not recorded"
+                        ? "italic text-amber-700"
+                        : "text-zinc-800"
+                    }`}
+                  >
+                    {value}
+                  </dd>
+                </div>
               ))}
+            </dl>
+          </div>
+
+          {/* Timing / span warnings */}
+          {missingCfg && (
+            <div className="rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+              <p className="font-medium">
+                This project is missing timing configuration — its monthly
+                expense, net and balance cannot be calculated:
+              </p>
+              <ul className="mt-1 list-inside list-disc">
+                {report.missingExpenseConfig.map((mc) => (
+                  <li key={mc.projectName}>
+                    Missing {mc.missing.join(" and ")} — set them in the Fund
+                    Flow form.
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!missingCfg && !report.hasFundFlow && (
+            <div className="rounded-lg bg-zinc-50 px-4 py-2.5 text-sm text-zinc-600">
+              This project has no fund flow record yet — no Staff Exp. or saved
+              allocations exist.
+            </div>
+          )}
+          {report.expenseSpanWarnings.map((w) => (
+            <div
+              key={w.projectName}
+              className="rounded-lg bg-blue-50 px-4 py-2.5 text-sm text-blue-800"
+            >
+              Target Time Limit {w.targetTimeLimitMonths} is not a whole
+              number: {w.note}
+            </div>
+          ))}
+
+          {/* Project financial cards for the selected month */}
+          <div>
+            <p className="mb-2 text-sm font-medium text-zinc-700">
+              {selMonth?.label ?? "Selected month"} —{" "}
+              <span className="text-zinc-500">
+                {report.project.name} only (not the company-wide Row 12–18
+                totals)
+              </span>
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryCard
+                label="Monthly Income"
+                row="this project"
+                value={incomeText}
+                icon={<ArrowUpRight className="h-4 w-4 text-emerald-600" />}
+                tone="emerald"
+                provisional={incomeText != null && hasAmbiguousIncome}
+                provisionalHint="An ambiguous record was excluded from this month"
+                emptyHint={
+                  hasAmbiguousIncome
+                    ? "Unverified record — excluded"
+                    : "No saved allocation"
+                }
+                caption="verified saved allocation"
+              />
+              <SummaryCard
+                label="Monthly Expense"
+                row="this project"
+                value={expenseText}
+                icon={<ArrowDownRight className="h-4 w-4 text-rose-600" />}
+                tone="rose"
+                emptyHint={
+                  missingCfg ? "Timing not configured" : "No expense this month"
+                }
+                caption="Staff Exp. in active months"
+              />
+              <SummaryCard
+                label="Monthly Net"
+                row="this project"
+                value={netText}
+                icon={<Minus className="h-4 w-4 text-zinc-500" />}
+                tone="zinc"
+                provisional={monthRow?.incomplete === true && !missingCfg}
+                provisionalHint="Computed with missing or excluded inputs treated as 0"
+                emptyHint={
+                  missingCfg
+                    ? "Unavailable — timing missing"
+                    : "No income or expense this month"
+                }
+                caption="income − staff expense"
+              />
+              <SummaryCard
+                label="Cumulative Balance"
+                row="this project"
+                value={balText}
+                icon={<Wallet className="h-4 w-4 text-blue-600" />}
+                tone="blue"
+                provisional={monthRow?.incomplete === true && !missingCfg}
+                provisionalHint="Includes months with missing or excluded inputs"
+                emptyHint={
+                  missingCfg ? "Unavailable — timing missing" : "—"
+                }
+                caption="Project's running planned balance — not a bank balance"
+              />
             </div>
           </div>
 
-          {/* Paginated allocation schedule (6 rows per page) */}
-          <AllocMonthsTable
-            allocations={allocations}
-            allocLoading={allocLoading}
-            view={allocView}
-            page={allocPage}
-            setPage={setAllocPage}
-          />
-          <p className="text-xs text-zinc-500">
-            Project-wise view shows income allocations only. Expenses, net and
-            running balance are company-level workbook figures — not per project.
-            Allocations after June 2027 remain project data but are not counted
-            in the company Row 12 total.
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
-
-const ALLOC_PAGE_SIZE = 6;
-
-function AllocMonthsTable({
-  allocations,
-  allocLoading,
-  view,
-  page,
-  setPage,
-}: {
-  allocations: ProjectAllocation[] | null;
-  allocLoading: boolean;
-  view: "entered" | "all";
-  page: number;
-  setPage: (fn: (p: number) => number) => void;
-}) {
-  const rows =
-    view === "entered"
-      ? (allocations ?? []).filter(
-          (a) => a.amount != null || a.unavailable === true
-        )
-      : (allocations ?? []);
-  const pageCount = Math.max(1, Math.ceil(rows.length / ALLOC_PAGE_SIZE));
-  const pageRows = rows.slice(
-    page * ALLOC_PAGE_SIZE,
-    (page + 1) * ALLOC_PAGE_SIZE
-  );
-  const firstIdx = page * ALLOC_PAGE_SIZE;
-
-  return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-zinc-200">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-              <th className="py-2 pl-3 pr-3">Month</th>
-              <th className="py-2 pr-3 text-right">Planned Income</th>
-              <th className="py-2 pr-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allocLoading && (
-              <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-zinc-500">
-                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                  Loading allocation schedule…
-                </td>
-              </tr>
-            )}
-            {!allocLoading && pageRows.length === 0 && (
-              <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-zinc-500">
-                  {view === "entered"
-                    ? "No entered months yet — switch to All 24 Months to plan."
-                    : "No allocation data."}
-                </td>
-              </tr>
-            )}
-            {!allocLoading &&
-              pageRows.map((a) => (
-                <tr key={`${a.year}-${a.month}`} className="border-b last:border-0">
-                  <td className="py-1.5 pl-3 pr-3 font-medium text-zinc-800">
-                    {monthLabel(a.month, a.year)}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-mono">
-                    {a.unavailable ? (
-                      <span
-                        className="text-amber-600"
-                        title={a.unavailableReason}
+          {/* 24-month project table */}
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-zinc-800">
+              Month-wise — Apr 2026 to Mar 2028
+            </h3>
+            <div className="overflow-x-auto rounded-lg border border-zinc-200">
+              <div className="max-h-[26rem] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="sticky top-0 border-b bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
+                      <th className="py-2 pl-3 pr-3">Month</th>
+                      <th className="py-2 pr-3 text-right">Income</th>
+                      <th className="py-2 pr-3 text-right">Staff Expense</th>
+                      <th className="py-2 pr-3 text-right">Monthly Net</th>
+                      <th className="py-2 pr-3 text-right">
+                        Cumulative Balance
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.months.map((row, i) => (
+                      <tr
+                        key={`${row.year}-${row.month}`}
+                        className={`border-b last:border-0 ${
+                          i === selectedIdx ? "bg-teal-50/60" : ""
+                        }`}
                       >
-                        Unverified
-                      </span>
-                    ) : a.amount != null ? (
-                      fmt2(a.amount)
-                    ) : (
-                      <span className="italic text-zinc-500">Not entered</span>
-                    )}
-                  </td>
-                  <td className="py-1.5 pr-3 text-xs text-zinc-500">
-                    {a.unavailable
-                      ? "Record without workbook provenance"
-                      : a.amount == null
-                        ? "Blank"
-                        : Number(a.amount) === 0
-                          ? "Entered as zero"
-                          : "Planned"}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      {rows.length > ALLOC_PAGE_SIZE && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-zinc-500">
-            Showing {firstIdx + 1}–{firstIdx + pageRows.length} of{" "}
-            {rows.length} months
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="gap-1"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= pageCount - 1}
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              className="gap-1"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+                        <td className="py-2 pl-3 pr-3 font-medium text-zinc-800">
+                          {row.label}
+                          {i === selectedIdx && (
+                            <span className="ml-2 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">
+                              selected
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {row.income != null ? (
+                            fmt2(row.income)
+                          ) : row.incomeUnavailableCount > 0 ? (
+                            <span
+                              className="text-amber-600"
+                              title="A saved record exists but lacks verified provenance — excluded, not counted"
+                            >
+                              Unverified
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                          {row.income != null &&
+                            row.incomeUnavailableCount > 0 && (
+                              <sup
+                                className="ml-0.5 text-amber-600"
+                                title="An ambiguous record was excluded from this month"
+                              >
+                                *
+                              </sup>
+                            )}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {missingCfg ? "—" : fmt2(row.expense)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {missingCfg ? (
+                            "—"
+                          ) : row.net != null ? (
+                            <>
+                              {fmt2(row.net)}
+                              {row.incomplete && (
+                                <sup
+                                  className="ml-0.5 text-amber-600"
+                                  title="Provisional — missing or excluded inputs treated as 0"
+                                >
+                                  *
+                                </sup>
+                              )}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {missingCfg ? (
+                            "—"
+                          ) : (
+                            <>
+                              {fmt2(row.cumulativeBalance)}
+                              {row.incomplete && (
+                                <sup
+                                  className="ml-0.5 text-amber-600"
+                                  title="Provisional — carries months with missing or excluded inputs"
+                                >
+                                  *
+                                </sup>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              Project-specific figures — not the company-wide Excel Row 12–18
+              totals. A month outside the project&apos;s schedule contributes
+              zero staff expense; a negative balance is a valid planned result.
+              {missingCfg &&
+                " Timing is not configured for this project, so expense, net and balance cannot be shown."}
+            </p>
           </div>
-        </div>
-      )}
-      {rows.length > 0 && rows.length <= ALLOC_PAGE_SIZE && !allocLoading && (
-        <p className="text-xs text-zinc-500">
-          Showing all {rows.length} {view === "entered" ? "entered" : ""} months
-        </p>
+        </>
       )}
     </div>
   );
