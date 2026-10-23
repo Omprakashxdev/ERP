@@ -9,7 +9,6 @@ import {
   Info,
   Loader2,
   Minus,
-  Pencil,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,7 +40,6 @@ import {
   getMonthlyIncomeSummary,
   getMonthlyIncomeBreakdown,
   getMonthlyExpenses,
-  upsertMonthlyExpense,
   getMonthlyPlannedNet,
   getMonthlyRunningBalance,
   getMonthlyAllocations,
@@ -63,10 +61,14 @@ interface IncomeMonth {
 interface ExpenseMonth {
   month: number;
   year: number;
-  amount: { toString: () => string } | null;
-  updatedAt: string | null;
-  unavailable?: boolean;
-  unavailableReason?: string;
+  /** derived Row 14 expense ("0" when no project is in-span) */
+  amount: { toString: () => string };
+  contributors: { projectName: string; staffExp: string }[];
+}
+
+interface MissingExpenseConfig {
+  projectName: string;
+  missing: string[];
 }
 
 interface PlannedNetMonth {
@@ -135,17 +137,6 @@ function fmt2(value: unknown): string | null {
   });
 }
 
-function decimalToInputString(value: unknown, maxFrac = 2): string {
-  if (value == null) return "";
-  const s = typeof value === "string" ? value : String(value);
-  if (s === "" || s === "null" || s === "undefined") return "";
-  if (!s.includes(".")) return `${s}.00`;
-  const [intPart, fracPart] = s.split(".");
-  if (fracPart.length === 1) return `${intPart}.${fracPart}0`;
-  if (fracPart.length > maxFrac) return `${intPart}.${fracPart.slice(0, maxFrac)}`;
-  return s;
-}
-
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -162,7 +153,9 @@ export function MonthlyIncomeSummary() {
   const [expenses, setExpenses] = useState<ExpenseMonth[]>([]);
   const [planned, setPlanned] = useState<PlannedNetMonth[]>([]);
   const [running, setRunning] = useState<RunningBalanceMonth[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [missingExpenseConfig, setMissingExpenseConfig] = useState<
+    MissingExpenseConfig[]
+  >([]);
 
   // Selected month — defaults to the first formula-covered month with income,
   // else the first covered month (Apr 2026).
@@ -173,7 +166,6 @@ export function MonthlyIncomeSummary() {
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
-  const [editExpenses, setEditExpenses] = useState(false);
   const [overviewPage, setOverviewPage] = useState(0);
   const [editorProject, setEditorProject] = useState<FundFlowWithComputed | null>(null);
 
@@ -200,8 +192,12 @@ export function MonthlyIncomeSummary() {
         setSummary(incomeResult.data);
       }
       if (expenseResult.success && expenseResult.data) {
-        const data = expenseResult.data as { expenses: ExpenseMonth[] };
+        const data = expenseResult.data as {
+          expenses: ExpenseMonth[];
+          missingExpenseConfig?: MissingExpenseConfig[];
+        };
         setExpenses(data.expenses);
+        setMissingExpenseConfig(data.missingExpenseConfig ?? []);
       }
       if (netResult.success && netResult.data) {
         setPlanned((netResult.data as { months: PlannedNetMonth[] }).months);
@@ -320,41 +316,6 @@ export function MonthlyIncomeSummary() {
     }
   }
 
-  async function saveExpense(
-    month: number,
-    year: number,
-    value: string,
-    expectedUpdatedAt: string | null
-  ) {
-    const trimmed = value.trim();
-    // Blank input is a no-op: never delete or overwrite existing data.
-    if (trimmed === "") {
-      await load();
-      return;
-    }
-    setSaving(true);
-    try {
-      const result = await upsertMonthlyExpense({
-        month,
-        year,
-        amount: trimmed,
-        expectedUpdatedAt: expectedUpdatedAt ?? undefined,
-      });
-      if (!result.success) {
-        toast.error(result.error ?? "Failed to save monthly expense.");
-        await load();
-        return;
-      }
-      toast.success("Monthly expense saved");
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unexpected error.");
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  }
-
   if (loading) {
     return (
       <Card className="shadow-sm">
@@ -372,8 +333,7 @@ export function MonthlyIncomeSummary() {
   }
 
   const selIncomeText = fmt2(selMonth?.totalIncome);
-  const selExpenseEntered = selExpense?.amount != null && !selExpense.unavailable;
-  const selExpenseText = selExpenseEntered ? fmt2(selExpense.amount) : null;
+  const selExpenseText = fmt2(selExpense?.amount);
   const selNetText = fmt2(selPlanned?.plannedNet);
   const selBalText = fmt2(selRunning?.runningBalance);
   const selProvisional =
@@ -388,17 +348,15 @@ export function MonthlyIncomeSummary() {
   function statusFor(i: number): { label: string; tone: "green" | "amber" | "zinc" } {
     const m = summary[i];
     const e = expenses[i];
-    if (m && !m.formulaCovered)
-      return { label: "Outside formula range", tone: "zinc" };
-    if (e?.unavailable) return { label: "Expense unverified", tone: "amber" };
     const incomePresent = m?.totalIncome != null;
-    const expensePresent = e?.amount != null;
+    const expensePresent =
+      (e?.contributors?.length ?? 0) > 0 && e?.amount != null && e.amount !== "0";
     if (!incomePresent && !expensePresent)
       return { label: "No data", tone: "zinc" };
-    if (!expensePresent)
-      return { label: "Missing expense", tone: "amber" };
     if (!incomePresent)
       return { label: "No income planned", tone: "zinc" };
+    if (missingExpenseConfig.length > 0)
+      return { label: "Partial — see notice", tone: "amber" };
     return { label: "Complete", tone: "green" };
   }
 
@@ -432,7 +390,8 @@ export function MonthlyIncomeSummary() {
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5" />
-            Blank expense is different from zero.
+            Expenses are calculated automatically from each project&apos;s Staff
+            Exp. across its Start month and Target Time Limit.
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5" />
@@ -530,10 +489,13 @@ export function MonthlyIncomeSummary() {
             value={selExpenseText}
             icon={<ArrowDownRight className="h-4 w-4 text-rose-600" />}
             tone="rose"
-            emptyHint={
-              selExpense?.unavailable
-                ? "Unverified record — not editable"
-                : "Expense not entered"
+            emptyHint="No project expenses scheduled"
+            caption={
+              selExpense?.contributors?.length
+                ? `from ${selExpense.contributors.length} project${
+                    selExpense.contributors.length === 1 ? "" : "s"
+                  }`
+                : "calculated automatically"
             }
           />
           <SummaryCard
@@ -544,7 +506,7 @@ export function MonthlyIncomeSummary() {
             tone="zinc"
             provisional={selPlanned?.incomplete}
             provisionalHint="Computed with missing inputs treated as 0"
-            emptyHint="Outside formula range"
+            emptyHint="No income or expense this month"
           />
           <SummaryCard
             label="Planned Running Balance"
@@ -554,7 +516,7 @@ export function MonthlyIncomeSummary() {
             tone="blue"
             provisional={selRunning?.incomplete}
             provisionalHint="Includes months with missing inputs"
-            emptyHint="Outside formula range"
+            emptyHint="—"
             caption="Plan from an implied zero baseline — not a bank balance"
           />
         </div>
@@ -746,16 +708,20 @@ export function MonthlyIncomeSummary() {
                           </sup>
                         )}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {e?.unavailable ? (
-                          <span className="text-amber-600" title={e.unavailableReason}>
-                            Unverified
-                          </span>
-                        ) : e?.amount != null ? (
-                          fmt2(e.amount)
-                        ) : (
-                          <span className="italic text-zinc-500">Not entered</span>
-                        )}
+                      <td
+                        className="py-2 pr-3 text-right font-mono"
+                        title={
+                          e?.contributors?.length
+                            ? e.contributors
+                                .map(
+                                  (c) =>
+                                    `${c.projectName}: Staff Exp. ${fmt2(c.staffExp)}`
+                                )
+                                .join("\n")
+                            : undefined
+                        }
+                      >
+                        {e != null ? fmt2(e.amount) : "—"}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">
                         {p?.plannedNet != null ? (
@@ -770,8 +736,6 @@ export function MonthlyIncomeSummary() {
                               </sup>
                             )}
                           </>
-                        ) : p?.formulaCovered ? (
-                          <span className="italic text-zinc-500">Incomplete</span>
                         ) : (
                           "—"
                         )}
@@ -789,8 +753,6 @@ export function MonthlyIncomeSummary() {
                               </sup>
                             )}
                           </>
-                        ) : r?.formulaCovered ? (
-                          <span className="italic text-zinc-500">Incomplete</span>
                         ) : (
                           "—"
                         )}
@@ -810,53 +772,42 @@ export function MonthlyIncomeSummary() {
           </div>
         </div>
 
-        {/* Expense editing */}
-        <div className="rounded-lg border border-zinc-200">
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-            onClick={() => setEditExpenses((v) => !v)}
-            aria-expanded={editExpenses}
-          >
-            <Pencil className="h-4 w-4 text-zinc-500" />
-            Edit Monthly Expenses (Row 14)
-            <span className="ml-auto text-xs font-normal text-zinc-500">
-              {editExpenses ? "Hide" : "Show"}
-            </span>
-          </button>
-          {editExpenses && (
-            <div className="border-t border-zinc-200 px-4 py-3">
-              <p className="mb-3 text-xs text-zinc-500">
-                Company monthly expense plan — enter one amount per month.
-                Leave blank for unentered; enter 0 for an explicit zero.
+        {/* How Row 14 is derived + missing-configuration flag */}
+        <div className="rounded-lg border border-zinc-200 px-4 py-3">
+          <p className="text-xs text-zinc-500">
+            <span className="font-medium text-zinc-700">
+              Monthly Expenses (Row 14) are calculated automatically
+            </span>{" "}
+            — every project contributes its saved Staff Exp. in each month of
+            its schedule (Start month through Start month + Target Time Limit −
+            1). To change an expense, update the project&apos;s Staff Exp.,
+            Start month or Target Time Limit in the Fund Flow form.
+          </p>
+          {selExpense && selExpense.contributors.length > 0 && (
+            <p className="mt-2 text-xs text-zinc-500">
+              <span className="font-medium text-zinc-700">
+                {selMonth?.label} contributors:
+              </span>{" "}
+              {selExpense.contributors
+                .map((c) => `${c.projectName} (${fmt2(c.staffExp)})`)
+                .join(", ")}
+            </p>
+          )}
+          {missingExpenseConfig.length > 0 && (
+            <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="font-medium">
+                {missingExpenseConfig.length} project
+                {missingExpenseConfig.length === 1 ? " is" : "s are"} missing
+                timing configuration — excluded from expenses (totals may be
+                incomplete):
               </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                {expenses.map((e) => (
-                  <div key={`${e.year}-${e.month}`} className="space-y-1">
-                    <label className="block text-xs text-zinc-500">
-                      {monthLabel(e.month, e.year)}
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      defaultValue={decimalToInputString(e.amount, 2)}
-                      disabled={e.unavailable === true || saving}
-                      placeholder="—"
-                      title={
-                        e.unavailable
-                          ? e.unavailableReason ?? "Unavailable for editing"
-                          : "Manually entered monthly expense"
-                      }
-                      className="h-8 w-full rounded border border-zinc-200 bg-white px-2 text-right font-mono text-sm text-zinc-700 disabled:bg-zinc-50 disabled:text-zinc-500 focus:border-zinc-400 focus:outline-none"
-                      onBlur={(ev) => {
-                        const v = ev.target.value.trim();
-                        if (v === decimalToInputString(e.amount, 2)) return;
-                        void saveExpense(e.month, e.year, v, e.updatedAt);
-                      }}
-                    />
-                  </div>
+              <ul className="mt-1 list-inside list-disc">
+                {missingExpenseConfig.map((m) => (
+                  <li key={m.projectName}>
+                    {m.projectName} — missing {m.missing.join(" and ")}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
         </div>

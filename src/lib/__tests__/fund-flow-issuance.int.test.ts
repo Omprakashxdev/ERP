@@ -41,6 +41,9 @@ let projectId = "";
 
 (SKIP ? describe.skip : describe)("fund flow confirmed fields — disposable DB", () => {
   beforeAll(async () => {
+    await prisma.user.create({
+      data: { id: "int-test", email: "int-test@local", hashedPassword: "x" },
+    }).catch(() => {});
     const region = await prisma.region.create({ data: { name: "Rajkot FF-Test" } });
     regionId = region.id;
     const client = await prisma.client.create({
@@ -69,6 +72,7 @@ let projectId = "";
     await prisma.project.delete({ where: { id: projectId } }).catch(() => {});
     await prisma.client.delete({ where: { id: clientId } }).catch(() => {});
     await prisma.region.delete({ where: { id: regionId } }).catch(() => {});
+    await prisma.user.delete({ where: { id: "int-test" } }).catch(() => {});
     await prisma.$disconnect();
   });
 

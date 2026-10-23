@@ -178,12 +178,27 @@ export async function upsertFundFlow(
           let skippedOutside = 0;
           for (let i = 0; i < n; i++) {
             if (windowKeys.has(`${cursor.y}-${cursor.m}`)) {
-              await tx.fundFlowMonthly.create({
+              const rec = await tx.fundFlowMonthly.create({
                 data: {
                   fundFlowId: fundFlow.id,
                   month: cursor.m,
                   year: cursor.y,
                   income: perMonth,
+                },
+              });
+              // Same provenance marker applyMonthlyPlan writes — without it the
+              // monthly report treats these saved allocations as ambiguous and
+              // excludes them from Total Income per Month (Row 12).
+              await tx.auditLog.create({
+                data: {
+                  userId: user.id,
+                  action: "create",
+                  entity: "FundFlowMonthly",
+                  entityId: rec.id,
+                  metadata: {
+                    source: "ff-01k-workbook-allocation",
+                    generatedBy: "fund-flow-initial-distribution",
+                  },
                 },
               });
               createdAllocations++;

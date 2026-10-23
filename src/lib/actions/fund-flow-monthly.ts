@@ -20,6 +20,13 @@ import {
 export type { MonthWindow } from "@/lib/fund-flow-window";
 import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
 
+import {
+  computeMonthlyReport,
+  type ExpenseSourceProject,
+  type MissingExpenseConfig,
+  type ExpenseContributor,
+} from "@/lib/fund-flow-summary";
+
 const windowKeySet = new Set(
   MONTHLY_ALLOCATION_WINDOW.map((m) => `${m.year}-${m.month}`)
 );
@@ -46,9 +53,8 @@ export interface MonthlyIncomeSummary {
   month: number;
   year: number;
   label: string;
-  /** Excel Row 12 SUM formulas exist only in V12:AJ12 (Apr 2026 – Jun 2027).
-      Months beyond that range contain no workbook formula — allocations there
-      are preserved in the data but produce no Row 12 value. */
+  /** The confirmed report covers every month of the Apr 2026 – Mar 2028
+      window — kept for interface compatibility, always true. */
   formulaCovered: boolean;
   /** Serialized decimal string — class instances cannot cross the RSC boundary. */
   totalIncome: string | null;
@@ -307,12 +313,76 @@ interface IncomeMonthAggregate {
   unavailableCount: number;
 }
 
-/** Verified workbook income aggregated per month key "YYYY-M". */
-async function aggregateIncomeByMonth(): Promise<Map<string, IncomeMonthAggregate>> {
-  const allFundFlows = await prisma.fundFlow.findMany({
-    include: { monthlyData: true },
-  });
+interface FundFlowReportRow {
+  staffExp: Decimal;
+  distributionStartMonth: number | null;
+  distributionStartYear: number | null;
+  project: { name: string; targetTimeLimitMonths: Decimal | null } | null;
+  monthlyData: {
+    id: string;
+    month: number;
+    year: number;
+    income: Decimal;
+    expense: Decimal | null;
+    net: Decimal | null;
+    cumulative: Decimal | null;
+  }[];
+}
 
+/**
+ * Single report query — Row 12 income aggregates + Row 14 expense sources.
+ * One findMany serves both sides so income and expenses cannot diverge.
+ */
+async function loadReportComputation() {
+  const allFundFlows = (await prisma.fundFlow.findMany({
+    select: {
+      staffExp: true,
+      distributionStartMonth: true,
+      distributionStartYear: true,
+      project: { select: { name: true, targetTimeLimitMonths: true } },
+      monthlyData: {
+        select: {
+          id: true,
+          month: true,
+          year: true,
+          income: true,
+          expense: true,
+          net: true,
+          cumulative: true,
+        },
+      },
+    },
+  })) as FundFlowReportRow[];
+
+  const incomeByMonth = await aggregateIncomeByMonth(allFundFlows);
+
+  const projects: ExpenseSourceProject[] = allFundFlows.map((ff) => ({
+    name: ff.project?.name ?? "Unknown project",
+    staffExp: ff.staffExp,
+    startMonth: ff.distributionStartMonth,
+    startYear: ff.distributionStartYear,
+    targetTimeLimitMonths: ff.project?.targetTimeLimitMonths ?? null,
+  }));
+
+  return computeMonthlyReport(projects, incomeByMonth);
+}
+
+interface FundFlowWithMonthlyData {
+  monthlyData: {
+    id: string;
+    month: number;
+    year: number;
+    income: Decimal;
+    expense: Decimal | null;
+    net: Decimal | null;
+    cumulative: Decimal | null;
+  }[];
+}
+
+/** Verified workbook income aggregated per month key "YYYY-M". */
+async function aggregateIncomeByMonth(
+  allFundFlows: FundFlowWithMonthlyData[]
+): Promise<Map<string, IncomeMonthAggregate>> {
   // Fetch all audit provenance for all monthly records in one query
   const allMonthlyIds = allFundFlows.flatMap((ff) => ff.monthlyData.map((m) => m.id));
   const provenanceSet = await fetchProvenanceSet(allMonthlyIds);
@@ -353,29 +423,38 @@ async function aggregateIncomeByMonth(): Promise<Map<string, IncomeMonthAggregat
 
 export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyIncomeSummary[]>> {
   return withPermission("fundFlow", "read", async () => {
-    const monthlyAggregates = await aggregateIncomeByMonth();
-
-    // Excel Row 12 has SUM formulas only in V12:AJ12 (Apr 2026 – Jun 2027);
-    // AK12:AT12 are blank. No Row 12 value is generated beyond AJ, so the
-    // AU12-equivalent grand total (a client-side sum over non-null months)
-    // reproduces SUM(V12:AT12) exactly — it can only ever see covered cells.
-    const ROW12_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
+    // Confirmed rule: Row 12 = Σ saved allocations — the whole Apr 2026 –
+    // Mar 2028 window is covered, not the workbook's old 15-column boundary.
+    const monthlyAggregates = await aggregateIncomeByMonth(
+      (await prisma.fundFlow.findMany({
+        select: {
+          monthlyData: {
+            select: {
+              id: true,
+              month: true,
+              year: true,
+              income: true,
+              expense: true,
+              net: true,
+              cumulative: true,
+            },
+          },
+        },
+      })) as FundFlowWithMonthlyData[]
+    );
 
     const summary: MonthlyIncomeSummary[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month, label }, index) => {
+      ({ year, month, label }) => {
         const key = `${year}-${month}`;
         const agg = monthlyAggregates.get(key);
-        const formulaCovered = index <= ROW12_LAST_COVERED_INDEX;
 
         return {
           month,
           year,
           label,
-          formulaCovered,
+          formulaCovered: true,
           totalIncome:
-            formulaCovered && agg && agg.projectCount > 0
-              ? agg.total.toString()
-              : null,
+            agg && agg.projectCount > 0 ? agg.total.toString() : null,
           projectCount: agg?.projectCount ?? 0,
           unavailableCount: agg?.unavailableCount ?? 0,
         };
@@ -386,389 +465,150 @@ export async function getMonthlyIncomeSummary(): Promise<ActionResult<MonthlyInc
   });
 }
 
-// ─── Worksheet-Level Monthly Expenses (FF-01M: Excel Row 14) ────
-// One company-level expense amount per month (Excel V–AS).
-// Manually entered values only — never derived from project staffing
-// columns I–N, staffExp or miscExp. Units are workbook-native and neutral.
+// ─── Derived Monthly Expenses (confirmed Excel Row 14) ──────────
+// Row 14 is AUTOMATIC: each project contributes its saved Staff Exp. in
+// every month of [Start month … Start month + Target Time Limit − 1].
+// It is never entered manually and never persisted. Projects missing a
+// Start month or Target Time Limit are excluded and flagged — timing is
+// never invented for legacy rows.
 
 export interface MonthlyExpense {
   month: number;
   year: number;
-  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
-  amount: string | null;
-  /** ISO timestamp of the stored record — optimistic concurrency token */
-  updatedAt: string | null;
-  /** true if a record exists but lacks FF-01M create provenance */
-  unavailable?: boolean;
-  unavailableReason?: string;
+  /** Serialized decimal string — derived expense ("0" when nothing applies) */
+  amount: string;
+  /** in-span projects contributing their Staff Exp. this month */
+  contributors: ExpenseContributor[];
 }
 
 export interface MonthlyExpenseResult {
   expenses: MonthlyExpense[];
-  /** Serialized decimal sum of entered amounts only (Excel AU14 SUM parity) */
-  total: string | null;
-}
-
-const expenseSchema = z.object({
-  month: z.number().int().min(1).max(12),
-  year: z.number().int().min(2000).max(2100),
-  amount: z.string().nullable(),
-  /**
-   * Optimistic concurrency token: the updatedAt ISO string of the record
-   * as last read by the client. When a record exists, an update is only
-   * applied if the stored updatedAt still matches — two users editing
-   * the same month cannot silently overwrite each other.
-   */
-  expectedUpdatedAt: z.string().optional(),
-});
-
-// ─── Read ───────────────────────────────────────────────────────
-
-interface ExpenseRecordInfo {
-  amount: Decimal;
-  updatedAt: Date;
-  /** true only when a create audit carries the ff-01m source marker */
-  verified: boolean;
-}
-
-/** All worksheet-level expense records keyed "YYYY-MM", with provenance verdicts. */
-async function loadExpenseMap(): Promise<Map<string, ExpenseRecordInfo>> {
-  const records = await prisma.fundFlowMonthlyExpense.findMany();
-
-  const provenanceSet = await fetchProvenanceSet(
-    records.map((r) => r.id),
-    "FundFlowMonthlyExpense",
-    "ff-01m-workbook-expense"
-  );
-
-  const map = new Map<string, ExpenseRecordInfo>();
-  for (const r of records) {
-    map.set(`${r.year}-${String(r.month).padStart(2, "0")}`, {
-      amount: new Decimal(r.amount.toString()),
-      updatedAt: r.updatedAt,
-      verified: provenanceSet.has(r.id),
-    });
-  }
-  return map;
+  /** Serialized decimal sum of derived monthly expenses across the window */
+  total: string;
+  /** projects excluded from Row 14 for missing timing configuration */
+  missingExpenseConfig: MissingExpenseConfig[];
 }
 
 export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseResult>> {
   return withPermission("fundFlow", "read", async () => {
-    const expenseInfo = await loadExpenseMap();
+    const report = await loadReportComputation();
 
-    const expenseMap = new Map<string, MonthlyExpense>();
-    for (const [key, r] of expenseInfo) {
-      const [y, m] = key.split("-").map(Number);
-
-      if (!r.verified) {
-        expenseMap.set(key, {
-          month: m,
-          year: y,
-          amount: null,
-          updatedAt: null,
-          unavailable: true,
-          unavailableReason:
-            "Record without audit provenance — unavailable for editing",
-        });
-        continue;
-      }
-
-      expenseMap.set(key, {
-        month: m,
-        year: y,
-        amount: r.amount.toString(),
-        updatedAt: r.updatedAt.toISOString(),
-      });
-    }
-
-    const expenses: MonthlyExpense[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month }) => {
-        const key = `${year}-${String(month).padStart(2, "0")}`;
-        return (
-          expenseMap.get(key) ?? {
-            month,
-            year,
-            amount: null,
-            updatedAt: null,
-          }
-        );
-      }
-    );
-
-    const total = expenses.reduce<Decimal | null>((acc, e) => {
-      if (e.amount == null) return acc;
-      return acc ? acc.plus(e.amount) : new Decimal(e.amount);
-    }, null);
-
-    return { expenses, total: total != null ? total.toString() : null };
+    return {
+      expenses: report.months.map((m) => ({
+        month: m.month,
+        year: m.year,
+        amount: m.expense,
+        contributors: m.expenseContributors,
+      })),
+      total: report.totalExpense,
+      missingExpenseConfig: report.missingExpenseConfig,
+    };
   });
 }
 
 // ─── Write ──────────────────────────────────────────────────────
+// Row 14 is now DERIVED from each project's Staff Exp. and schedule —
+// manual monthly-expense entry no longer exists. Legacy
+// FundFlowMonthlyExpense records are preserved untouched; the calculated
+// report never reads them, so they can neither be edited nor double-counted.
 
 export async function upsertMonthlyExpense(
-  input: unknown
+  _input: unknown
 ): Promise<ActionResult<{ id: string }>> {
-  return withPermission("fundFlow", "update", async (user) => {
-    const parsed = expenseSchema.parse(input);
-    await checkRateLimit(user.id);
-
-    // Reject out-of-window writes (Excel V–AS only; AT is outside the window)
-    const reqKey = `${parsed.year}-${parsed.month}`;
-    if (!windowKeySet.has(reqKey)) {
-      throw new Error(
-        `Month ${parsed.month}/${parsed.year} is outside the supported 24-month allocation window.`
-      );
-    }
-
-    const existing = await prisma.fundFlowMonthlyExpense.findUnique({
-      where: {
-        month_year: { month: parsed.month, year: parsed.year },
-      },
-    });
-
-    // Blank input is a no-op: never delete or overwrite existing data.
-    if (parsed.amount == null || parsed.amount.trim() === "") {
-      return { id: existing?.id ?? "" };
-    }
-
-    let amountDecimal: Decimal;
-    try {
-      amountDecimal = new Decimal(parsed.amount);
-      if (!amountDecimal.isFinite()) throw new Error();
-    } catch {
-      throw new Error("Invalid monetary amount.");
-    }
-    // Expense column remains DECIMAL(19,2); reject >2dp explicitly rather
-    // than letting Postgres silently round.
-    if (amountDecimal.decimalPlaces() > 2) {
-      throw new Error("Amount must have up to 2 decimal places.");
-    }
-
-    if (existing) {
-      // Provenance: a record without an FF-01M create audit entry cannot be
-      // confirmed as a workbook expense entry — reject rather than overwrite.
-      const provenance = await fetchProvenanceSet(
-        [existing.id],
-        "FundFlowMonthlyExpense",
-        "ff-01m-workbook-expense"
-      );
-      if (!provenance.has(existing.id)) {
-        throw new Error(
-          "Cannot update existing FundFlowMonthlyExpense record: audit provenance missing — the record's meaning is ambiguous."
-        );
-      }
-
-      // Optimistic concurrency: the record must not have changed since the
-      // client last read it. A missing or stale token means another user
-      // already wrote to this month — reject instead of silently overwriting.
-      if (!parsed.expectedUpdatedAt) {
-        throw new Error(
-          "Concurrent update detected: the monthly expense record was created or modified after it was read — reload and retry."
-        );
-      }
-      const expected = new Date(parsed.expectedUpdatedAt);
-      const res = await prisma.fundFlowMonthlyExpense.updateMany({
-        where: { id: existing.id, updatedAt: expected },
-        data: { amount: amountDecimal },
-      });
-      if (res.count === 0) {
-        throw new Error(
-          "Concurrent update detected: the monthly expense record was modified by another user — reload and retry."
-        );
-      }
-
-      await audit(user.id, "update", "FundFlowMonthlyExpense", existing.id, {
-        source: "ff-01m-workbook-expense",
-        input: await sanitizeForAudit({
-          month: parsed.month,
-          year: parsed.year,
-          amount: parsed.amount,
-        }),
-      });
-
-      return { id: existing.id };
-    }
-
-    // Create path: the @@unique([month, year]) constraint makes concurrent
-    // creates atomic — a duplicate-key error means another user won the race.
-    let record: { id: string };
-    try {
-      record = await prisma.fundFlowMonthlyExpense.create({
-        data: {
-          month: parsed.month,
-          year: parsed.year,
-          amount: amountDecimal,
-        },
-      });
-    } catch (e) {
-      const code = (e as { code?: string })?.code;
-      if (code === "P2002") {
-        throw new Error(
-          "Concurrent update detected: a monthly expense record was created by another user — reload and retry."
-        );
-      }
-      throw e;
-    }
-
-    await audit(user.id, "create", "FundFlowMonthlyExpense", record.id, {
-      source: "ff-01m-workbook-expense",
-      input: await sanitizeForAudit({
-        month: parsed.month,
-        year: parsed.year,
-        amount: parsed.amount,
-      }),
-    });
-
-    return { id: record.id };
+  return withPermission("fundFlow", "update", async () => {
+    throw new Error(
+      "Monthly expense (Row 14) is calculated automatically from each project's Staff Exp. across its Start month and Target Time Limit — it cannot be entered manually. Set the project's Staff Exp., Start month and Target Time Limit instead."
+    );
   });
 }
 
-// ─── Planned Net (FF-01N: Excel Row 16) ─────────────────────────
-// V16–AJ16: =<month income row 12> − <month expense row 14>
-// AU16:     =AU12 − AU14  (total net = total income − total expenses)
-// Excel treats blank cells as 0 in subtraction; we mirror that arithmetic
-// but flag every month whose inputs are missing or excluded as incomplete
-// rather than presenting the result as a fully reconciled figure.
-// Row 16 is computed on read — net values are never written to the database.
+// ─── Planned Net (confirmed Excel Row 16) ───────────────────────
+// Row 16 = Row 12 − Row 14 for every month of the Apr 2026 – Mar 2028
+// window (the confirmed report covers all 24 months, not the workbook's
+// old V16:AJ16 formula range). A missing side counts as 0 — Excel
+// blank-cell semantics. Row 16 is computed on read and never persisted.
 
 export interface PlannedNetMonth {
   month: number;
   year: number;
   label: string;
-  /** Excel Row 16 formulas exist only in V16:AJ16 (Apr 2026 – Jun 2027) */
+  /** confirmed report covers every window month */
   formulaCovered: boolean;
-  /** income − expense; null when no verified input exists for the month,
-      or when the workbook has no Row 16 formula for the month.
+  /** income − expense; null only when neither side has data.
       Serialized decimal string — class instances cannot cross the RSC boundary. */
   plannedNet: string | null;
   /** verified Row 12 workbook allocations exist for this month */
   incomePresent: boolean;
-  /** a verified Row 14 expense entry exists for this month */
+  /** at least one project contributes a derived expense this month */
   expensePresent: boolean;
-  /** ambiguous records excluded from this month's inputs */
+  /** ambiguous income records excluded from this month's Row 12 */
   excludedCount: number;
-  /** true when a source input is missing or excluded — net treats it as 0 */
+  /** expense may be understated (missing project timing config) or
+      income records were excluded — treated as 0 in the arithmetic */
   incomplete: boolean;
 }
 
 export interface PlannedNetResult {
   months: PlannedNetMonth[];
-  /** AU16 parity: total income − total expenses over the window.
+  /** total income − total expenses over the whole window.
       Serialized decimal string. */
   totalNet: string | null;
   totalIncomplete: boolean;
+  missingExpenseConfig: MissingExpenseConfig[];
 }
 
 export async function getMonthlyPlannedNet(): Promise<ActionResult<PlannedNetResult>> {
   return withPermission("fundFlow", "read", async () => {
-    const [incomeMap, expenseMap] = await Promise.all([
-      aggregateIncomeByMonth(),
-      loadExpenseMap(),
-    ]);
+    const report = await loadReportComputation();
 
-    let incomeTotal: Decimal | null = null;
-    let expenseTotal: Decimal | null = null;
+    const months: PlannedNetMonth[] = report.months.map((m) => ({
+      month: m.month,
+      year: m.year,
+      label: m.label,
+      formulaCovered: true,
+      plannedNet: m.net,
+      incomePresent: m.income != null,
+      expensePresent: m.expenseContributors.length > 0,
+      excludedCount: m.incomeUnavailableCount,
+      incomplete: m.incomplete,
+    }));
 
-    // Excel Row 16 formulas are populated only in V16:AJ16 — the first 15
-    // months of the window (Apr 2026 – Jun 2027). Later months (AK–AS) have
-    // no formula in the workbook, so no net is produced for them.
-    // AU16 = AU12 − AU14: AU12 sums only populated Row 12 cells (V12:AJ12),
-    // so the income side of the total is likewise restricted to the same
-    // coverage. AU14's SUM(V14:AT14) spans every month column, so any
-    // entered expense counts toward the expense side.
-    const ROW16_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
-
-    const months: PlannedNetMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month, label }, index) => {
-        const inc = incomeMap.get(`${year}-${month}`);
-        const exp = expenseMap.get(`${year}-${String(month).padStart(2, "0")}`);
-
-        const incomePresent = (inc?.projectCount ?? 0) > 0;
-        const expensePresent = exp?.verified === true;
-        const excludedCount =
-          (inc?.unavailableCount ?? 0) + (exp && !exp.verified ? 1 : 0);
-
-        if (incomePresent && index <= ROW16_LAST_COVERED_INDEX) {
-          incomeTotal = incomeTotal
-            ? incomeTotal.plus(inc!.total)
-            : new Decimal(inc!.total.toString());
-        }
-        if (expensePresent) {
-          expenseTotal = expenseTotal
-            ? expenseTotal.plus(exp!.amount)
-            : new Decimal(exp!.amount.toString());
-        }
-
-        // Excel =V12-V14 arithmetic: missing side treated as 0.
-        // Only surfaced when at least one verified input exists — a month with
-        // no verified data shows blank, not a fabricated zero.
-        const formulaCovered = index <= ROW16_LAST_COVERED_INDEX;
-        const plannedNet =
-          formulaCovered && (incomePresent || expensePresent)
-            ? (incomePresent
-                ? new Decimal(inc!.total.toString())
-                : new Decimal("0")
-              ).minus(
-                expensePresent
-                  ? new Decimal(exp!.amount.toString())
-                  : new Decimal("0")
-              )
-            : null;
-
-        return {
-          month,
-          year,
-          label,
-          formulaCovered,
-          plannedNet: plannedNet != null ? plannedNet.toString() : null,
-          incomePresent,
-          expensePresent,
-          excludedCount,
-          incomplete: !incomePresent || !expensePresent || excludedCount > 0,
-        };
-      }
-    );
-
-    const totalNetDec =
-      incomeTotal != null || expenseTotal != null
-        ? (incomeTotal ?? new Decimal("0")).minus(expenseTotal ?? new Decimal("0"))
+    const totalNet =
+      report.totalIncome != null || !new Decimal(report.totalExpense).isZero()
+        ? new Decimal(report.totalIncome ?? "0")
+            .minus(report.totalExpense)
+            .toString()
         : null;
 
     return {
       months,
-      totalNet: totalNetDec != null ? totalNetDec.toString() : null,
-      // AU16 = AU12 − AU14 treats every blank input cell as 0. The total is
-      // flagged incomplete when any covered side is absent or any month the
-      // workbook's formulas actually read lacks a verified input — it is not
-      // a fully reconciled sum. Months without Row 16 formulas are excluded.
+      totalNet,
       totalIncomplete:
-        incomeTotal == null ||
-        expenseTotal == null ||
-        months.some((m) => m.formulaCovered && m.incomplete),
+        report.missingExpenseConfig.length > 0 ||
+        months.some((m) => m.excludedCount > 0),
+      missingExpenseConfig: report.missingExpenseConfig,
     };
   });
 }
 
-// ─── Planned Running Balance (FF-01O: Excel Row 18) ─────────────
-// V18: =V12-V14                  — first covered month, opening baseline 0
-// W18–AJ18: =<prev>+<inc>-<exp>  — carry-forward through Jun 2027
-// AK18–AT18: no formulas. AU18: no formula — no grand total exists.
-// The implied opening balance of 0 is the workbook's calculation baseline,
-// NOT a verified bank balance. Computed on read; never persisted.
+// ─── Planned Running Balance (confirmed Excel Row 18) ───────────
+// First month:  V18 = V12 − V14              (opening baseline 0)
+// Later months: W18 = V18 + W12 − W14        (carry-forward)
+// The confirmed report covers all 24 window months; a missing side counts
+// as 0. This is a planned figure from an implied zero baseline — NOT a
+// verified bank balance. Computed on read; never persisted.
 
 export interface RunningBalanceMonth {
   month: number;
   year: number;
   label: string;
-  /** Excel Row 18 formulas exist only in V18:AJ18 (Apr 2026 – Jun 2027) */
+  /** confirmed report covers every window month */
   formulaCovered: boolean;
-  /** carried balance for the month; null before the first verified input
-      or outside the workbook formula range */
-  /** Serialized decimal string — class instances cannot cross the RSC boundary. */
+  /** carried balance for the month — defined for every window month.
+      Serialized decimal string — class instances cannot cross the RSC boundary. */
   runningBalance: string | null;
-  /** covered months up to and including this one that lack a verified
-      input or had ambiguous records excluded (missing treated as 0) */
+  /** months up to and including this one whose source data is incomplete
+      (excluded income records or projects missing timing config) */
   gapMonths: number;
   /** true when the carried balance reflects incomplete source data */
   incomplete: boolean;
@@ -776,63 +616,28 @@ export interface RunningBalanceMonth {
 
 export interface RunningBalanceResult {
   months: RunningBalanceMonth[];
-  // No AU18: the workbook defines no grand total for the running balance.
+  missingExpenseConfig: MissingExpenseConfig[];
 }
 
 export async function getMonthlyRunningBalance(): Promise<ActionResult<RunningBalanceResult>> {
   return withPermission("fundFlow", "read", async () => {
-    const [incomeMap, expenseMap] = await Promise.all([
-      aggregateIncomeByMonth(),
-      loadExpenseMap(),
-    ]);
+    const report = await loadReportComputation();
 
-    const ROW18_LAST_COVERED_INDEX = 14; // AJ = Jun 2027
-
-    let running = new Decimal("0"); // workbook baseline: implied zero opening
-    let seenVerifiedInput = false;
     let gapMonths = 0;
+    const months: RunningBalanceMonth[] = report.months.map((m) => {
+      if (m.incomplete) gapMonths += 1;
+      return {
+        month: m.month,
+        year: m.year,
+        label: m.label,
+        formulaCovered: true,
+        runningBalance: m.cumulativeBalance,
+        gapMonths,
+        incomplete: m.incomplete || gapMonths > 0,
+      };
+    });
 
-    const months: RunningBalanceMonth[] = MONTHLY_ALLOCATION_WINDOW.map(
-      ({ year, month, label }, index) => {
-        if (index > ROW18_LAST_COVERED_INDEX) {
-          return {
-            month,
-            year,
-            label,
-            formulaCovered: false,
-            runningBalance: null,
-            gapMonths: 0,
-            incomplete: false,
-          };
-        }
-
-        const inc = incomeMap.get(`${year}-${month}`);
-        const exp = expenseMap.get(`${year}-${String(month).padStart(2, "0")}`);
-
-        const incomePresent = (inc?.projectCount ?? 0) > 0;
-        const expensePresent = exp?.verified === true;
-        const excludedCount =
-          (inc?.unavailableCount ?? 0) + (exp && !exp.verified ? 1 : 0);
-
-        // Excel treats blank inputs as 0 in the running sum.
-        if (incomePresent) running = running.plus(inc!.total);
-        if (expensePresent) running = running.minus(exp!.amount);
-        if (incomePresent || expensePresent) seenVerifiedInput = true;
-        if (!incomePresent || !expensePresent || excludedCount > 0) gapMonths += 1;
-
-        return {
-          month,
-          year,
-          label,
-          formulaCovered: true,
-          runningBalance: seenVerifiedInput ? running.toString() : null,
-          gapMonths,
-          incomplete: gapMonths > 0,
-        };
-      }
-    );
-
-    return { months };
+    return { months, missingExpenseConfig: report.missingExpenseConfig };
   });
 }
 
@@ -1355,8 +1160,8 @@ export async function getMonthlyIncomeBreakdown(
     const index = MONTHLY_ALLOCATION_WINDOW.findIndex(
       (w) => w.month === parsed.month && w.year === parsed.year
     );
-    // Row 12 formulas exist only in V12:AJ12 (Apr 2026 – Jun 2027).
-    const formulaCovered = index >= 0 && index <= 14;
+    // The confirmed report covers the full Apr 2026 – Mar 2028 window.
+    const formulaCovered = index >= 0;
 
     const records = await prisma.fundFlowMonthly.findMany({
       where: { month: parsed.month, year: parsed.year },
@@ -1386,13 +1191,6 @@ export async function getMonthlyIncomeBreakdown(
         excluded.push({
           projectName,
           reason: "Allocation lacks verified workbook provenance",
-        });
-        continue;
-      }
-      if (!formulaCovered) {
-        excluded.push({
-          projectName,
-          reason: "Outside the workbook Row 12 formula range",
         });
         continue;
       }

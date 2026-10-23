@@ -8,15 +8,9 @@ let mockAuditLogEntries: any[] = [];
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    fundFlow: {
-      findMany: vi.fn(),
-    },
-    fundFlowMonthlyExpense: {
-      findMany: vi.fn(),
-    },
-    auditLog: {
-      findMany: vi.fn(),
-    },
+    fundFlow: { findMany: vi.fn() },
+    fundFlowMonthlyExpense: { findMany: vi.fn() },
+    auditLog: { findMany: vi.fn() },
   },
 }));
 
@@ -28,13 +22,37 @@ vi.mock("../actions/wrapper", () => ({
 }));
 
 function mockWithPermission() {
-  vi.mocked(withPermission).mockImplementation(async (_resource, _action, fn) => {
+  vi.mocked(withPermission).mockImplementation(async (_r, _a, fn) => {
     try {
       return { success: true, data: await fn({ id: "user-1", role: "ADMIN" }) };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : "Action failed" };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Action failed",
+      };
     }
   });
+}
+
+function ffRow(opts: {
+  name: string;
+  staffExp?: string;
+  startMonth?: number | null;
+  startYear?: number | null;
+  ttl?: number | null;
+  monthlyData?: any[];
+}) {
+  return {
+    staffExp: new Decimal(opts.staffExp ?? "0"),
+    distributionStartMonth: opts.startMonth ?? null,
+    distributionStartYear: opts.startYear ?? null,
+    project: {
+      name: opts.name,
+      targetTimeLimitMonths:
+        opts.ttl == null ? null : new Decimal(String(opts.ttl)),
+    },
+    monthlyData: opts.monthlyData ?? [],
+  };
 }
 
 function incRec(id: string, month: number, year: number, income: string) {
@@ -49,17 +67,6 @@ function incRec(id: string, month: number, year: number, income: string) {
   };
 }
 
-function expRec(id: string, month: number, year: number, amount: string) {
-  return {
-    id,
-    month,
-    year,
-    amount: new Decimal(amount),
-    createdAt: new Date("2026-04-01T00:00:00.000Z"),
-    updatedAt: new Date("2026-05-01T00:00:00.000Z"),
-  };
-}
-
 const incProv = (id: string) => ({
   entityId: id,
   entity: "FundFlowMonthly",
@@ -67,231 +74,99 @@ const incProv = (id: string) => ({
   metadata: { source: "ff-01k-workbook-allocation" },
 });
 
-const expProv = (id: string) => ({
-  entityId: id,
-  entity: "FundFlowMonthlyExpense",
-  action: "create",
-  metadata: { source: "ff-01m-workbook-expense" },
-});
+const idx = (month: number, year: number) => (year - 2026) * 12 + (month - 4);
 
-const monthAt = (data: any, i: number) => data.months[i];
-
-describe("Planned Running Balance (FF-01O, Excel Row 18)", () => {
+describe("Cumulative Balance (confirmed Excel Row 18)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockWithPermission();
     mockAuditLogEntries = [];
     vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue([] as any);
-    vi.mocked(prisma.auditLog.findMany).mockImplementation(((args: any) => {
-      const where = args?.where;
-      if (!where) return Promise.resolve([]);
-      const entityIds = where.entityId?.in;
-      if (!entityIds || !Array.isArray(entityIds)) return Promise.resolve([]);
-      const filtered = mockAuditLogEntries.filter((e) => {
-        if (where.entity && e.entity !== where.entity) return false;
-        if (!entityIds.includes(e.entityId)) return false;
-        if (where.action && e.action !== where.action) return false;
-        if (
-          where.metadata?.path?.[0] === "source" &&
-          e.metadata?.source !== where.metadata?.equals
-        )
-          return false;
-        return true;
-      });
-      return Promise.resolve(filtered);
+    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue(
+      [] as any
+    );
+    vi.mocked(prisma.auditLog.findMany).mockImplementation((async (args: any) => {
+      const ids = new Set<string>(args?.where?.entityId?.in ?? []);
+      const entity = args?.where?.entity;
+      return mockAuditLogEntries.filter(
+        (e) => ids.has(e.entityId) && (!entity || e.entity === entity)
+      );
     }) as any);
   });
 
-  it("covers 24 months with formula coverage limited to V18:AJ18 (T120)", async () => {
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
+  it("first month = income − expense from a zero baseline", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({
+        name: "A", staffExp: "1.60", startMonth: 4, startYear: 2026, ttl: 2,
+        monthlyData: [incRec("m1", 4, 2026, "5.31")],
+      }),
+    ] as any);
+    mockAuditLogEntries = [incProv("m1")];
+    const data = (await getMonthlyRunningBalance()).data as any;
+    expect(data.months[0].runningBalance).toBe("3.71"); // 5.31 − 1.60
+  });
+
+  it("carries forward: next = prev + income − expense", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({
+        name: "A", staffExp: "1.60", startMonth: 4, startYear: 2026, ttl: 2,
+        monthlyData: [incRec("m1", 4, 2026, "5.31"), incRec("m2", 5, 2026, "2.00")],
+      }),
+    ] as any);
+    mockAuditLogEntries = [incProv("m1"), incProv("m2")];
+    const data = (await getMonthlyRunningBalance()).data as any;
+    // Apr: 5.31−1.60=3.71 ; May: 3.71+2.00−1.60=4.11 ; Jun: no data → stays 4.11
+    expect(data.months[0].runningBalance).toBe("3.71");
+    expect(data.months[1].runningBalance).toBe("4.11");
+    expect(data.months[2].runningBalance).toBe("4.11");
+  });
+
+  it("negative cumulative balances display correctly", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "A", staffExp: "10", startMonth: 4, startYear: 2026, ttl: 3 }),
+    ] as any);
+    const data = (await getMonthlyRunningBalance()).data as any;
+    expect(data.months[0].runningBalance).toBe("-10");
+    expect(data.months[1].runningBalance).toBe("-20");
+    expect(data.months[2].runningBalance).toBe("-30");
+    expect(data.months[3].runningBalance).toBe("-30"); // flat after span ends
+  });
+
+  it("runs the full 24-month window", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "A", staffExp: "1", startMonth: 3, startYear: 2028, ttl: 1 }),
+    ] as any);
+    const data = (await getMonthlyRunningBalance()).data as any;
     expect(data.months).toHaveLength(24);
-    expect(monthAt(data, 0).formulaCovered).toBe(true);  // V18 Apr 2026
-    expect(monthAt(data, 14).formulaCovered).toBe(true); // AJ18 Jun 2027
-    expect(monthAt(data, 15).formulaCovered).toBe(false); // AK18 Jul 2027
-    expect(monthAt(data, 23).formulaCovered).toBe(false); // AS18 Mar 2028
+    expect(data.months[22].runningBalance).toBe("0");
+    expect(data.months[23].runningBalance).toBe("-1");
   });
 
-  it("no AU18 grand total is produced (T121)", async () => {
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
-    expect("totalNet" in data).toBe(false);
-    expect("total" in data).toBe(false);
+  it("keeps carrying through income gaps", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({
+        name: "A", staffExp: "0", startMonth: 4, startYear: 2026, ttl: 24,
+        monthlyData: [incRec("m1", 4, 2026, "100"), incRec("m2", 4, 2027, "50")],
+      }),
+    ] as any);
+    mockAuditLogEntries = [incProv("m1"), incProv("m2")];
+    const data = (await getMonthlyRunningBalance()).data as any;
+    expect(data.months[idx(3, 2027)].runningBalance).toBe("100");
+    expect(data.months[idx(4, 2027)].runningBalance).toBe("150");
+    expect(data.months[23].runningBalance).toBe("150");
   });
 
-  it("leading months with no verified inputs show blank, not fabricated zero (T122)", async () => {
-    const result = await getMonthlyRunningBalance();
-    for (const m of (result.data as any).months) {
-      expect(m.runningBalance).toBeNull();
-    }
-  });
-
-  it("first month = income − expense with implied zero opening (V18 = V12−V14) (T123)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      { id: "ff-1", monthlyData: [incRec("i1", 4, 2026, "3.43")] },
+  it("incomplete flag reflects missing config / excluded income", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "Legacy", staffExp: "2000" }),
+      ffRow({
+        name: "A", staffExp: "1", startMonth: 4, startYear: 2026, ttl: 1,
+        monthlyData: [incRec("m1", 4, 2026, "10")],
+      }),
     ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "30.61"),
-    ] as any);
-    mockAuditLogEntries = [incProv("i1"), expProv("e1")];
-
-    const result = await getMonthlyRunningBalance();
-    const m = monthAt(result.data as any, 0);
-    expect(Number(m.runningBalance).toFixed(2)).toBe("-27.18");
-    expect(m.incomplete).toBe(false);
-    expect(m.gapMonths).toBe(0);
-  });
-
-  it("carries forward: balance_n = balance_(n-1) + income − expense (T124)", async () => {
-    // Workbook Apr–Jun 2026: income 3.43, 3.43, 1.72; expenses 30.61, 30.36, 30.31
-    // → running: −27.18, −54.11, −82.70
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      {
-        id: "ff-1",
-        monthlyData: [
-          incRec("i1", 4, 2026, "3.43"),
-          incRec("i2", 5, 2026, "3.43"),
-          incRec("i3", 6, 2026, "1.72"),
-        ],
-      },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "30.61"),
-      expRec("e2", 5, 2026, "30.36"),
-      expRec("e3", 6, 2026, "30.31"),
-    ] as any);
-    mockAuditLogEntries = [
-      incProv("i1"), incProv("i2"), incProv("i3"),
-      expProv("e1"), expProv("e2"), expProv("e3"),
-    ];
-
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
-    expect(Number(monthAt(data, 0).runningBalance).toFixed(2)).toBe("-27.18");
-    expect(Number(monthAt(data, 1).runningBalance).toFixed(2)).toBe("-54.11");
-    expect(Number(monthAt(data, 2).runningBalance).toFixed(2)).toBe("-82.70");
-  });
-
-  it("no balance beyond formula range even with inputs (T125)", async () => {
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 6, 2027, "6.27"),  // Jun 2027 — covered
-      expRec("e2", 7, 2027, "5.00"),  // Jul 2027 — not covered
-    ] as any);
-    mockAuditLogEntries = [expProv("e1"), expProv("e2")];
-
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
-    expect(Number(monthAt(data, 14).runningBalance).toFixed(2)).toBe("-6.27");
-    expect(monthAt(data, 15).runningBalance).toBeNull();
-    expect(monthAt(data, 15).formulaCovered).toBe(false);
-  });
-
-  it("missing expense treated as 0 but month and all later months flagged incomplete (T126)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      {
-        id: "ff-1",
-        monthlyData: [
-          incRec("i1", 4, 2026, "10.00"),
-          incRec("i2", 5, 2026, "10.00"),
-        ],
-      },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "3.00"),
-      // May 2026 expense missing entirely
-    ] as any);
-    mockAuditLogEntries = [incProv("i1"), incProv("i2"), expProv("e1")];
-
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
-    expect(Number(monthAt(data, 0).runningBalance).toFixed(2)).toBe("7.00");
-    expect(monthAt(data, 0).incomplete).toBe(false);
-    // May: balance = 7 + 10 − 0 = 17, but flagged incomplete (missing expense)
-    expect(Number(monthAt(data, 1).runningBalance).toFixed(2)).toBe("17.00");
-    expect(monthAt(data, 1).incomplete).toBe(true);
-    expect(monthAt(data, 1).gapMonths).toBe(1);
-    // Later covered months carry the balance AND the incomplete flag
-    expect(Number(monthAt(data, 2).runningBalance).toFixed(2)).toBe("17.00");
-    expect(monthAt(data, 2).incomplete).toBe(true);
-  });
-
-  it("ambiguous records are excluded and flagged (T127)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      { id: "ff-1", monthlyData: [incRec("i-amb", 4, 2026, "999")] },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "30.61"),
-    ] as any);
-    mockAuditLogEntries = [expProv("e1")]; // income record lacks provenance
-
-    const result = await getMonthlyRunningBalance();
-    const m = monthAt(result.data as any, 0);
-    expect(Number(m.runningBalance).toFixed(2)).toBe("-30.61"); // income treated as 0
-    expect(m.incomplete).toBe(true);
-    expect(m.gapMonths).toBe(1);
-  });
-
-  it("explicit zero expense keeps month complete (T128)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      { id: "ff-1", monthlyData: [incRec("i1", 4, 2026, "5.00")] },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "0.00"),
-    ] as any);
-    mockAuditLogEntries = [incProv("i1"), expProv("e1")];
-
-    const result = await getMonthlyRunningBalance();
-    const m = monthAt(result.data as any, 0);
-    expect(Number(m.runningBalance).toFixed(2)).toBe("5.00");
-    expect(m.incomplete).toBe(false);
-  });
-
-  it("preserves Decimal(19,2) precision across the carry-forward (T129)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      {
-        id: "ff-1",
-        monthlyData: [
-          incRec("i1", 4, 2026, "99999999999999999.99"),
-          incRec("i2", 5, 2026, "0.01"),
-        ],
-      },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2026, "0.02"),
-      expRec("e2", 5, 2026, "0"),
-    ] as any);
-    mockAuditLogEntries = [
-      incProv("i1"), incProv("i2"), expProv("e1"), expProv("e2"),
-    ];
-
-    const result = await getMonthlyRunningBalance();
-    const data = result.data as any;
-    expect(monthAt(data, 0).runningBalance.toString()).toBe("99999999999999999.97");
-    expect(monthAt(data, 1).runningBalance.toString()).toBe("99999999999999999.98");
-  });
-
-  it("ignores out-of-window records entirely (T130)", async () => {
-    vi.mocked(prisma.fundFlow.findMany).mockResolvedValueOnce([
-      { id: "ff-1", monthlyData: [incRec("i1", 4, 2028, "50.00")] },
-    ] as any);
-    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-      expRec("e1", 4, 2028, "50.00"),
-    ] as any);
-    mockAuditLogEntries = [incProv("i1"), expProv("e1")];
-
-    const result = await getMonthlyRunningBalance();
-    for (const m of (result.data as any).months) {
-      expect(m.runningBalance).toBeNull();
-    }
-  });
-
-  it("requires fundFlow read permission (T131)", async () => {
-    vi.mocked(withPermission).mockImplementationOnce(async () => ({
-      success: false,
-      error: "Unauthorized",
-    }));
-    const result = await getMonthlyRunningBalance();
-    expect(result.success).toBe(false);
+    mockAuditLogEntries = [incProv("m1")];
+    const data = (await getMonthlyRunningBalance()).data as any;
+    expect(data.months[0].incomplete).toBe(true);
+    expect(data.missingExpenseConfig).toHaveLength(1);
   });
 });

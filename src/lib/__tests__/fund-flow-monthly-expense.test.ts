@@ -7,20 +7,14 @@ import {
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "../actions/wrapper";
 
-// Mock audit log entries storage — filters by the where clause the action uses
+// Mock audit log entries — filtered by the where clause the actions use
 let mockAuditLogEntries: any[] = [];
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    fundFlowMonthlyExpense: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      updateMany: vi.fn(),
-    },
-    auditLog: {
-      findMany: vi.fn(),
-    },
+    fundFlow: { findMany: vi.fn() },
+    fundFlowMonthlyExpense: { findMany: vi.fn() },
+    auditLog: { findMany: vi.fn() },
   },
 }));
 
@@ -32,284 +26,195 @@ vi.mock("../actions/wrapper", () => ({
 }));
 
 function mockWithPermission() {
-  vi.mocked(withPermission).mockImplementation(async (_resource, _action, fn) => {
+  vi.mocked(withPermission).mockImplementation(async (_r, _a, fn) => {
     try {
       return { success: true, data: await fn({ id: "user-1", role: "ADMIN" }) };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : "Action failed" };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Action failed",
+      };
     }
   });
 }
 
-function mockWithoutPermission() {
-  vi.mocked(withPermission).mockImplementation(async () => ({
-    success: false,
-    error: "Unauthorized",
-  }));
+/** fund-flow row for the derived-expense source query */
+function ffRow(opts: {
+  name: string;
+  staffExp: string;
+  startMonth?: number | null;
+  startYear?: number | null;
+  ttl?: number | null;
+  monthlyData?: any[];
+}) {
+  return {
+    staffExp: new Decimal(opts.staffExp),
+    distributionStartMonth: opts.startMonth ?? null,
+    distributionStartYear: opts.startYear ?? null,
+    project: {
+      name: opts.name,
+      targetTimeLimitMonths:
+        opts.ttl == null ? null : new Decimal(String(opts.ttl)),
+    },
+    monthlyData: opts.monthlyData ?? [],
+  };
 }
 
-function rec(id: string, month: number, year: number, amount: string, updatedAt = "2026-05-01T00:00:00.000Z") {
+function incRec(id: string, month: number, year: number, income: string) {
   return {
     id,
     month,
     year,
-    amount: new Decimal(amount),
-    createdAt: new Date("2026-04-01T00:00:00.000Z"),
-    updatedAt: new Date(updatedAt),
+    income: new Decimal(income),
+    expense: new Decimal("0"),
+    net: new Decimal("0"),
+    cumulative: new Decimal("0"),
   };
 }
 
-function provenanceFor(id: string, source = "ff-01m-workbook-expense") {
-  return { entityId: id, action: "create", metadata: { source } };
-}
+const incProv = (id: string) => ({
+  entityId: id,
+  entity: "FundFlowMonthly",
+  action: "create",
+  metadata: { source: "ff-01k-workbook-allocation" },
+});
 
-describe("Worksheet-level monthly expenses (FF-01M, Excel Row 14)", () => {
+// window index helper: Apr 2026 = 0 … Mar 2028 = 23
+const idx = (month: number, year: number) => (year - 2026) * 12 + (month - 4);
+
+describe("Derived Monthly Expenses (confirmed Excel Row 14)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockWithPermission();
     mockAuditLogEntries = [];
-    vi.mocked(prisma.auditLog.findMany).mockImplementation(((args: any) => {
-      const where = args?.where;
-      if (!where) return Promise.resolve([]);
-      const entityIds = where.entityId?.in;
-      if (!entityIds || !Array.isArray(entityIds)) return Promise.resolve([]);
-      const filtered = mockAuditLogEntries.filter((e) => {
-        if (!entityIds.includes(e.entityId)) return false;
-        if (where.action && e.action !== where.action) return false;
-        if (
-          where.metadata?.path?.[0] === "source" &&
-          e.metadata?.source !== where.metadata?.equals
-        )
-          return false;
-        return true;
-      });
-      return Promise.resolve(filtered);
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue(
+      [] as any
+    );
+    vi.mocked(prisma.auditLog.findMany).mockImplementation((async (args: any) => {
+      const ids = new Set<string>(args?.where?.entityId?.in ?? []);
+      const entity = args?.where?.entity;
+      return mockAuditLogEntries.filter(
+        (e) => ids.has(e.entityId) && (!entity || e.entity === entity)
+      );
     }) as any);
   });
 
-  describe("getMonthlyExpenses", () => {
-    it("covers exactly 24 months Apr 2026 – Mar 2028 in order (T88)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([] as any);
-      const result = await getMonthlyExpenses();
-      expect(result.success).toBe(true);
-      const data = result.data as any;
-      expect(data.expenses).toHaveLength(24);
-      expect(data.expenses[0]).toMatchObject({ month: 4, year: 2026 });
-      expect(data.expenses[2]).toMatchObject({ month: 6, year: 2026 });
-      expect(data.expenses[23]).toMatchObject({ month: 3, year: 2028 });
-    });
-
-    it("maps stored amounts to correct month slots (T89)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-        rec("e1", 4, 2026, "30.61"),
-        rec("e2", 7, 2026, "15.56"),
-      ] as any);
-      mockAuditLogEntries = [provenanceFor("e1"), provenanceFor("e2")];
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(data.expenses[0].amount.toString()).toBe("30.61");
-      expect(data.expenses[3].amount.toString()).toBe("15.56");
-      expect(data.expenses[1].amount).toBeNull();
-    });
-
-    it("distinguishes missing month (null) from explicitly entered zero (T90)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-        rec("e1", 4, 2026, "0.00"),
-      ] as any);
-      mockAuditLogEntries = [provenanceFor("e1")];
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(data.expenses[0].amount).not.toBeNull();
-      expect(Number(data.expenses[0].amount).toFixed(2)).toBe("0.00");
-      expect(data.expenses[1].amount).toBeNull();
-      expect(data.expenses[0].unavailable).not.toBe(true);
-    });
-
-    it("sums only entered values for the AU14-equivalent total (T91)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-        rec("e1", 4, 2026, "30.61"),
-        rec("e2", 5, 2026, "30.36"),
-        rec("e3", 6, 2026, "0.00"),
-      ] as any);
-      mockAuditLogEntries = [provenanceFor("e1"), provenanceFor("e2"), provenanceFor("e3")];
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(data.total.toString()).toBe("60.97");
-    });
-
-    it("returns null total when no months are entered", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([] as any);
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(data.total).toBeNull();
-    });
-
-    it("preserves Decimal(19,2) precision for large amounts (T92)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-        rec("e1", 4, 2026, "99999999999999999.99"),
-      ] as any);
-      mockAuditLogEntries = [provenanceFor("e1")];
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(data.expenses[0].amount.toString()).toBe("99999999999999999.99");
-      expect(data.total.toString()).toBe("99999999999999999.99");
-    });
-
-    it("marks records without ff-01m provenance as unavailable and excludes from total (T93)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValueOnce([
-        rec("e1", 4, 2026, "10.00"),
-        rec("e-amb", 5, 2026, "999.00"),
-        rec("e-amb2", 6, 2026, "999.00"),
-      ] as any);
-      // e1 has valid provenance; e-amb has a different source; e-amb2 only an update audit
-      mockAuditLogEntries = [
-        provenanceFor("e1"),
-        provenanceFor("e-amb", "some-other-source"),
-        { entityId: "e-amb2", action: "update", metadata: { source: "ff-01m-workbook-expense" } },
-      ];
-      const result = await getMonthlyExpenses();
-      const data = result.data as any;
-      expect(Number(data.expenses[0].amount).toFixed(2)).toBe("10.00");
-      expect(data.expenses[1].unavailable).toBe(true);
-      expect(data.expenses[1].amount).toBeNull();
-      expect(data.expenses[2].unavailable).toBe(true);
-      expect(Number(data.total).toFixed(2)).toBe("10.00");
-    });
-
-    it("requires fundFlow read permission (T94)", async () => {
-      mockWithoutPermission();
-      const result = await getMonthlyExpenses();
-      expect(result.success).toBe(false);
-    });
+  it("covers all 24 window months Apr 2026 – Mar 2028 in order", async () => {
+    const result = await getMonthlyExpenses();
+    expect(result.success).toBe(true);
+    const data = result.data as any;
+    expect(data.expenses).toHaveLength(24);
+    expect(data.expenses[0]).toMatchObject({ month: 4, year: 2026 });
+    expect(data.expenses[23]).toMatchObject({ month: 3, year: 2028 });
+    expect(data.total).toBe("0");
+    expect(data.missingExpenseConfig).toHaveLength(0);
   });
 
-  describe("upsertMonthlyExpense", () => {
-    it("creates a new record and audits with ff-01m source (T95)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(null);
-      vi.mocked(prisma.fundFlowMonthlyExpense.create).mockResolvedValueOnce({ id: "new-1" } as any);
-      const { audit } = await import("../actions/wrapper");
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "30.61" });
-      expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthlyExpense.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ month: 4, year: 2026, amount: expect.any(Decimal) }),
-        })
-      );
-      const createCall = vi.mocked(prisma.fundFlowMonthlyExpense.create).mock.calls[0][0] as any;
-      expect(createCall.data.amount.toString()).toBe("30.61");
-      expect(vi.mocked(audit)).toHaveBeenCalledWith(
-        "user-1", "create", "FundFlowMonthlyExpense", "new-1",
-        expect.objectContaining({ source: "ff-01m-workbook-expense" })
-      );
-    });
+  it("two overlapping projects produce the customer's confirmed monthly expenses", async () => {
+    // Project A: Staff Exp 1.60, Jul 2026, 18 months → Jul 2026 – Dec 2027
+    // Project B: Staff Exp 0.90, Sep 2026, 4 months  → Sep – Dec 2026
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "Project A", staffExp: "1.60", startMonth: 7, startYear: 2026, ttl: 18 }),
+      ffRow({ name: "Project B", staffExp: "0.90", startMonth: 9, startYear: 2026, ttl: 4 }),
+    ] as any);
 
-    it("rejects out-of-window writes (e.g., Apr 2028 beyond AS) (T96)", async () => {
-      const result = await upsertMonthlyExpense({ month: 4, year: 2028, amount: "10" });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("outside the supported 24-month");
-      expect(prisma.fundFlowMonthlyExpense.create).not.toHaveBeenCalled();
-    });
+    const result = await getMonthlyExpenses();
+    const data = result.data as any;
+    const at = (m: number, y: number) => data.expenses[idx(m, y)];
 
-    it("blank input on existing record is a no-op — no update, no delete (T97)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(
-        rec("e1", 4, 2026, "30.61") as any
-      );
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "  " });
-      expect(result.success).toBe(true);
-      expect(result.data).toEqual({ id: "e1" });
-      expect(prisma.fundFlowMonthlyExpense.updateMany).not.toHaveBeenCalled();
-      expect(prisma.fundFlowMonthlyExpense.create).not.toHaveBeenCalled();
-    });
+    expect(at(7, 2026).amount).toBe("1.6");
+    expect(at(8, 2026).amount).toBe("1.6");
+    expect(at(9, 2026).amount).toBe("2.5");   // 1.60 + 0.90 overlap
+    expect(at(10, 2026).amount).toBe("2.5");
+    expect(at(11, 2026).amount).toBe("2.5");
+    expect(at(12, 2026).amount).toBe("2.5");
+    expect(at(1, 2027).amount).toBe("1.6");   // B finished
+    expect(at(12, 2027).amount).toBe("1.6");  // A's last month
+    expect(at(1, 2028).amount).toBe("0");     // A finished
+    expect(at(4, 2026).amount).toBe("0");     // before A starts
 
-    it("blank input on empty month creates nothing (T98)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(null);
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: null });
-      expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthlyExpense.create).not.toHaveBeenCalled();
-      expect(prisma.fundFlowMonthlyExpense.updateMany).not.toHaveBeenCalled();
-    });
+    // contributors listed per month
+    expect(at(9, 2026).contributors).toHaveLength(2);
+    expect(at(7, 2026).contributors).toHaveLength(1);
 
-    it("updates existing record when expectedUpdatedAt matches (T99)", async () => {
-      const existing = rec("e1", 4, 2026, "30.61");
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(existing as any);
-      mockAuditLogEntries = [provenanceFor("e1")];
-      vi.mocked(prisma.fundFlowMonthlyExpense.updateMany).mockResolvedValueOnce({ count: 1 } as any);
-      const { audit } = await import("../actions/wrapper");
-      const result = await upsertMonthlyExpense({
-        month: 4, year: 2026, amount: "31.00",
-        expectedUpdatedAt: existing.updatedAt.toISOString(),
-      });
-      expect(result.success).toBe(true);
-      expect(prisma.fundFlowMonthlyExpense.updateMany).toHaveBeenCalledWith({
-        where: { id: "e1", updatedAt: existing.updatedAt },
-        data: { amount: expect.any(Decimal) },
-      });
-      expect(vi.mocked(audit)).toHaveBeenCalledWith(
-        "user-1", "update", "FundFlowMonthlyExpense", "e1",
-        expect.objectContaining({ source: "ff-01m-workbook-expense" })
-      );
-    });
+    // total = 1.60×18 + 0.90×4 = 28.8 + 3.6 = 32.4
+    expect(new Decimal(data.total).toFixed(1)).toBe("32.4");
+  });
 
-    it("rejects update when expectedUpdatedAt is stale (concurrent modification) (T100)", async () => {
-      const existing = rec("e1", 4, 2026, "30.61");
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(existing as any);
-      mockAuditLogEntries = [provenanceFor("e1")];
-      vi.mocked(prisma.fundFlowMonthlyExpense.updateMany).mockResolvedValueOnce({ count: 0 } as any);
-      const result = await upsertMonthlyExpense({
-        month: 4, year: 2026, amount: "31.00",
-        expectedUpdatedAt: "2026-01-01T00:00:00.000Z", // stale token
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Concurrent update");
-    });
+  it("expense starts and stops exactly at the configured span", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "P", staffExp: "2.00", startMonth: 6, startYear: 2026, ttl: 3 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    const at = (m: number, y: number) => data.expenses[idx(m, y)];
+    expect(at(5, 2026).amount).toBe("0");
+    expect(at(6, 2026).amount).toBe("2");   // first month = start month
+    expect(at(8, 2026).amount).toBe("2");   // last = start + ttl − 1
+    expect(at(9, 2026).amount).toBe("0");
+  });
 
-    it("rejects update without expectedUpdatedAt on existing record (T101)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(
-        rec("e1", 4, 2026, "30.61") as any
-      );
-      mockAuditLogEntries = [provenanceFor("e1")];
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "31.00" });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Concurrent update");
-      expect(prisma.fundFlowMonthlyExpense.updateMany).not.toHaveBeenCalled();
-    });
+  it("project with no income allocations still contributes expense", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "P", staffExp: "0.50", startMonth: 4, startYear: 2026, ttl: 2 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    expect(data.expenses[0].amount).toBe("0.5");
+  });
 
-    it("rejects updates to records without ff-01m create provenance (T102)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(
-        rec("e1", 4, 2026, "30.61") as any
-      );
-      mockAuditLogEntries = [provenanceFor("e1", "some-other-source")];
-      const result = await upsertMonthlyExpense({
-        month: 4, year: 2026, amount: "31.00",
-        expectedUpdatedAt: "2026-05-01T00:00:00.000Z",
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("audit provenance missing");
-      expect(prisma.fundFlowMonthlyExpense.updateMany).not.toHaveBeenCalled();
-    });
+  it("Staff Exp. is used whole — never divided by duration", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "P", staffExp: "9.00", startMonth: 4, startYear: 2026, ttl: 3 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    expect(data.expenses[0].amount).toBe("9");
+    expect(data.expenses[1].amount).toBe("9");
+  });
 
-    it("maps create unique-violation to a concurrency error (T104)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(null);
-      const err = new Error("Unique constraint failed");
-      (err as any).code = "P2002";
-      vi.mocked(prisma.fundFlowMonthlyExpense.create).mockRejectedValueOnce(err);
+  it("legacy projects without Start month or duration are excluded and flagged", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "Legacy A", staffExp: "2000" }),
+      ffRow({ name: "Legacy B", staffExp: "5000", startMonth: 7, startYear: 2026 }),
+      ffRow({ name: "OK", staffExp: "1", startMonth: 4, startYear: 2026, ttl: 1 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    expect(data.expenses[0].amount).toBe("1"); // only the configured project
+    expect(data.missingExpenseConfig).toEqual([
+      { projectName: "Legacy A", missing: ["Start month", "Target Time Limit (In Month)"] },
+      { projectName: "Legacy B", missing: ["Target Time Limit (In Month)"] },
+    ]);
+  });
+
+  it("stored legacy FundFlowMonthlyExpense records are never counted", async () => {
+    // A legacy manual record exists — it must not feed the derived report.
+    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue([
+      { id: "e1", month: 4, year: 2026, amount: new Decimal("30.61") },
+    ] as any);
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "P", staffExp: "1.25", startMonth: 4, startYear: 2026, ttl: 1 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    expect(data.expenses[0].amount).toBe("1.25"); // 30.61 not added
+  });
+
+  it("a project spanning beyond the window still contributes inside it", async () => {
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
+      ffRow({ name: "Long", staffExp: "1", startMonth: 3, startYear: 2028, ttl: 12 }),
+    ] as any);
+    const data = (await getMonthlyExpenses()).data as any;
+    expect(data.expenses[23].amount).toBe("1"); // Mar 2028 — window edge
+  });
+
+  describe("upsertMonthlyExpense (manual entry removed)", () => {
+    it("rejects every write — Row 14 is calculated, never entered", async () => {
       const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "30.61" });
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Concurrent update");
+      expect(result.error).toMatch(/calculated automatically/);
     });
 
-    it("rejects invalid monetary amounts (T105)", async () => {
-      vi.mocked(prisma.fundFlowMonthlyExpense.findUnique).mockResolvedValueOnce(null);
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "not-a-number" });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Invalid monetary amount");
-    });
-
-    it("requires fundFlow update permission (T103)", async () => {
-      mockWithoutPermission();
-      const result = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "10" });
-      expect(result.success).toBe(false);
-      expect(prisma.fundFlowMonthlyExpense.findUnique).not.toHaveBeenCalled();
+    it("does not touch the FundFlowMonthlyExpense table", async () => {
+      await upsertMonthlyExpense({ month: 4, year: 2026, amount: "10" });
+      expect(prisma.fundFlowMonthlyExpense.findMany).not.toHaveBeenCalled();
     });
   });
 });

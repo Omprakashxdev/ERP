@@ -9,11 +9,15 @@ import {
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "../actions/wrapper";
 
-// ── Excel cached values from docs/ERP - Work Flow Formats.xlsx ──
-// Project 1 (row 6): Y6:AP6 = 2.777744444444444 each (Jul26-Dec27, 18 months)
-// Project 2 (row 8): AA8:AD8 = 2.5276199999999998 each (Sep-Dec26)
-// Project 3 (row 9): V9/W9 = 3.4299999999999997, X9 = 1.72
-// Row 14 literals V14:AJ14 (Apr26-Jun27)
+// Confirmed customer rules (ERP - Work Flow Formats.xlsx, "Fund Flow" sheet):
+//   Row 12 = Σ saved project allocations per month (whole Apr26–Mar28 window)
+//   Row 14 = Σ Staff Exp. of every project whose [Start month … +TTL−1] span
+//            covers the month — derived, never the workbook's old sample
+//            literals (30.61, 30.36, 30.31…)
+//   Row 16 = Row 12 − Row 14
+//   Row 18 = prev + Row 12 − Row 14, zero opening baseline
+// Old manually-entered FundFlowMonthlyExpense records are preserved but
+// never feed the derived report.
 
 let mockAuditLogEntries: any[] = [];
 
@@ -32,78 +36,72 @@ vi.mock("../actions/wrapper", () => ({
   sanitizeForAudit: vi.fn(async (v) => v),
 }));
 
-const P1 = "2.777744444444444";
-const P2 = "2.5276199999999998";
-const P3a = "3.4299999999999997";
-const P3c = "1.72";
-const EXP = ["30.61","30.36","30.31","15.56","15.37","14.66","13.21","13.21","10.81","10.02","9.91","9.98","7.49","6.49","6.27"];
-
-// Excel cached results to compare against
-const X_INCOME = [3.4299999999999997,3.4299999999999997,1.72,2.777744444444444,2.777744444444444,5.305364444444444,5.305364444444444,5.305364444444444,5.305364444444444,2.777744444444444,2.777744444444444,2.777744444444444,2.777744444444444,2.777744444444444,2.777744444444444];
-const X_NET = [-27.18,-26.93,-28.59,-12.782255555555556,-12.592255555555555,-9.354635555555557,-7.904635555555557,-7.904635555555557,-5.504635555555557,-7.2422555555555554,-7.132255555555556,-7.202255555555556,-4.712255555555556,-3.712255555555556,-3.4922555555555554];
-const X_BAL = [-27.18,-54.11,-82.7,-95.48225555555555,-108.07451111111112,-117.42914666666667,-125.33378222222223,-133.23841777777778,-138.74305333333334,-145.9853088888889,-153.11756444444447,-160.31982000000002,-165.0320755555556,-168.74433111111117,-172.23658666666674];
-const X_AU12 = 52.02341333333333;
-const X_AU14 = 224.26000000000005;
-const X_AU16 = -172.2365866666667;
-
-const TOL = 1e-9;
-function close(actual: Decimal | null, expected: number): boolean {
-  if (actual == null) return false;
-  return Math.abs(Number(actual.toString()) - expected) < TOL;
+function ffRow(opts: {
+  name: string;
+  staffExp: string;
+  startMonth?: number | null;
+  startYear?: number | null;
+  ttl?: number | null;
+  monthlyData?: any[];
+}) {
+  return {
+    staffExp: new Decimal(opts.staffExp),
+    distributionStartMonth: opts.startMonth ?? null,
+    distributionStartYear: opts.startYear ?? null,
+    project: {
+      name: opts.name,
+      targetTimeLimitMonths:
+        opts.ttl == null ? null : new Decimal(String(opts.ttl)),
+    },
+    monthlyData: opts.monthlyData ?? [],
+  };
 }
 
-function seedWorkbook() {
-  // Project 1: months Jul26(i=3)..Dec27(i=20) = P1
-  const p1: any[] = [];
-  const months1 = [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
-  // index i → month/year: i<9 → (2026, 4+i); else (2027, i-8)
-  months1.forEach((i, n) => {
-    const year = i <= 8 ? 2026 : 2027;
-    const month = i <= 8 ? 4 + i : i - 8;
-    p1.push({
-      id: `p1-${i}`, month, year,
-      income: new Decimal(P1),
-      expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0"),
-    });
-    mockAuditLogEntries.push({ entityId: `p1-${i}`, entity: "FundFlowMonthly", action: "create", metadata: { source: "ff-01k-workbook-allocation" } });
-  });
-  // Project 2: Sep-Dec 2026 (indices 5,6,7,8)
-  const p2: any[] = [];
-  [5,6,7,8].forEach((i) => {
-    p2.push({
-      id: `p2-${i}`, month: 4 + i, year: 2026,
-      income: new Decimal(P2),
-      expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0"),
-    });
-    mockAuditLogEntries.push({ entityId: `p2-${i}`, entity: "FundFlowMonthly", action: "create", metadata: { source: "ff-01k-workbook-allocation" } });
-  });
-  // Project 3: Apr,May,Jun 2026
-  const p3 = [
-    { id: "p3-0", month: 4, year: 2026, income: new Decimal(P3a), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
-    { id: "p3-1", month: 5, year: 2026, income: new Decimal(P3a), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
-    { id: "p3-2", month: 6, year: 2026, income: new Decimal(P3c), expense: new Decimal("0"), net: new Decimal("0"), cumulative: new Decimal("0") },
-  ];
-  ["p3-0","p3-1","p3-2"].forEach((id) =>
-    mockAuditLogEntries.push({ entityId: id, entity: "FundFlowMonthly", action: "create", metadata: { source: "ff-01k-workbook-allocation" } })
-  );
+function incRec(id: string, month: number, year: number, income: string) {
+  return {
+    id, month, year,
+    income: new Decimal(income),
+    expense: new Decimal("0"),
+    net: new Decimal("0"),
+    cumulative: new Decimal("0"),
+  };
+}
 
+const prov = (id: string) => {
+  mockAuditLogEntries.push({
+    entityId: id,
+    entity: "FundFlowMonthly",
+    action: "create",
+    metadata: { source: "ff-01k-workbook-allocation" },
+  });
+  return id;
+};
+
+const idx = (month: number, year: number) => (year - 2026) * 12 + (month - 4);
+
+// Customer's confirmed example: A = 1.60×18mo from Jul 2026, B = 0.90×4mo
+// from Sep 2026 → expected expenses Jul 1.60 / Aug 1.60 / Sep–Dec 2.50 /
+// Jan 2027–Dec 2027 1.60 / Jan 2028 0.
+function seedConfirmed() {
+  const aData: any[] = [];
+  // saved income allocations for A: 2.00/month Jul–Dec 2026
+  for (let m = 7; m <= 12; m++) {
+    const id = `a-${m}`;
+    aData.push(incRec(prov(id), m, 2026, "2.00"));
+  }
   vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([
-    { id: "ff-1", monthlyData: p1 },
-    { id: "ff-2", monthlyData: p2 },
-    { id: "ff-3", monthlyData: p3 },
+    ffRow({ name: "Project A", staffExp: "1.60", startMonth: 7, startYear: 2026, ttl: 18, monthlyData: aData }),
+    ffRow({ name: "Project B", staffExp: "0.90", startMonth: 9, startYear: 2026, ttl: 4 }),
+    // legacy row: historical staffExp, no timing → excluded, flagged
+    ffRow({ name: "Legacy", staffExp: "2000" }),
   ] as any);
-
-  // Row 14: expenses Apr26(i0)..Jun27(i14)
-  const exps = EXP.map((a, i) => {
-    const year = i <= 8 ? 2026 : 2027;
-    const month = i <= 8 ? 4 + i : i - 8;
-    mockAuditLogEntries.push({ entityId: `ex-${i}`, entity: "FundFlowMonthlyExpense", action: "create", metadata: { source: "ff-01m-workbook-expense" } });
-    return { id: `ex-${i}`, month, year, amount: new Decimal(a), createdAt: new Date(), updatedAt: new Date() };
-  });
-  vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue(exps as any);
+  // A stale manual-expense record exists — must not feed the report
+  vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue([
+    { id: "ex1", month: 9, year: 2026, amount: new Decimal("30.61"), createdAt: new Date(), updatedAt: new Date() },
+  ] as any);
 }
 
-describe("Excel numerical parity verification", () => {
+describe("Confirmed monthly report — Rows 12/14/16/18 end-to-end", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(withPermission).mockImplementation(async (_r, _a, fn) => {
@@ -117,84 +115,80 @@ describe("Excel numerical parity verification", () => {
     vi.mocked(prisma.auditLog.findMany).mockImplementation(((args: any) => {
       const where = args?.where;
       if (!where?.entityId?.in) return Promise.resolve([]);
-      const filtered = mockAuditLogEntries.filter((e) => {
-        if (where.entity && e.entity !== where.entity) return false;
-        if (!where.entityId.in.includes(e.entityId)) return false;
-        if (where.action && e.action !== where.action) return false;
-        if (where.metadata?.path?.[0] === "source" && e.metadata?.source !== where.metadata?.equals) return false;
-        return true;
-      });
-      return Promise.resolve(filtered);
+      return Promise.resolve(
+        mockAuditLogEntries.filter((e) => {
+          if (where.entity && e.entity !== where.entity) return false;
+          if (!where.entityId.in.includes(e.entityId)) return false;
+          if (where.action && e.action !== where.action) return false;
+          if (
+            where.metadata?.path?.[0] === "source" &&
+            e.metadata?.source !== where.metadata?.equals
+          )
+            return false;
+          return true;
+        })
+      );
     }) as any);
-    seedWorkbook();
-  });
-
-  it("Row 12: monthly income totals match Excel V12:AJ12 + AU12", async () => {
-    const r = await getMonthlyIncomeSummary();
-    const data = r.data as any[];
-    const diffs: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      if (!close(data[i].totalIncome, X_INCOME[i])) {
-        diffs.push(`month[${i}] erp=${data[i].totalIncome?.toString()} excel=${X_INCOME[i]}`);
-      }
-    }
-    // AK12:AT12 have no formulas in the workbook — no Row 12 value may exist
-    for (let i = 15; i < 24; i++) {
-      if (data[i].formulaCovered !== false)
-        diffs.push(`month[${i}] expected formulaCovered=false`);
-      if (data[i].totalIncome !== null)
-        diffs.push(`month[${i}] expected null got ${data[i].totalIncome}`);
-    }
-    const erpTotal = data.reduce(
-      (acc, m) => (m.totalIncome ? acc.plus(m.totalIncome) : acc),
-      new Decimal("0")
+    vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.fundFlowMonthlyExpense.findMany).mockResolvedValue(
+      [] as any
     );
-    if (!close(erpTotal, X_AU12)) diffs.push(`AU12 erp=${erpTotal} excel=${X_AU12}`);
-    console.log("ROW12 DIFFS:", diffs.length ? diffs : "NONE");
-    expect(diffs).toEqual([]);
+    seedConfirmed();
   });
 
-  it("Row 14: expense values + AU14 parity", async () => {
-    const r = await getMonthlyExpenses();
-    const data = r.data as any;
-    const diffs: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      if (!close(data.expenses[i].amount, Number(EXP[i]))) {
-        diffs.push(`month[${i}] erp=${data.expenses[i].amount?.toString()} excel=${EXP[i]}`);
-      }
-    }
-    if (!close(data.total, X_AU14)) diffs.push(`AU14 erp=${data.total} excel=${X_AU14}`);
-    console.log("ROW14 DIFFS:", diffs.length ? diffs : "NONE");
-    expect(diffs).toEqual([]);
+  it("Row 12 sums saved allocations per month (2.00 Jul–Dec 2026)", async () => {
+    const data = (await getMonthlyIncomeSummary()).data as any[];
+    expect(data[idx(7, 2026)].totalIncome).toBe("2");
+    expect(data[idx(12, 2026)].totalIncome).toBe("2");
+    expect(data[idx(1, 2027)].totalIncome).toBeNull();
+    // full window covered
+    expect(data.every((m: any) => m.formulaCovered)).toBe(true);
   });
 
-  it("Row 16: planned net matches Excel V16:AJ16 + AU16", async () => {
-    const r = await getMonthlyPlannedNet();
-    const data = r.data as any;
-    const diffs: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      if (!close(data.months[i].plannedNet, X_NET[i])) {
-        diffs.push(`month[${i}] erp=${data.months[i].plannedNet?.toString()} excel=${X_NET[i]}`);
-      }
-    }
-    if (!close(data.totalNet, X_AU16)) diffs.push(`AU16 erp=${data.totalNet} excel=${X_AU16}`);
-    console.log("ROW16 DIFFS:", diffs.length ? diffs : "NONE");
-    expect(diffs).toEqual([]);
+  it("Row 14 equals the confirmed overlapping-project expenses", async () => {
+    const data = (await getMonthlyExpenses()).data as any;
+    const at = (m: number, y: number) => data.expenses[idx(m, y)].amount;
+    expect(at(7, 2026)).toBe("1.6");
+    expect(at(8, 2026)).toBe("1.6");
+    expect(at(9, 2026)).toBe("2.5");
+    expect(at(10, 2026)).toBe("2.5");
+    expect(at(11, 2026)).toBe("2.5");
+    expect(at(12, 2026)).toBe("2.5");
+    expect(at(1, 2027)).toBe("1.6");
+    expect(at(12, 2027)).toBe("1.6");
+    expect(at(1, 2028)).toBe("0");
+    // legacy manual record 30.61 in Sep is NOT counted
+    expect(at(9, 2026)).not.toBe("33.11");
+    expect(data.missingExpenseConfig).toEqual([
+      {
+        projectName: "Legacy",
+        missing: ["Start month", "Target Time Limit (In Month)"],
+      },
+    ]);
   });
 
-  it("Row 18: running balance matches Excel V18:AJ18", async () => {
-    const r = await getMonthlyRunningBalance();
-    const data = r.data as any;
-    const diffs: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      if (!close(data.months[i].runningBalance, X_BAL[i])) {
-        diffs.push(`month[${i}] erp=${data.months[i].runningBalance?.toString()} excel=${X_BAL[i]}`);
-      }
-    }
-    for (let i = 15; i < 24; i++) {
-      if (data.months[i].runningBalance !== null) diffs.push(`month[${i}] beyond AJ should be null, got ${data.months[i].runningBalance}`);
-    }
-    console.log("ROW18 DIFFS:", diffs.length ? diffs : "NONE");
-    expect(diffs).toEqual([]);
+  it("Row 16 = Row 12 − Row 14 for every month", async () => {
+    const data = (await getMonthlyPlannedNet()).data as any;
+    const at = (m: number, y: number) => data.months[idx(m, y)].plannedNet;
+    // Sep–Dec: income 2.00 − expense 2.50 = −0.50
+    expect(at(9, 2026)).toBe("-0.5");
+    // Jul/Aug: income 2.00 − expense 1.60 = 0.40
+    expect(at(7, 2026)).toBe("0.4");
+    // Jan 2027: no income, expense 1.60 → −1.60
+    expect(at(1, 2027)).toBe("-1.6");
+    // Apr 2026: nothing at all → null
+    expect(at(4, 2026)).toBeNull();
+  });
+
+  it("Row 18 carries the confirmed cumulative balance", async () => {
+    const data = (await getMonthlyRunningBalance()).data as any;
+    const at = (m: number, y: number) => data.months[idx(m, y)].runningBalance;
+    expect(at(4, 2026)).toBe("0");      // baseline
+    expect(at(7, 2026)).toBe("0.4");    // +0.40
+    expect(at(8, 2026)).toBe("0.8");    // +0.40
+    expect(at(9, 2026)).toBe("0.3");    // −0.50
+    expect(at(12, 2026)).toBe("-1.2");  // 0.3 + 3×(−0.5)
+    expect(at(1, 2027)).toBe("-2.8");   // −1.2 − 1.6
+    expect(at(12, 2027)).toBe("-20.4"); // −2.8 − 1.6×11
   });
 });
