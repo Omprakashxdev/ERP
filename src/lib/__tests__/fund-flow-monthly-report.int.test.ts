@@ -87,13 +87,37 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
   () => {
     beforeAll(async () => {
       regionId = (
-        await prisma.region.create({ data: { name: "Monthly Report Test" } })
+        (await prisma.region.findFirst({
+          where: { name: "Monthly Report Test" },
+        })) ??
+        (await prisma.region.create({ data: { name: "Monthly Report Test" } }))
       ).id;
       clientId = (
-        await prisma.client.create({
+        (await prisma.client.findFirst({
+          where: { name: "MR Test Client" },
+        })) ??
+        (await prisma.client.create({
           data: { name: "MR Test Client", abbreviation: "MRT" },
-        })
+        }))
       ).id;
+      // clean any leftovers from a previously interrupted run
+      await prisma.fundFlowMonthlyExpense.deleteMany({
+        where: { month: 9, year: 2026 },
+      });
+      const stale = await prisma.project.findMany({
+        where: { name: { startsWith: "MR " } },
+        select: { id: true },
+      });
+      for (const s of stale) {
+        const ff = await prisma.fundFlow.findUnique({
+          where: { projectId: s.id },
+        });
+        if (ff)
+          await prisma.fundFlowMonthly.deleteMany({
+            where: { fundFlowId: ff.id },
+          });
+        await prisma.project.delete({ where: { id: s.id } }).catch(() => {});
+      }
 
       // Project A: Staff Exp 1.60, Jul 2026, 18 months
       const pa = await makeProject("MR Project A", 18);
@@ -205,13 +229,34 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
         })
         .catch(() => {});
       regionId = (
-        await prisma.region.create({ data: { name: "Provenance Test" } })
+        (await prisma.region.findFirst({
+          where: { name: "Provenance Test" },
+        })) ??
+        (await prisma.region.create({ data: { name: "Provenance Test" } }))
       ).id;
       clientId = (
-        await prisma.client.create({
+        (await prisma.client.findFirst({
+          where: { name: "Prov Test Client" },
+        })) ??
+        (await prisma.client.create({
           data: { name: "Prov Test Client", abbreviation: "PTC" },
-        })
+        }))
       ).id;
+      // clean leftovers from a previously interrupted run
+      const stale = await prisma.project.findMany({
+        where: { name: { startsWith: "Prov " } },
+        select: { id: true },
+      });
+      for (const s of stale) {
+        const ff = await prisma.fundFlow.findUnique({
+          where: { projectId: s.id },
+        });
+        if (ff)
+          await prisma.fundFlowMonthly.deleteMany({
+            where: { fundFlowId: ff.id },
+          });
+        await prisma.project.delete({ where: { id: s.id } }).catch(() => {});
+      }
       // fee 20 (cost 10000 × 0.2%), fee recvd 0, Staff Exp 1.60,
       // Start Jul 2026, TTL 18 — the requested scenario
       pid = (
@@ -245,7 +290,11 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
     });
 
     it("18 allocations created with 18 ff-01k provenance entries", async () => {
+      const ff = await prisma.fundFlow.findUniqueOrThrow({
+        where: { projectId: pid },
+      });
       const rows = await prisma.fundFlowMonthly.findMany({
+        where: { fundFlowId: ff.id },
         orderBy: [{ year: "asc" }, { month: "asc" }],
       });
       expect(rows).toHaveLength(18);
@@ -304,14 +353,17 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
         miscExp: "0.10", // unrelated-ish edit → Staff Exp 1.65
       } as never);
       expect(res.success).toBe(true);
+      const ff = await prisma.fundFlow.findUniqueOrThrow({
+        where: { projectId: pid },
+      });
       const rows = await prisma.fundFlowMonthly.findMany({
+        where: { fundFlowId: ff.id },
         orderBy: [{ year: "asc" }, { month: "asc" }],
       });
       expect(rows).toHaveLength(18);
       for (const r of rows.slice(0, 17))
         expect(Number(r.income.toString())).toBeCloseTo(1.111111, 6); // untouched
       expect(Number(rows[17].income.toString())).toBeCloseTo(1.111113, 6); // residual month untouched
-      const ff = await prisma.fundFlow.findUnique({ where: { projectId: pid } });
       expect(Number(ff!.staffExp.toString())).toBeCloseTo(1.65); // edit applied
     });
   }

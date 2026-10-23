@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { upsertFundFlow, getFundFlowByProjectId } from "@/lib/actions/fund-flow";
 import {
   getMonthlyAllocations,
@@ -27,7 +26,18 @@ import {
   wholeMonthPlanCount,
 } from "@/lib/fund-flow-window";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
-import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { formatDateIST } from "@/lib/date-utils";
+import {
+  Loader2,
+  Lock,
+  Users,
+  Wallet,
+  Percent,
+  CalendarDays,
+  TrendingUp,
+  Landmark,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
@@ -158,6 +168,118 @@ function formatDecimalAsCurrency(value: unknown): string {
   const remaining = digits.slice(0, -3);
   const restWithCommas = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ",");
   return `${negative ? "-" : ""}₹${restWithCommas},${lastThree}.${frac}`;
+}
+
+function formatMonths(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(2);
+}
+
+const SECTION_STYLES = {
+  blue: "border-blue-200/80 bg-blue-50/50",
+  amber: "border-amber-200/80 bg-amber-50/50",
+  purple: "border-purple-200/80 bg-purple-50/50",
+  green: "border-emerald-200/80 bg-emerald-50/40",
+  zinc: "border-zinc-200 bg-zinc-50/60",
+} as const;
+
+function Section({
+  icon,
+  title,
+  helper,
+  accent,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  helper?: string;
+  accent: keyof typeof SECTION_STYLES;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn("rounded-xl border p-4 sm:p-5", SECTION_STYLES[accent])}
+    >
+      <h4 className="flex items-center gap-2 text-lg font-semibold text-zinc-800">
+        {icon}
+        {title}
+      </h4>
+      {helper && <p className="mt-1 text-sm text-zinc-600">{helper}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function CalcField({
+  label,
+  value,
+  formula,
+  tone = "calc",
+}: {
+  label: string;
+  value: string;
+  formula?: string;
+  tone?: "calc" | "recorded";
+}) {
+  const recorded = tone === "recorded";
+  return (
+    <div className="space-y-1.5">
+      <span className="flex items-center gap-1.5 text-base font-medium text-zinc-700">
+        {label}
+        {recorded && (
+          <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-semibold text-zinc-600">
+            recorded
+          </span>
+        )}
+        <Lock
+          aria-hidden
+          className={cn(
+            "h-4 w-4 shrink-0",
+            recorded ? "text-zinc-400" : "text-emerald-600"
+          )}
+        />
+      </span>
+      <div
+        aria-readonly
+        className={cn(
+          "flex h-11 items-center rounded-lg border px-3 font-mono text-base font-medium",
+          recorded
+            ? "border-zinc-300 bg-zinc-100 text-zinc-800"
+            : "border-emerald-200 bg-emerald-50 text-emerald-900"
+        )}
+      >
+        {value}
+        {recorded && (
+          <span className="ml-2 font-sans text-xs font-medium text-zinc-500">
+            previously saved
+          </span>
+        )}
+      </div>
+      {formula && (
+        <p
+          className={cn(
+            "text-xs font-normal",
+            recorded ? "text-zinc-600" : "text-emerald-800/80"
+          )}
+        >
+          {formula}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-base font-medium text-zinc-700">{label}</span>
+      <div className="flex h-11 items-center rounded-lg border border-zinc-200 bg-white/80 px-3 font-mono text-base text-zinc-800">
+        {value}
+      </div>
+    </div>
+  );
 }
 
 export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) {
@@ -340,6 +462,13 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     return divideDecimalBy100(multiplyDecimals(form.totalProjectCost || "0", pct));
   }, [form.feePercentage, form.totalProjectCost, project.totalFee]);
 
+  // When no valid fee percentage is entered, the displayed Total Fee is the
+  // previously recorded project fee — not a freshly calculated value.
+  const feePctValid = useMemo(
+    () => /^\d+(\.\d+)?$/.test(form.feePercentage.trim()),
+    [form.feePercentage]
+  );
+
   const remainingFee = useMemo(() => {
     // String-based decimal subtraction — totalFee is DECIMAL(23,6);
     // Number() loses precision beyond 15 significant digits.
@@ -347,6 +476,19 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     const received = /^-?\d+(\.\d+)?$/.test(rawReceived) ? rawReceived : "0";
     return subtractDecimals(totalFee, received);
   }, [totalFee, form.feeReceived]);
+
+  // Display-only live hint for the plan inputs. The authoritative amounts
+  // come from the server-side plan preview (computeEqualInstallments).
+  const planPerMonthHint = useMemo(() => {
+    if (planPreview?.perMonth != null) {
+      return formatDecimalAsCurrency(planPreview.perMonth);
+    }
+    const n = Math.floor(Number(planInstallments));
+    if (!remainingFee || !Number.isFinite(n) || n < 1) return "—";
+    const per = Number(remainingFee) / n;
+    if (!Number.isFinite(per)) return "—";
+    return formatDecimalAsCurrency(per.toFixed(6));
+  }, [remainingFee, planInstallments, planPreview]);
 
   function updateField(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -466,7 +608,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     const input = planInput();
     if (!input) {
       setError(
-        "Select a Start month above and save before preparing the monthly plan."
+        "Select a Start month under Time / Duration and save before preparing the monthly plan."
       );
       return;
     }
@@ -638,186 +780,245 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
       )}
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Staff Exp.</h4>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+            {/* LEFT — financial entry fields */}
+            <div className="min-w-0 space-y-5">
+          <Section
+            accent="blue"
+            icon={<Users aria-hidden className="h-5 w-5 text-blue-600" />}
+            title="Staff Exp."
+            helper="Calculated automatically from the five expense fields."
+          >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="teamLeaderExp">Team Leader/Project Manager (₹)</Label>
+              <Label className="text-base" htmlFor="teamLeaderExp">Team Leader/Project Manager (₹)</Label>
               <Input
                 id="teamLeaderExp"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.teamLeaderExp}
                 onChange={(e) => updateField("teamLeaderExp", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="residentialEngineerExp">Residential Engineer (₹)</Label>
+              <Label className="text-base" htmlFor="residentialEngineerExp">Residential Engineer (₹)</Label>
               <Input
                 id="residentialEngineerExp"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.residentialEngineerExp}
                 onChange={(e) => updateField("residentialEngineerExp", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="designEngineerExp">Design Engineer (₹)</Label>
+              <Label className="text-base" htmlFor="designEngineerExp">Design Engineer (₹)</Label>
               <Input
                 id="designEngineerExp"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.designEngineerExp}
                 onChange={(e) => updateField("designEngineerExp", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="siteEngineerExp">Site Engineer (₹)</Label>
+              <Label className="text-base" htmlFor="siteEngineerExp">Site Engineer (₹)</Label>
               <Input
                 id="siteEngineerExp"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.siteEngineerExp}
                 onChange={(e) => updateField("siteEngineerExp", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="miscExp">Misc Exp (₹)</Label>
+              <Label className="text-base" htmlFor="miscExp">Misc Exp (₹)</Label>
               <Input
                 id="miscExp"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.miscExp}
                 onChange={(e) => updateField("miscExp", e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="staffExp">Staff Exp. (₹) — automatic</Label>
-              <Input
-                id="staffExp"
-                value={staffExpTotal}
-                disabled
-                readOnly
-                className="font-mono bg-zinc-50"
-              />
-            </div>
+            <CalcField
+              label="Staff Exp. (₹)"
+              value={staffExpTotal}
+              formula="Calculated automatically from the five expense fields."
+            />
           </div>
-          </div>
+          </Section>
 
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Work amounts</h4>
+          <Section
+            accent="amber"
+            icon={<Wallet aria-hidden className="h-5 w-5 text-amber-600" />}
+            title="Work Amounts"
+          >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="totalProjectCost">Total Project Cost (₹)</Label>
+              <Label className="text-base" htmlFor="totalProjectCost">Total Project Cost (₹)</Label>
               <Input
                 id="totalProjectCost"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.totalProjectCost}
                 onChange={(e) => updateField("totalProjectCost", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="completedWorkAmt">completed work amt (₹)</Label>
+              <Label className="text-base" htmlFor="completedWorkAmt">completed work amt (₹)</Label>
               <Input
                 id="completedWorkAmt"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.completedWorkAmt}
                 onChange={(e) => updateField("completedWorkAmt", e.target.value)}
               />
             </div>
+            <CalcField
+              label="remaining work amt (₹)"
+              value={`₹${remainingWorkAmt.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`}
+              formula="= Total Project Cost − completed work amt"
+            />
           </div>
-          </div>
+          </Section>
 
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Fee</h4>
+          <Section
+            accent="purple"
+            icon={<Percent aria-hidden className="h-5 w-5 text-purple-600" />}
+            title="Fee Details"
+          >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="feePercentage">Fee percentage (%)</Label>
+              <Label className="text-base" htmlFor="feePercentage">Fee percentage (%)</Label>
               <Input
                 id="feePercentage"
                 type="number"
                 step="0.000001"
                 min="0"
                 max="100"
+                className="h-11 text-base"
                 value={form.feePercentage}
                 onChange={(e) => updateField("feePercentage", e.target.value)}
                 placeholder="e.g. 0.22727"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="proposedDueBillAmount">Proposed / Due Bill Amount (₹)</Label>
+              <Label className="text-base" htmlFor="proposedDueBillAmount">Proposed / Due Bill Amount (₹)</Label>
               <Input
                 id="proposedDueBillAmount"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.proposedDueBillAmount}
                 onChange={(e) => updateField("proposedDueBillAmount", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="feeReceived">fee recvd (₹)</Label>
+              <Label className="text-base" htmlFor="feeReceived">fee recvd (₹)</Label>
               <Input
                 id="feeReceived"
                 type="number"
                 step="0.01"
+                className="h-11 text-base"
                 value={form.feeReceived}
                 onChange={(e) => updateField("feeReceived", e.target.value)}
               />
             </div>
+            <CalcField
+              label="Total Fee (₹)"
+              value={formatDecimalAsCurrency(totalFee)}
+              tone={feePctValid ? "calc" : "recorded"}
+              formula={
+                feePctValid
+                  ? "= Total Project Cost × Fee percentage ÷ 100"
+                  : "This fee was recorded previously. Enter a fee percentage to enable automatic calculation."
+              }
+            />
+            <CalcField
+              label="remaing fee (₹)"
+              value={formatDecimalAsCurrency(remainingFee)}
+              formula="= Total Fee − fee recvd"
+            />
+          </div>
+          </Section>
+
+          <Section
+            accent="blue"
+            icon={<CalendarDays aria-hidden className="h-5 w-5 text-blue-600" />}
+            title="Time / Duration"
+            helper="Project dates come from the Project information tab. The Start month is set here and is used by the Monthly Income Plan."
+          >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <InfoTile
+              label="Date of Work Order"
+              value={formatDateIST(project.workOrderDate)}
+            />
+            <InfoTile
+              label="Time Limit (in Month)"
+              value={formatMonths(project.timeLimitMonths)}
+            />
+            <InfoTile
+              label="Grace period (months)"
+              value={formatMonths(project.additionalTimeMonths)}
+            />
+            <InfoTile
+              label="Target Time Limit (In Month)"
+              value={formatMonths(project.targetTimeLimitMonths)}
+            />
+            <InfoTile
+              label="Stipulated Date of Completion"
+              value={formatDateIST(project.stipulatedCompletionDate)}
+            />
+            <InfoTile
+              label="Target Date of Completion"
+              value={formatDateIST(project.targetCompletionDate)}
+            />
             <div className="space-y-1.5">
-              <Label htmlFor="startMonth">Start month</Label>
+              <Label className="text-base" htmlFor="startMonth">Start month</Label>
               <Input
                 id="startMonth"
                 type="month"
+                className="h-11 text-base"
                 value={form.startMonth}
-                onChange={(e) => updateField("startMonth", e.target.value)}
+                onChange={(e) => {
+                  updateField("startMonth", e.target.value);
+                  setPlanPreview(null);
+                }}
               />
-            </div>
-          </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Calculated (read-only)</h4>
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-            <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">remaining work amt</p>
-              <p className="font-mono font-medium">
-                ₹{remainingWorkAmt.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
-            </div>
-            <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">Total Fee</p>
-              <p className="font-mono font-medium">
-                {formatDecimalAsCurrency(totalFee)}
-              </p>
-            </div>
-            <div className="rounded-md bg-zinc-50 p-3">
-              <p className="text-xs text-zinc-500">remaing fee</p>
-              <p className="font-mono font-medium">
-                {formatDecimalAsCurrency(remainingFee)}
+              <p className="text-xs font-normal text-zinc-600">
+                Select the first month from which monthly fee allocation should
+                begin.
               </p>
             </div>
           </div>
-          </div>
+          </Section>
+            </div>
 
-          <Separator />
+            {/* RIGHT — monthly plan */}
+            <div className="min-w-0 space-y-5">
 
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium">
-              Monthly Income Plan (Apr 2026 – Mar 2028)
-              {monthlyLoading && (
-                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
-              )}
-            </h4>
-            <p className="text-xs text-zinc-500">
+          <Section
+            accent="green"
+            icon={<TrendingUp aria-hidden className="h-5 w-5 text-emerald-600" />}
+            title="Monthly Income Plan"
+            helper="Apr 2026 – Mar 2028"
+          >
+          <div className="space-y-4">
+            {monthlyLoading && (
+              <Loader2 className="inline h-4 w-4 animate-spin text-zinc-500" />
+            )}
+            <p className="text-sm text-zinc-600">
               Spread the remaining fee (Total Fee − fee recvd) evenly over a
               number of whole months, starting from the saved Start month —
               the same style used in the customer workbook. You review the
@@ -854,102 +1055,88 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 </div>
               </div>
             </div>
-            {/* Plan inputs */}
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <p className="text-sm text-zinc-500">
-                    remaing fee ÷ months:{" "}
-                    <span className="font-mono font-medium text-zinc-800">
-                      {formatDecimalAsCurrency(remainingFee)} ÷{" "}
-                      {Math.floor(Number(planInstallments)) || 1}
-                    </span>{" "}
-                    per month
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    The remaining fee is split equally over the number of whole
-                    months below, starting from the saved Start month. The last
-                    month absorbs any rounding remainder so the plan always
-                    totals the remaining fee exactly.
-                  </p>
+            {/* Plan inputs — Remaining fee / months / monthly amount */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <CalcField
+                  label="Remaining fee (₹)"
+                  value={formatDecimalAsCurrency(remainingFee)}
+                />
+                <div className="space-y-1.5">
+                  <Label className="text-base" htmlFor="plan-months">
+                    No. of months
+                  </Label>
+                  <input
+                    id="plan-months"
+                    type="number"
+                    min={1}
+                    max={24}
+                    step={1}
+                    className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-right font-mono text-base"
+                    value={planInstallments}
+                    onChange={(e) => {
+                      setPlanInstallments(e.target.value);
+                      setPlanPreview(null);
+                    }}
+                  />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="plan-months">Months</Label>
-                    <input
-                      id="plan-months"
-                      type="number"
-                      min={1}
-                      max={24}
-                      step={1}
-                      className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-right font-mono text-sm"
-                      value={planInstallments}
-                      onChange={(e) => {
-                        setPlanInstallments(e.target.value);
-                        setPlanPreview(null);
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="plan-start">Start month</Label>
-                    <select
-                      id="plan-start"
-                      className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
-                      value={planStart}
-                      onChange={(e) => {
-                        updateField("startMonth", e.target.value);
-                        setPlanPreview(null);
-                      }}
-                    >
-                      <option value="">— select —</option>
-                      {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => {
-                        const v = `${year}-${String(month).padStart(2, "0")}`;
-                        return (
-                          <option key={v} value={v}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                </div>
+                <CalcField
+                  label="Monthly amount (₹)"
+                  value={planPerMonthHint}
+                  formula="Last month adjusts for rounding."
+                />
               </div>
+              <p className="text-sm text-zinc-600">
+                The remaining fee is divided across the selected monthly
+                installments, starting from the Start month under
+                &ldquo;Time / Duration&rdquo;. Review the amounts before saving.
+              </p>
               {project.targetTimeLimitMonths != null &&
                 !Number.isInteger(
                   Number(project.targetTimeLimitMonths)
                 ) && (
-                  <p className="text-xs text-amber-700">
+                  <p className="rounded-md bg-amber-50 p-2.5 text-sm text-amber-800">
                     Target Time Limit (In Month) is{" "}
                     {String(project.targetTimeLimitMonths)} — not a whole
                     number. The workbook resolves this to{" "}
                     {wholeMonthPlanCount(project.targetTimeLimitMonths)}{" "}
-                    whole months; adjust the Months field if needed, then save
-                    before preparing the plan.
+                    whole months; adjust the &ldquo;No. of months&rdquo; field
+                    if needed, then save before preparing the plan.
                   </p>
                 )}
               {!planStart && (
-                <p className="text-xs text-amber-700">
-                  Select a Start month above — it is used as the first month of
-                  the plan. (Save the form to keep it.)
+                <p className="rounded-md bg-amber-50 p-2.5 text-sm text-amber-800">
+                  Select the Start month and number of installments, then
+                  prepare the monthly plan. The Start month is chosen under
+                  &ldquo;Time / Duration&rdquo; on the left (save the form to
+                  keep it).
                 </p>
               )}
 
               <Button
                 type="button"
                 size="lg"
+                className="h-12 w-full text-base"
                 onClick={handlePreviewPlan}
                 disabled={planLoading || monthlyLoading || !planStart}
               >
                 {planLoading && (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-1.5 h-5 w-5 animate-spin" />
                 )}
-                Prepare monthly plan
+                Prepare Monthly Plan
               </Button>
             </div>
 
+            {!planPreview && !planLoading && (
+              <div className="rounded-lg border border-dashed border-zinc-300 bg-white/60 px-4 py-6 text-center text-sm text-zinc-500">
+                Select the Start month and number of installments, then prepare
+                the monthly plan.
+              </div>
+            )}
+
             {/* Plan preview */}
             {planPreview && (
-              <div className="rounded-md border border-zinc-200 bg-white p-3 space-y-3">
+              <div className="rounded-lg border border-emerald-200 bg-white p-4 space-y-3">
                 {planPreview.unavailableReason ? (
                   <p className="text-sm text-amber-700">
                     {planPreview.unavailableReason}
@@ -973,16 +1160,23 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                         " — amounts vary per month, see the list below."
                       )}
                     </p>
-                    <div className="max-h-56 overflow-y-auto rounded border border-zinc-100">
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1 p-2 text-sm">
-                        {planPreview.items.map((item) => {
+                    <div className="rounded-md border border-zinc-200">
+                      <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-x-4 border-b bg-zinc-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        <span>#</span>
+                        <span>Month</span>
+                        <span className="text-right">Amount</span>
+                        <span className="w-52 text-right">Status</span>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto">
+                      <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-x-4 gap-y-1 p-3 text-base">
+                        {planPreview.items.map((item, idx) => {
                           const key = `${item.year}-${item.month}`;
                           if (item.status === "conflict") {
                             const replacing = !!planReplace[key];
                             return (
                               <div
                                 key={key}
-                                className="col-span-3 rounded bg-amber-50 px-2 py-1.5"
+                                className="col-span-4 rounded bg-amber-50 px-2 py-1.5"
                               >
                                 <div className="flex flex-wrap items-baseline gap-x-3">
                                   <span className="font-medium text-zinc-800">
@@ -1026,7 +1220,8 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                             );
                           }
                           return (
-                            <div key={key} className="col-span-3 grid grid-cols-subgrid items-baseline">
+                            <div key={key} className="col-span-4 grid grid-cols-subgrid items-baseline">
+                              <span className="text-zinc-400">{idx + 1}</span>
                               <span className="font-medium text-zinc-700">
                                 {item.label}
                               </span>
@@ -1054,6 +1249,7 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                             </div>
                           );
                         })}
+                      </div>
                       </div>
                     </div>
                     <p className="text-xs text-zinc-500">
@@ -1177,20 +1373,24 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             </div>
             </details>
           </div>
-
-          <Separator />
+          </Section>
 
           {/* Legacy financial overview — kept intact, but it is NOT the
               source for monthly fee allocations (those come from the saved
               remaing fee above). */}
-          <details className="rounded-md border border-zinc-200 p-3 [&[open]>summary]:mb-3">
-            <summary className="cursor-pointer select-none text-sm font-medium text-zinc-700">
+          <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 [&[open]>summary]:mb-3">
+            <summary className="flex cursor-pointer select-none items-center gap-2 text-base font-semibold text-zinc-700">
+              <Landmark aria-hidden className="h-5 w-5 text-zinc-500" />
               Advanced Financial Reconciliation
               {detailLoading && (
-                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
+                <Loader2 className="ml-2 inline h-4 w-4 animate-spin text-zinc-500" />
               )}
             </summary>
-            <div className="space-y-3">
+            <p className="mt-1 text-sm text-zinc-500">
+              Additional invoice and settlement information. These figures do
+              not control monthly fee allocation.
+            </p>
+            <div className="mt-3 space-y-3">
               <p className="text-xs text-zinc-500">
                 The monthly plan above is calculated from the{" "}
                 <span className="font-medium">Calculated Total Fee</span>, the{" "}
@@ -1205,43 +1405,43 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
               {reconciliationAvailable ? (
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Contract fee</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.totalContractFee)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Total invoiced</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.totalInvoiced)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Invoice settlement</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.totalSettlement)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Recorded cheque</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.totalRecordedCheque)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Outstanding (settlement basis)</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.outstandingPerSettlement)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Legacy fee received</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.legacyFeeReceived)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-zinc-50 p-3">
+                  <div className="rounded-md border border-zinc-200 bg-white p-3">
                     <p className="text-xs text-zinc-500">Contractor RA-bill project expenses (WIP)</p>
                     <p className="font-mono font-medium">
                       {formatMoney(detailData!.wipRaBillProjectExpense)}
@@ -1259,24 +1459,27 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
               )}
             </div>
           </details>
+            </div>
+          </div>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
           </div>
 
-          <div className="flex justify-end gap-2 border-t bg-popover px-4 py-3">
+          <div className="flex flex-col-reverse gap-2 border-t bg-popover px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
             <Button
               type="button"
               variant="outline"
+              className="h-11 px-6 text-base"
               onClick={onClose}
               disabled={submitting}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" className="h-11 px-6 text-base" disabled={submitting}>
               {submitting && (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               )}
-              Save fund flow
+              Save Fund Flow
             </Button>
           </div>
         </form>

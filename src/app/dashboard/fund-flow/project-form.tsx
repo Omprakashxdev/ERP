@@ -30,6 +30,7 @@ import { getRegions } from "@/lib/actions/region";
 import { getClients } from "@/lib/actions/client";
 import { getStaff } from "@/lib/actions/staff";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
+import { cn } from "@/lib/utils";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
@@ -424,22 +425,29 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="flex flex-col overflow-hidden"
+            className={cn(
+              "flex flex-col overflow-hidden",
+              embedded && "min-h-0 flex-1"
+            )}
           >
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v ?? "details")}
-              className="flex-1 overflow-hidden"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="staff">Staff</TabsTrigger>
-                <TabsTrigger value="fees">Fee Stages</TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-3">
+                <TabsTrigger value="details" className="h-11 text-base">Details</TabsTrigger>
+                <TabsTrigger value="staff" className="h-11 text-base">Staff</TabsTrigger>
+                <TabsTrigger value="fees" className="h-11 text-base">Fee Stages</TabsTrigger>
               </TabsList>
 
               <TabsContent
                 value="details"
-                className="max-h-[55vh] overflow-y-auto py-4"
+                keepMounted
+                className={cn(
+                  "overflow-y-auto py-4 [&[hidden]]:hidden",
+                  embedded ? "min-h-0 flex-1" : "max-h-[55vh]"
+                )}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {!isEdit && (
@@ -692,7 +700,11 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
               <TabsContent
                 value="staff"
-                className="max-h-[55vh] overflow-y-auto py-4"
+                keepMounted
+                className={cn(
+                  "overflow-y-auto py-4 [&[hidden]]:hidden",
+                  embedded ? "min-h-0 flex-1" : "max-h-[55vh]"
+                )}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -794,7 +806,11 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
               <TabsContent
                 value="fees"
-                className="max-h-[55vh] overflow-y-auto py-4"
+                keepMounted
+                className={cn(
+                  "overflow-y-auto py-4 [&[hidden]]:hidden",
+                  embedded ? "min-h-0 flex-1" : "max-h-[55vh]"
+                )}
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -933,16 +949,17 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
 
             <ErrorBanner error={error} onAskAi={(e) => askAi(e, mode === "create" ? "Creating project" : "Editing project")} askingAi={askingAi} aiResponse={aiResponse} />
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
+                className="h-11 px-6 text-base"
                 onClick={onClose}
                 disabled={submitting}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" className="h-11 px-6 text-base" disabled={submitting}>
                 {submitting && (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
