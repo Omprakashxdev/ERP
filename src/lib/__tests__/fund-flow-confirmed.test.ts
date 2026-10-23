@@ -7,7 +7,9 @@ import {
   computeTotalFee,
   computeRemainingFee,
   computeMonthlyDistribution,
+  computeEqualInstallments,
 } from "../fund-flow-calcs";
+import { wholeMonthPlanCount } from "../fund-flow-window";
 
 // First Excel row: WO 1 Apr 2026, TL 12, Grace 6 → Stipulated 31 Mar 2027,
 // Target 30 Sep 2027, Target TL 18.
@@ -77,5 +79,52 @@ describe("confirmed Fund Flow calculations", () => {
     const total = m.mul(18);
     const residual = new Decimal("49.9994").minus(total);
     expect(residual.toString()).toBe("0.000008");
+  });
+});
+
+describe("whole-month plan count + exact installment split", () => {
+  it("workbook example: Target Time Limit 4.5 resolves to 4 whole months", () => {
+    expect(wholeMonthPlanCount(4.5)).toBe(4);
+    expect(wholeMonthPlanCount("4.5")).toBe(4);
+    expect(wholeMonthPlanCount(new Decimal(4.5))).toBe(4);
+    expect(wholeMonthPlanCount(18)).toBe(18);
+    expect(wholeMonthPlanCount(0.4)).toBe(1);
+    expect(wholeMonthPlanCount(0)).toBeNull();
+    expect(wholeMonthPlanCount(null)).toBeNull();
+    expect(wholeMonthPlanCount(undefined)).toBeNull();
+  });
+
+  it("installments always sum to the remaining fee exactly (residual last)", () => {
+    const four = computeEqualInstallments("10.11048", 4);
+    expect(four.map((d) => d.toString())).toEqual([
+      "2.52762",
+      "2.52762",
+      "2.52762",
+      "2.52762",
+    ]);
+    expect(
+      four.reduce((a, d) => a.plus(d), new Decimal(0)).toString()
+    ).toBe("10.11048");
+
+    const three = computeEqualInstallments("10", 3);
+    expect(three.map((d) => d.toString())).toEqual([
+      "3.333333",
+      "3.333333",
+      "3.333334",
+    ]);
+    expect(
+      three.reduce((a, d) => a.plus(d), new Decimal(0)).toString()
+    ).toBe("10");
+
+    const eighteen = computeEqualInstallments("49.9994", 18);
+    expect(eighteen[17].toString()).toBe("2.777752");
+    expect(
+      eighteen.reduce((a, d) => a.plus(d), new Decimal(0)).toString()
+    ).toBe("49.9994");
+  });
+
+  it("rejects non-whole or non-positive counts", () => {
+    expect(() => computeEqualInstallments("10", 4.5)).toThrow();
+    expect(() => computeEqualInstallments("10", 0)).toThrow();
   });
 });

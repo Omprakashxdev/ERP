@@ -100,4 +100,23 @@ describe("computeMonthlyReport — confirmed Rows 12/14/16/18", () => {
     expect(r.months[idx(6, 2026)].expense).toBe("1");
     expect(r.months[idx(7, 2026)].expense).toBe("0");
   });
+
+  it("fractional Target Time Limit (4.5) is flagged, not silently floored", () => {
+    const r = computeMonthlyReport(
+      [{ name: "Testing012", staffExp: "0.5", startMonth: 7, startYear: 2026, targetTimeLimitMonths: "4.5" }],
+      emptyIncome
+    );
+    // No confirmed fractional rule → rounded to 5 whole months and flagged.
+    expect(r.expenseSpanWarnings).toHaveLength(1);
+    expect(r.expenseSpanWarnings[0]).toMatchObject({
+      projectName: "Testing012",
+      targetTimeLimitMonths: "4.5",
+      monthsUsed: 5,
+    });
+    // Jul 2026 → Nov 2026 (5 months) at 0.5 each
+    expect(r.months[idx(7, 2026)].expense).toBe("0.5");
+    expect(r.months[idx(11, 2026)].expense).toBe("0.5");
+    expect(r.months[idx(12, 2026)].expense).toBe("0");
+    expect(r.missingExpenseConfig).toHaveLength(0);
+  });
 });

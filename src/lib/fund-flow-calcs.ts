@@ -57,3 +57,26 @@ export function computeMonthlyDistribution(
     .div(targetTimeLimitMonths)
     .toDecimalPlaces(6);
 }
+
+/**
+ * Split `amount` into `count` equal monthly installments at 6-decimal
+ * precision. Every month except the last is amount ÷ count rounded to 6dp;
+ * the last month absorbs the rounding residual so the installments always
+ * sum to exactly `amount`.
+ */
+export function computeEqualInstallments(
+  amount: Decimal | number | string,
+  count: number
+): Decimal[] {
+  const total = new Decimal(amount.toString());
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error("Installment count must be a positive whole number.");
+  }
+  const perMonth = total.div(count).toDecimalPlaces(6);
+  const installments: Decimal[] = Array.from(
+    { length: count },
+    () => perMonth
+  );
+  installments[count - 1] = total.minus(perMonth.mul(count - 1));
+  return installments;
+}

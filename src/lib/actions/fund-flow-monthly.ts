@@ -25,7 +25,9 @@ import {
   type ExpenseSourceProject,
   type MissingExpenseConfig,
   type ExpenseContributor,
+  type ExpenseSpanWarning,
 } from "@/lib/fund-flow-summary";
+import { computeEqualInstallments } from "@/lib/fund-flow-calcs";
 
 const windowKeySet = new Set(
   MONTHLY_ALLOCATION_WINDOW.map((m) => `${m.year}-${m.month}`)
@@ -487,6 +489,8 @@ export interface MonthlyExpenseResult {
   total: string;
   /** projects excluded from Row 14 for missing timing configuration */
   missingExpenseConfig: MissingExpenseConfig[];
+  /** projects with a fractional Target Time Limit — span is rounded and flagged */
+  expenseSpanWarnings: ExpenseSpanWarning[];
 }
 
 export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseResult>> {
@@ -502,6 +506,7 @@ export async function getMonthlyExpenses(): Promise<ActionResult<MonthlyExpenseR
       })),
       total: report.totalExpense,
       missingExpenseConfig: report.missingExpenseConfig,
+      expenseSpanWarnings: report.expenseSpanWarnings,
     };
   });
 }
@@ -798,14 +803,17 @@ async function computeMonthlyPlan(
     basisAmount = null;
   }
 
-  // Per-index amount + plain-language basis note.
-  const perMonth =
+  // Per-index amount + plain-language basis note. EVEN installments split
+  // the basis equally at 6dp with the rounding residual absorbed by the
+  // last month, so the plan always totals exactly the basis amount.
+  const evenInstallments =
     schedule === "EVEN" && basisAmount != null
-      ? basisAmount.div(n).toDecimalPlaces(6)
+      ? computeEqualInstallments(basisAmount, n)
       : null;
+  const perMonth = evenInstallments?.[0] ?? null;
   const amountFor = (i: number): Decimal | null => {
     if (unavailableReason || basisAmount == null) return null;
-    if (schedule === "EVEN") return perMonth;
+    if (schedule === "EVEN") return evenInstallments![i];
     if (schedule === "REMAINING_FIRST") {
       return i === 0
         ? remainingFee!.div(n).toDecimalPlaces(6)
@@ -825,11 +833,17 @@ async function computeMonthlyPlan(
         ? `fee received ÷ ${n - 1}`
         : "remainder (total − received)";
     }
-    return parsed.basis === "TOTAL_FEE"
-      ? `total fee ÷ ${n}`
-      : parsed.basis === "REMAINING_FEE"
-        ? `remaining fee ÷ ${n}`
-        : `fee received ÷ ${n}`;
+    const base =
+      parsed.basis === "TOTAL_FEE"
+        ? `total fee ÷ ${n}`
+        : parsed.basis === "REMAINING_FEE"
+          ? `remaining fee ÷ ${n}`
+          : `fee received ÷ ${n}`;
+    return i === n - 1 &&
+      evenInstallments != null &&
+      !evenInstallments[n - 1].equals(perMonth!)
+      ? `${base} + rounding remainder`
+      : base;
   };
 
   const provenanceSet = fundFlow

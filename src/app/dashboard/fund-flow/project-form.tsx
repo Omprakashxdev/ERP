@@ -29,7 +29,7 @@ import { createProject, updateProject } from "@/lib/actions/project";
 import { getRegions } from "@/lib/actions/region";
 import { getClients } from "@/lib/actions/client";
 import { getStaff } from "@/lib/actions/staff";
-import { FundFlowWithComputed } from "@/types/fund-flow";
+import type { FundFlowWithComputed } from "@/types/fund-flow";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";

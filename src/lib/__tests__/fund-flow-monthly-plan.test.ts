@@ -64,11 +64,13 @@ describe("Monthly income plan (Phase 1)", () => {
     const data = res.data!;
     expect(data.perMonth).toBe("2.777744");
     expect(data.createCount).toBe(18);
-    expect(data.plannedTotal).toBe("49.999392"); // 18 * 2.777744, within ±0.01 of 49.9994
-    for (const item of data.items) {
+    // Last month absorbs the rounding residual — plan totals the fee exactly.
+    expect(data.plannedTotal).toBe("49.9994");
+    for (const item of data.items.slice(0, 17)) {
       expect(item.status).toBe("create");
       expect(item.plannedAmount).toBe("2.777744");
     }
+    expect(data.items[17].plannedAmount).toBe("2.777752");
     // months should be Jul 2026 .. Dec 2027
     expect(data.items[0]).toMatchObject({ month: 7, year: 2026 });
     expect(data.items[17]).toMatchObject({ month: 12, year: 2027 });
@@ -166,14 +168,17 @@ describe("Monthly income plan (Phase 1)", () => {
   });
 
   it("apply: zero creates + one explicit replace still saves (TEST-001 scenario)", async () => {
-    // 17 months already correct at 2.777744, Jul 2027 saved as 5.00
+    // 17 months already correct (last = residual-absorbed 2.777752),
+    // Jul 2027 saved as 5.00
     const monthlyData: any[] = [];
     for (let i = 0; i < 18; i++) {
       const m = ((4 + i - 1) % 12) + 1;
       const y = 2026 + Math.floor((4 + i - 1) / 12);
       monthlyData.push({
         id: `m${i}`, fundFlowId: "ff1", month: m, year: y,
-        income: new Decimal(m === 7 && y === 2027 ? "5" : "2.777744"),
+        income: new Decimal(
+          m === 7 && y === 2027 ? "5" : i === 17 ? "2.777752" : "2.777744"
+        ),
         expense: new Decimal(0), net: new Decimal(0), cumulative: new Decimal(0),
       });
     }
@@ -313,6 +318,37 @@ describe("Monthly income plan (Phase 1)", () => {
     expect(res.success).toBe(true);
     expect(res.data!.unavailableReason).toContain("received");
     expect(res.data!.items.every((i: any) => i.plannedAmount == null)).toBe(true);
+  });
+
+  it("schema rejects a fractional installment count (4.5-month TTL bug)", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("10.11048") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "REMAINING_FEE", installments: 4.5, startMonth: 9, startYear: 2026,
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("expected int");
+    expect(prismaMock.fundFlowMonthly.create).not.toHaveBeenCalled();
+  });
+
+  it("EVEN split: last month absorbs the rounding residual, total is exact", async () => {
+    setup(
+      { id: PID, name: "P", totalFee: new Decimal("10") },
+      { id: "ff1", projectId: PID, feeReceived: new Decimal("0"), monthlyData: [] }
+    );
+    const res = await previewMonthlyPlan({
+      projectId: PID, basis: "TOTAL_FEE", installments: 3, startMonth: 4, startYear: 2026,
+    });
+    expect(res.success).toBe(true);
+    expect(res.data!.items.map((i: any) => i.plannedAmount)).toEqual([
+      "3.333333",
+      "3.333333",
+      "3.333334",
+    ]);
+    expect(res.data!.plannedTotal).toBe("10");
+    expect(res.data!.items[2].calcNote).toContain("rounding remainder");
   });
 
   it("empty basis: totalFee = 0 -> unavailableReason, nothing created", async () => {

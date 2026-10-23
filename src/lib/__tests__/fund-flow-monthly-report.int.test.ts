@@ -245,11 +245,21 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
     });
 
     it("18 allocations created with 18 ff-01k provenance entries", async () => {
-      const rows = await prisma.fundFlowMonthly.findMany();
+      const rows = await prisma.fundFlowMonthly.findMany({
+        orderBy: [{ year: "asc" }, { month: "asc" }],
+      });
       expect(rows).toHaveLength(18);
       expect(rows[0].month).toBe(7);
       expect(rows[17].month).toBe(12);
       expect(rows[17].year).toBe(2027);
+      // 20 ÷ 18 = 1.111111… — the last month absorbs the rounding
+      // residual so the plan totals the remaining fee exactly.
+      for (const r of rows.slice(0, 17))
+        expect(Number(r.income.toString())).toBeCloseTo(1.111111, 6);
+      expect(Number(rows[17].income.toString())).toBeCloseTo(1.111113, 6);
+      expect(
+        rows.reduce((a, r) => a + Number(r.income.toString()), 0)
+      ).toBeCloseTo(20, 5);
       const ids = rows.map((r) => r.id);
       const prov = await prisma.auditLog.count({
         where: {
@@ -294,10 +304,13 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
         miscExp: "0.10", // unrelated-ish edit → Staff Exp 1.65
       } as never);
       expect(res.success).toBe(true);
-      const rows = await prisma.fundFlowMonthly.findMany();
+      const rows = await prisma.fundFlowMonthly.findMany({
+        orderBy: [{ year: "asc" }, { month: "asc" }],
+      });
       expect(rows).toHaveLength(18);
-      for (const r of rows)
+      for (const r of rows.slice(0, 17))
         expect(Number(r.income.toString())).toBeCloseTo(1.111111, 6); // untouched
+      expect(Number(rows[17].income.toString())).toBeCloseTo(1.111113, 6); // residual month untouched
       const ff = await prisma.fundFlow.findUnique({ where: { projectId: pid } });
       expect(Number(ff!.staffExp.toString())).toBeCloseTo(1.65); // edit applied
     });

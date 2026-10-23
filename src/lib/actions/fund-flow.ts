@@ -18,7 +18,7 @@ import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
 import {
   computeStaffExp,
   computeTotalFee,
-  computeMonthlyDistribution,
+  computeEqualInstallments,
 } from "@/lib/fund-flow-calcs";
 import { withPermission, checkRateLimit, audit, sanitizeForAudit, ActionResult } from "./wrapper";
 
@@ -33,6 +33,8 @@ export async function upsertFundFlow(
   createdAllocations?: number;
   skippedOutsideWindow?: number;
   roundingResidual?: string;
+  /** set when auto-generation was skipped because Target Time Limit is fractional */
+  fractionalDuration?: string | null;
 }>> {
   return withPermission("fundFlow", "update", async (user) => {
     const parsed = fundFlowUpdateSchema.parse(input);
@@ -169,12 +171,20 @@ export async function upsertFundFlow(
           fundFlow.feeReceived.toString()
         );
         if (remainingFee.gt(0)) {
-          const perMonth = computeMonthlyDistribution(
-            remainingFee,
-            targetTl.toNumber()
-          );
+          // Whole-month installment count. A fractional Target Time Limit
+          // (e.g. 4.5) is ambiguous — the employee chooses the whole-month
+          // count explicitly in the monthly-plan workflow, so do not
+          // silently floor/ceil it into an incomplete schedule.
+          const n = targetTl.toNumber();
+          if (!Number.isInteger(n)) {
+            return {
+              fundFlow,
+              createdAllocations,
+              fractionalDuration: targetTl.toString(),
+            };
+          }
+          const installments = computeEqualInstallments(remainingFee, n);
           let cursor = { y: startY, m: startM };
-          const n = Math.floor(targetTl.toNumber());
           let skippedOutside = 0;
           for (let i = 0; i < n; i++) {
             if (windowKeys.has(`${cursor.y}-${cursor.m}`)) {
@@ -183,7 +193,7 @@ export async function upsertFundFlow(
                   fundFlowId: fundFlow.id,
                   month: cursor.m,
                   year: cursor.y,
-                  income: perMonth,
+                  income: installments[i],
                 },
               });
               // Same provenance marker applyMonthlyPlan writes — without it the
@@ -207,14 +217,13 @@ export async function upsertFundFlow(
             }
             cursor = cursor.m === 12 ? { y: cursor.y + 1, m: 1 } : { y: cursor.y, m: cursor.m + 1 };
           }
-          // Rounding residual of the full plan (perMonth rounded to 6dp × n),
-          // reported separately from months skipped outside the window.
-          const residual = remainingFee.minus(perMonth.mul(n));
+          // The last installment absorbs the rounding residual, so the plan
+          // always sums to exactly the remaining fee (residual = 0).
           return {
             fundFlow,
             createdAllocations,
             skippedOutside,
-            roundingResidual: residual.toString(),
+            roundingResidual: "0",
           };
         }
       }
@@ -233,6 +242,8 @@ export async function upsertFundFlow(
       skippedOutsideWindow: (result as { skippedOutside?: number }).skippedOutside ?? 0,
       roundingResidual:
         (result as { roundingResidual?: string }).roundingResidual ?? "0",
+      fractionalDuration:
+        (result as { fractionalDuration?: string }).fractionalDuration ?? null,
     };
   });
 }

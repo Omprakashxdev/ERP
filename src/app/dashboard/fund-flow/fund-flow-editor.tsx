@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FundFlowWithComputed } from "@/types/fund-flow";
+import type { FundFlowWithComputed } from "@/types/fund-flow";
 import { ProjectForm } from "./project-form";
 import { FundFlowForm } from "./fund-flow-form";
 

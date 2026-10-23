@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
-import { FundFlowWithComputed } from "@/types/fund-flow";
+import type { FundFlowWithComputed } from "@/types/fund-flow";
 import { ProjectForm } from "./project-form";
 import { FundFlowEditor } from "./fund-flow-editor";
 import {

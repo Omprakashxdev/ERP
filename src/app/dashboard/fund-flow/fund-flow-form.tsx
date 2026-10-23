@@ -22,8 +22,11 @@ import {
   MonthlyPlanPreview,
   PlanBasis,
 } from "@/lib/actions/fund-flow-monthly";
-import { MONTHLY_ALLOCATION_WINDOW } from "@/lib/fund-flow-window";
-import { FundFlowWithComputed } from "@/types/fund-flow";
+import {
+  MONTHLY_ALLOCATION_WINDOW,
+  wholeMonthPlanCount,
+} from "@/lib/fund-flow-window";
+import type { FundFlowWithComputed } from "@/types/fund-flow";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
@@ -205,15 +208,11 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
   // Monthly income plan (Phase 1) state
   const [planInstallments, setPlanInstallments] = useState(() =>
-    String(project.targetTimeLimitMonths ?? "18")
+    String(wholeMonthPlanCount(project.targetTimeLimitMonths) ?? "1")
   );
-  const [planStart, setPlanStart] = useState(() => {
-    const sm = project.fundFlow?.distributionStartMonth;
-    const sy = project.fundFlow?.distributionStartYear;
-    return sy != null && sm != null
-      ? `${sy}-${sm}`
-      : `${MONTHLY_ALLOCATION_WINDOW[0].year}-${MONTHLY_ALLOCATION_WINDOW[0].month}`;
-  });
+  // The plan starts from the same Start month selected in this form —
+  // never a silent window default.
+  const planStart = form.startMonth;
   const [planPreview, setPlanPreview] = useState<MonthlyPlanPreview | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
@@ -392,12 +391,16 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
   }
 
   function planInput() {
+    if (!planStart) return null;
     const [startYear, startMonth] = planStart.split("-").map(Number);
     return {
       projectId: project.id,
       basis: "REMAINING_FEE" as PlanBasis,
       schedule: "EVEN",
-      installments: Math.max(1, Math.min(24, Number(planInstallments) || 1)),
+      installments: Math.max(
+        1,
+        Math.min(24, Math.floor(Number(planInstallments)) || 1)
+      ),
       startMonth,
       startYear,
       replace: Object.keys(planReplace).filter((k) => planReplace[k]),
@@ -442,7 +445,9 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     if (formPct !== storedPct) return true;
     const storedStart =
       ff.distributionStartYear != null && ff.distributionStartMonth != null
-        ? `${ff.distributionStartYear}-${ff.distributionStartMonth}`
+        ? `${ff.distributionStartYear}-${String(
+            ff.distributionStartMonth
+          ).padStart(2, "0")}`
         : "";
     if ((form.startMonth.trim() || "") !== storedStart) return true;
     return false;
@@ -458,9 +463,16 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
       );
       return;
     }
+    const input = planInput();
+    if (!input) {
+      setError(
+        "Select a Start month above and save before preparing the monthly plan."
+      );
+      return;
+    }
     setPlanLoading(true);
     try {
-      const result = await previewMonthlyPlan(planInput());
+      const result = await previewMonthlyPlan(input);
       if (!result.success) {
         setError(result.error ?? "Could not prepare the plan.");
         return;
@@ -495,7 +507,14 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
     setPlanSaving(true);
     setError("");
     try {
-      const result = await applyMonthlyPlan(planInput());
+      const input = planInput();
+      if (!input) {
+        setError(
+          "Select a Start month above and save before preparing the monthly plan."
+        );
+        return;
+      }
+      const result = await applyMonthlyPlan(input);
       if (!result.success) {
         setError(result.error ?? "Could not save the plan.");
         toast.error(result.error ?? "Could not save the plan.");
@@ -793,83 +812,17 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
           <div className="space-y-3">
             <h4 className="text-sm font-medium">
-              Reconciliation summary
-              {detailLoading && (
-                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
-              )}
-            </h4>
-
-            {reconciliationAvailable ? (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Contract fee</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.totalContractFee)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Total invoiced</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.totalInvoiced)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Invoice settlement</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.totalSettlement)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Recorded cheque</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.totalRecordedCheque)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Outstanding (settlement basis)</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.outstandingPerSettlement)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Legacy fee received</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.legacyFeeReceived)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-zinc-50 p-3">
-                  <p className="text-xs text-zinc-500">Contractor RA-bill project expenses (WIP)</p>
-                  <p className="font-mono font-medium">
-                    {formatMoney(detailData!.wipRaBillProjectExpense)}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-zinc-500">Reconciliation data unavailable.</p>
-            )}
-
-            {reconciliationAvailable && typeof detailData!.recordedCashLabel === "string" && (
-              <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">
-                {detailData!.recordedCashLabel as string}
-              </p>
-            )}
-          </div>
-
-          <Separator />
-
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium">
               Monthly Income Plan (Apr 2026 – Mar 2028)
               {monthlyLoading && (
                 <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
               )}
             </h4>
             <p className="text-xs text-zinc-500">
-              Spread a fee evenly over a number of months — the same style used
-              in the customer workbook. You review the amounts before anything
-              is saved. The saved monthly total does not have to equal the
-              project fee — it may cover part of the fee or a different figure
-              such as the fee already received.
+              Spread the remaining fee (Total Fee − fee recvd) evenly over a
+              number of whole months, starting from the saved Start month —
+              the same style used in the customer workbook. You review the
+              amounts before anything is saved; existing saved months are only
+              replaced if you explicitly choose to.
             </p>
 
             {/* Fee vs saved allocations summary */}
@@ -901,69 +854,91 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
                 </div>
               </div>
             </div>
-            {(() => {
-              const outside = MONTHLY_ALLOCATION_WINDOW.slice(15).filter(
-                ({ year, month }) => {
-                  const v =
-                    monthlyAllocations[
-                      `${year}-${String(month).padStart(2, "0")}`
-                    ];
-                  return v != null && v.trim() !== "";
-                }
-              );
-              if (outside.length === 0) return null;
-              return (
-                <p className="text-xs text-amber-700">
-                  Note: saved amounts in{" "}
-                  {outside.map((o) => o.label).join(", ")} are kept as data but
-                  are outside the monthly summary formulas (Apr 2026 – Jul 2027).
-                </p>
-              );
-            })()}
-
             {/* Plan inputs */}
             <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2">
                   <p className="text-sm text-zinc-500">
-                    remaing fee ÷ Target Time Limit (In Month):{" "}
+                    remaing fee ÷ months:{" "}
                     <span className="font-mono font-medium text-zinc-800">
                       {formatDecimalAsCurrency(remainingFee)} ÷{" "}
-                      {planInstallments}
+                      {Math.floor(Number(planInstallments)) || 1}
                     </span>{" "}
                     per month
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Remaining fee is split equally over the Target Time Limit
-                    (In Month) consecutive months from the selected start
-                    month.
+                    The remaining fee is split equally over the number of whole
+                    months below, starting from the saved Start month. The last
+                    month absorbs any rounding remainder so the plan always
+                    totals the remaining fee exactly.
                   </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan-start">Start month</Label>
-                  <select
-                    id="plan-start"
-                    className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
-                    value={planStart}
-                    onChange={(e) => {
-                      setPlanStart(e.target.value);
-                      setPlanPreview(null);
-                    }}
-                  >
-                    {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => (
-                      <option key={`${year}-${month}`} value={`${year}-${month}`}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="plan-months">Months</Label>
+                    <input
+                      id="plan-months"
+                      type="number"
+                      min={1}
+                      max={24}
+                      step={1}
+                      className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-right font-mono text-sm"
+                      value={planInstallments}
+                      onChange={(e) => {
+                        setPlanInstallments(e.target.value);
+                        setPlanPreview(null);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="plan-start">Start month</Label>
+                    <select
+                      id="plan-start"
+                      className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm"
+                      value={planStart}
+                      onChange={(e) => {
+                        updateField("startMonth", e.target.value);
+                        setPlanPreview(null);
+                      }}
+                    >
+                      <option value="">— select —</option>
+                      {MONTHLY_ALLOCATION_WINDOW.map(({ year, month, label }) => {
+                        const v = `${year}-${String(month).padStart(2, "0")}`;
+                        return (
+                          <option key={v} value={v}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
                 </div>
               </div>
+              {project.targetTimeLimitMonths != null &&
+                !Number.isInteger(
+                  Number(project.targetTimeLimitMonths)
+                ) && (
+                  <p className="text-xs text-amber-700">
+                    Target Time Limit (In Month) is{" "}
+                    {String(project.targetTimeLimitMonths)} — not a whole
+                    number. The workbook resolves this to{" "}
+                    {wholeMonthPlanCount(project.targetTimeLimitMonths)}{" "}
+                    whole months; adjust the Months field if needed, then save
+                    before preparing the plan.
+                  </p>
+                )}
+              {!planStart && (
+                <p className="text-xs text-amber-700">
+                  Select a Start month above — it is used as the first month of
+                  the plan. (Save the form to keep it.)
+                </p>
+              )}
 
               <Button
                 type="button"
                 size="lg"
                 onClick={handlePreviewPlan}
-                disabled={planLoading || monthlyLoading}
+                disabled={planLoading || monthlyLoading || !planStart}
               >
                 {planLoading && (
                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -1202,6 +1177,88 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
             </div>
             </details>
           </div>
+
+          <Separator />
+
+          {/* Legacy financial overview — kept intact, but it is NOT the
+              source for monthly fee allocations (those come from the saved
+              remaing fee above). */}
+          <details className="rounded-md border border-zinc-200 p-3 [&[open]>summary]:mb-3">
+            <summary className="cursor-pointer select-none text-sm font-medium text-zinc-700">
+              Advanced Financial Reconciliation
+              {detailLoading && (
+                <Loader2 className="ml-2 inline h-3 w-3 animate-spin text-zinc-500" />
+              )}
+            </summary>
+            <div className="space-y-3">
+              <p className="text-xs text-zinc-500">
+                The monthly plan above is calculated from the{" "}
+                <span className="font-medium">Calculated Total Fee</span>, the{" "}
+                <span className="font-medium">remaing fee</span> and the{" "}
+                <span className="font-medium">saved monthly allocations</span>.
+                The figures below are a legacy{" "}
+                <span className="font-medium">invoice reconciliation</span>{" "}
+                overview (invoices, recorded cheques, contractor RA-bill WIP
+                expenses) — they are never used to calculate monthly fee
+                allocations.
+              </p>
+
+              {reconciliationAvailable ? (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Contract fee</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.totalContractFee)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Total invoiced</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.totalInvoiced)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Invoice settlement</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.totalSettlement)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Recorded cheque</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.totalRecordedCheque)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Outstanding (settlement basis)</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.outstandingPerSettlement)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Legacy fee received</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.legacyFeeReceived)}
+                    </p>
+                  </div>
+                  <div className="rounded-md bg-zinc-50 p-3">
+                    <p className="text-xs text-zinc-500">Contractor RA-bill project expenses (WIP)</p>
+                    <p className="font-mono font-medium">
+                      {formatMoney(detailData!.wipRaBillProjectExpense)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500">Reconciliation data unavailable.</p>
+              )}
+
+              {reconciliationAvailable && typeof detailData!.recordedCashLabel === "string" && (
+                <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-700">
+                  {detailData!.recordedCashLabel as string}
+                </p>
+              )}
+            </div>
+          </details>
 
           <ErrorBanner error={error} onAskAi={(e) => askAi(e, "Editing fund flow")} askingAi={askingAi} aiResponse={aiResponse} />
           </div>

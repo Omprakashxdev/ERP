@@ -4,6 +4,7 @@
  * RUN_INTEGRATION_TESTS=1 + DATABASE_URL=...saec_erp_fundflow_test
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { Decimal } from "@prisma/client/runtime/library";
 
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
@@ -33,6 +34,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 import { prisma } from "@/lib/prisma";
 import { upsertFundFlow } from "../actions/fund-flow";
 import { updateProject } from "../actions/project";
+import { applyMonthlyPlan } from "../actions/fund-flow-monthly";
 
 const SKIP = !process.env.RUN_INTEGRATION_TESTS;
 let regionId = "";
@@ -118,8 +120,12 @@ let projectId = "";
     expect(`${rows[0].year}-${rows[0].month}`).toBe("2026-7");
     expect(`${rows[17].year}-${rows[17].month}`).toBe("2027-12");
     expect(rows[0].income.toString()).toBe("2.777744");
-    // all 18 accounted: total = 49.999392, residual 0.000008 reported
-    expect(res.data!.roundingResidual).toBe("0.000008");
+    // last month absorbs the residual — the plan totals the fee exactly
+    expect(rows[17].income.toString()).toBe("2.777752");
+    expect(
+      rows.reduce((a, r) => a.plus(r.income.toString()), new Decimal(0)).toString()
+    ).toBe("49.9994");
+    expect(res.data!.roundingResidual).toBe("0");
   });
 
   it("editing fee recvd recalculates remaing fee only — allocations untouched", async () => {
@@ -429,3 +435,110 @@ let projectId = "";
     expect(p!.targetCompletionDate).not.toBeNull();
   });
 });
+
+(SKIP ? describe.skip : describe)(
+  "fractional Target Time Limit — no silent schedule",
+  () => {
+    let fracProjectId = "";
+    beforeAll(async () => {
+      await prisma.user
+        .create({
+          data: { id: "int-test", email: "int-test@local", hashedPassword: "x" },
+        })
+        .catch(() => {});
+      const region =
+        (await prisma.region.findFirst({ where: { name: "Rajkot FF-Frac" } })) ??
+        (await prisma.region.create({ data: { name: "Rajkot FF-Frac" } }));
+      const client =
+        (await prisma.client.findFirst({
+          where: { name: "FF Frac Client" },
+        })) ??
+        (await prisma.client.create({
+          data: { name: "FF Frac Client", abbreviation: "FFC" },
+        }));
+      // Testing012: fee 10.11048, Target Time Limit 4.5 (fractional)
+      const project =
+        (await prisma.project.findFirst({ where: { name: "Testing012" } })) ??
+        (await prisma.project.create({
+          data: {
+            regionId: region.id,
+            clientId: client.id,
+            name: "Testing012",
+            abbreviation: "T012",
+            workOrderDate: new Date("2026-07-01T00:00:00Z"),
+            timeLimitMonths: "4.5",
+            totalFee: "10.11048",
+            targetTimeLimitMonths: "4.5",
+            workType: "DESIGN",
+            serviceType: "PMC",
+          },
+        }));
+      fracProjectId = project.id;
+    });
+    afterAll(async () => {
+      await prisma.project
+        .delete({ where: { id: fracProjectId } })
+        .catch(() => {});
+      await prisma.$disconnect();
+    });
+
+    it("auto-generation skips a fractional duration instead of flooring it", async () => {
+      const res = await upsertFundFlow({
+        projectId: fracProjectId,
+        totalProjectCost: "842.54",
+        feeReceived: "0",
+        distributionStartMonth: 7,
+        distributionStartYear: 2026,
+      } as never);
+      expect(res.success).toBe(true);
+      // Never silently floor 4.5 → an incomplete 4-month schedule of
+      // 10.11048 ÷ 4.5. The employee picks whole months explicitly in the
+      // monthly-plan workflow instead.
+      expect(res.data!.createdAllocations ?? 0).toBe(0);
+      expect(res.data!.fractionalDuration).toBe("4.5");
+      const rows = await prisma.fundFlowMonthly.findMany({
+        where: { fundFlow: { projectId: fracProjectId } },
+      });
+      expect(rows.length).toBe(0);
+    });
+
+    it("workbook example: explicit 4-month plan spreads the remaing fee exactly", async () => {
+      // The workbook shows 4 installments ≈ 2.53 for the 4.5-month duration.
+      const res = await applyMonthlyPlan({
+        projectId: fracProjectId,
+        basis: "REMAINING_FEE",
+        schedule: "EVEN",
+        installments: 4,
+        startMonth: 7,
+        startYear: 2026,
+      } as never);
+      expect(res.success).toBe(true);
+      const rows = await prisma.fundFlowMonthly.findMany({
+        where: { fundFlow: { projectId: fracProjectId } },
+        orderBy: [{ year: "asc" }, { month: "asc" }],
+      });
+      expect(rows).toHaveLength(4);
+      for (const r of rows)
+        expect(r.income.toString()).toBe("2.52762");
+      // complete remaining fee distributed — 4 × 2.52762 = 10.11048 exactly
+      expect(
+        rows.reduce((a, r) => a.plus(r.income.toString()), new Decimal(0)).toString()
+      ).toBe("10.11048");
+      // Jul→Oct 2026, provenance on every record
+      expect(`${rows[0].year}-${rows[0].month}`).toBe("2026-7");
+      expect(`${rows[3].year}-${rows[3].month}`).toBe("2026-10");
+      const prov = await prisma.auditLog.count({
+        where: {
+          entity: "FundFlowMonthly",
+          entityId: { in: rows.map((r) => r.id) },
+          action: "create",
+          metadata: {
+            path: ["source"],
+            equals: "ff-01k-workbook-allocation",
+          },
+        },
+      });
+      expect(prov).toBe(4);
+    });
+  }
+);

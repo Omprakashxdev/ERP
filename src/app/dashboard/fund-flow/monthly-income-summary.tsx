@@ -51,7 +51,7 @@ interface IncomeMonth {
   month: number;
   year: number;
   label: string;
-  /** Excel Row 12 formulas exist only for Apr 2026 – Jun 2027 */
+  /** confirmed report covers the full Apr 2026 – Mar 2028 window */
   formulaCovered: boolean;
   totalIncome: { toString: () => string } | null;
   projectCount: number;
@@ -156,6 +156,9 @@ export function MonthlyIncomeSummary() {
   const [missingExpenseConfig, setMissingExpenseConfig] = useState<
     MissingExpenseConfig[]
   >([]);
+  const [expenseSpanWarnings, setExpenseSpanWarnings] = useState<
+    { projectName: string; targetTimeLimitMonths: string; monthsUsed: number; note: string }[]
+  >([]);
 
   // Selected month — defaults to the first formula-covered month with income,
   // else the first covered month (Apr 2026).
@@ -195,9 +198,11 @@ export function MonthlyIncomeSummary() {
         const data = expenseResult.data as {
           expenses: ExpenseMonth[];
           missingExpenseConfig?: MissingExpenseConfig[];
+          expenseSpanWarnings?: typeof expenseSpanWarnings;
         };
         setExpenses(data.expenses);
         setMissingExpenseConfig(data.missingExpenseConfig ?? []);
+        setExpenseSpanWarnings(data.expenseSpanWarnings ?? []);
       }
       if (netResult.success && netResult.data) {
         setPlanned((netResult.data as { months: PlannedNetMonth[] }).months);
@@ -547,12 +552,6 @@ export function MonthlyIncomeSummary() {
               </div>
             ) : breakdown ? (
               <>
-                {!breakdown.formulaCovered && (
-                  <p className="mb-2 text-xs text-amber-700">
-                    This month is outside the workbook Row 12 formula range —
-                    allocations listed below are not added to Row 12.
-                  </p>
-                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -805,6 +804,19 @@ export function MonthlyIncomeSummary() {
                 {missingExpenseConfig.map((m) => (
                   <li key={m.projectName}>
                     {m.projectName} — missing {m.missing.join(" and ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {expenseSpanWarnings.length > 0 && (
+            <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              <ul className="list-inside list-disc">
+                {expenseSpanWarnings.map((w) => (
+                  <li key={w.projectName}>
+                    {w.projectName} — Target Time Limit{" "}
+                    {w.targetTimeLimitMonths} is not a whole number:{" "}
+                    {w.note}
                   </li>
                 ))}
               </ul>

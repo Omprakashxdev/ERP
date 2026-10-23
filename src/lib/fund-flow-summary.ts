@@ -52,10 +52,23 @@ export interface MonthlyReportRow {
   incomplete: boolean;
 }
 
+export interface ExpenseSpanWarning {
+  projectName: string;
+  targetTimeLimitMonths: string;
+  monthsUsed: number;
+  note: string;
+}
+
 export interface MonthlyReportComputation {
   months: MonthlyReportRow[];
   /** configured projects whose expense could not be scheduled */
   missingExpenseConfig: MissingExpenseConfig[];
+  /**
+   * Projects with a fractional Target Time Limit — the workbook establishes
+   * no general rule for expense spans, so the span is rounded to the nearest
+   * whole month and flagged here for confirmation rather than silently used.
+   */
+  expenseSpanWarnings: ExpenseSpanWarning[];
   /** Σ Row 12 over the window; null when no verified income exists */
   totalIncome: string | null;
   /** Σ Row 14 over the window */
@@ -88,6 +101,7 @@ export function computeMonthlyReport(
   window: MonthWindow[] = MONTHLY_ALLOCATION_WINDOW
 ): MonthlyReportComputation {
   const missingExpenseConfig: MissingExpenseConfig[] = [];
+  const expenseSpanWarnings: ExpenseSpanWarning[] = [];
 
   // Resolve each project's expense span once
   const spans: {
@@ -107,16 +121,27 @@ export function computeMonthlyReport(
     ) {
       missing.push("Start month");
     }
-    const ttl =
+    const rawTtl =
       p.targetTimeLimitMonths == null
         ? null
-        : Math.round(Number(p.targetTimeLimitMonths.toString()));
+        : Number(p.targetTimeLimitMonths.toString());
+    const ttl = rawTtl == null ? null : Math.round(rawTtl);
     if (ttl == null || ttl < 1) {
       missing.push("Target Time Limit (In Month)");
     }
     if (missing.length > 0) {
       missingExpenseConfig.push({ projectName: p.name, missing });
       continue;
+    }
+    if (rawTtl != null && !Number.isInteger(rawTtl)) {
+      expenseSpanWarnings.push({
+        projectName: p.name,
+        targetTimeLimitMonths: p.targetTimeLimitMonths!.toString(),
+        monthsUsed: ttl!,
+        note:
+          `fractional duration — expense applied over ${ttl} whole months ` +
+          `(nearest); confirm the intended span`,
+      });
     }
     const start = absMonth(p.startYear!, p.startMonth!);
     spans.push({
@@ -189,6 +214,7 @@ export function computeMonthlyReport(
   return {
     months,
     missingExpenseConfig,
+    expenseSpanWarnings,
     totalIncome: incomeTotal != null ? incomeTotal.toString() : null,
     totalExpense: expenseTotal.toString(),
   };
