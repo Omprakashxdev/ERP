@@ -10,6 +10,7 @@ import { FundFlowTable } from "./fund-flow-table";
 import { FundFlowFilters } from "./fund-flow-filters";
 import { FundFlowSkeleton } from "./fund-flow-skeleton";
 import { MonthlyIncomeSummary } from "./monthly-income-summary";
+import { FundFlowPageTabs } from "./fund-flow-tabs";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import { Card, CardContent } from "@/components/ui/card";
 import { Landmark, FileSpreadsheet } from "lucide-react";
@@ -23,6 +24,7 @@ interface FundFlowPageProps {
     clientId?: string;
     status?: string;
     page?: string;
+    tab?: string;
   }>;
 }
 
@@ -66,62 +68,54 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
         title="Fund Flow"
         description="Project financial tracking and fee realization"
         reportCategory="fund-flow"
+        reportsHref="/dashboard/fund-flow?tab=reports"
         totalCount={total}
         countLabel="Projects"
       >
         <BulkImportDialog module="fundFlow" moduleLabel="Fund Flow" />
       </ModuleHeader>
 
+      <FundFlowPageTabs
+        initialTab={params.tab}
+        projects={
+          <>
+            <Card className="shadow-sm">
+              <CardContent className="p-4">
+                <FundFlowFilters
+                  regions={serialize(regions) as { id: string; name: string }[]}
+                  clients={serialize(clients) as { id: string; name: string }[]}
+                  initialFilter={filter}
+                />
+              </CardContent>
+            </Card>
 
-      <Card className="shadow-sm">
-        <CardContent className="p-4">
-          <FundFlowFilters
-            regions={serialize(regions) as { id: string; name: string }[]}
-            clients={serialize(clients) as { id: string; name: string }[]}
-            initialFilter={filter}
-          />
-        </CardContent>
-      </Card>
-
-      {fundFlowResult.success ? (
-        <FundFlowTable
-          rows={serialize(rows) as never}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          totalPages={totalPages}
-          filter={filter}
-          regions={serialize(regions) as { id: string; name: string }[]}
-          clients={serialize(clients) as { id: string; name: string }[]}
-          staff={serialize(staff) as { id: string; name: string | null }[]}
-        />
-      ) : (
-        <Card className="shadow-sm">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
-            <h3 className="mt-4 text-lg font-medium">Failed to load Fund Flow</h3>
-            <p className="mt-1 max-w-sm text-sm text-zinc-500">
-              {fundFlowResult.error ?? "An unexpected error occurred."}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <details className="group">
-        <summary className="flex cursor-pointer select-none items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-base font-medium text-zinc-800 shadow-sm hover:bg-zinc-50">
-          <FileSpreadsheet className="h-5 w-5 text-zinc-500" />
-          Monthly Fund Flow Report — income, expenses, planned net &amp; running balance
-          <span className="ml-auto text-sm font-normal text-zinc-500 group-open:hidden">
-            Click to expand
-          </span>
-          <span className="ml-auto hidden text-sm font-normal text-zinc-500 group-open:inline">
-            Click to collapse
-          </span>
-        </summary>
-        <div className="mt-4">
-          <MonthlyIncomeSummary />
-        </div>
-      </details>
+            {fundFlowResult.success ? (
+              <FundFlowTable
+                rows={serialize(rows) as never}
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                totalPages={totalPages}
+                filter={filter}
+                regions={serialize(regions) as { id: string; name: string }[]}
+                clients={serialize(clients) as { id: string; name: string }[]}
+                staff={serialize(staff) as { id: string; name: string | null }[]}
+              />
+            ) : (
+              <Card className="shadow-sm">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
+                  <h3 className="mt-4 text-lg font-medium">Failed to load Fund Flow</h3>
+                  <p className="mt-1 max-w-sm text-sm text-zinc-500">
+                    {fundFlowResult.error ?? "An unexpected error occurred."}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        }
+        reports={<MonthlyIncomeSummary />}
+      />
     </div>
   );
 }

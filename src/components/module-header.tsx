@@ -23,6 +23,8 @@ export interface ModuleHeaderProps {
   description: string;
   reportCategory?: string;
   returnHref?: string;
+  /** Overrides the default /dashboard/reports link for "View Reports". */
+  reportsHref?: string;
   totalCount?: number;
   countLabel?: string;
   children?: React.ReactNode;
@@ -34,15 +36,18 @@ export function ModuleHeader({
   description,
   reportCategory,
   returnHref,
+  reportsHref,
   totalCount,
   countLabel = "Records",
   children,
 }: ModuleHeaderProps) {
   const effectiveReturnHref =
     returnHref || (reportCategory ? DEFAULT_HREF_MAP[reportCategory] : "");
-  const viewReportsUrl = `/dashboard/reports?category=${reportCategory}&from=module${
-    effectiveReturnHref ? `&returnTo=${encodeURIComponent(effectiveReturnHref)}` : ""
-  }&returnLabel=${encodeURIComponent(title)}`;
+  const viewReportsUrl =
+    reportsHref ??
+    `/dashboard/reports?category=${reportCategory}&from=module${
+      effectiveReturnHref ? `&returnTo=${encodeURIComponent(effectiveReturnHref)}` : ""
+    }&returnLabel=${encodeURIComponent(title)}`;
 
   return (
     <div className="space-y-4">
