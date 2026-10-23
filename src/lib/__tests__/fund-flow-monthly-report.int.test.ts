@@ -29,6 +29,8 @@ vi.mock("../actions/wrapper", () => ({
   sanitizeForAudit: async (v: unknown) => v,
 }));
 
+vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+
 import { prisma } from "@/lib/prisma";
 import {
   getMonthlyExpenses,
@@ -37,6 +39,7 @@ import {
   getMonthlyRunningBalance,
   upsertMonthlyExpense,
 } from "../actions/fund-flow-monthly";
+import { upsertFundFlow } from "../actions/fund-flow";
 
 const SKIP = !process.env.RUN_INTEGRATION_TESTS;
 const idx = (month: number, year: number) => (year - 2026) * 12 + (month - 4);
@@ -187,6 +190,116 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
       const r = await upsertMonthlyExpense({ month: 4, year: 2026, amount: "5" });
       expect(r.success).toBe(false);
       expect(await prisma.fundFlowMonthlyExpense.count()).toBe(1);
+    });
+  }
+);
+
+(SKIP ? describe.skip : describe)(
+  "initial allocations carry ff-01k provenance (post-fix)",
+  () => {
+    let pid = "";
+    beforeAll(async () => {
+      await prisma.user
+        .create({
+          data: { id: "int-test", email: "int-test@local", hashedPassword: "x" },
+        })
+        .catch(() => {});
+      regionId = (
+        await prisma.region.create({ data: { name: "Provenance Test" } })
+      ).id;
+      clientId = (
+        await prisma.client.create({
+          data: { name: "Prov Test Client", abbreviation: "PTC" },
+        })
+      ).id;
+      // fee 20 (cost 10000 × 0.2%), fee recvd 0, Staff Exp 1.60,
+      // Start Jul 2026, TTL 18 — the requested scenario
+      pid = (
+        await makeProject("Prov Project", 18)
+      ).id;
+      const res = await upsertFundFlow({
+        projectId: pid,
+        teamLeaderExp: "0.50",
+        residentialEngineerExp: "0.40",
+        designEngineerExp: "0.30",
+        siteEngineerExp: "0.35",
+        miscExp: "0.05",
+        totalProjectCost: "10000",
+        completedWorkAmt: "0",
+        feePercentage: 0.2,
+        proposedDueBillAmount: "0",
+        feeReceived: "0",
+        distributionStartMonth: 7,
+        distributionStartYear: 2026,
+      } as never);
+      expect(res.success).toBe(true);
+    });
+
+    afterAll(async () => {
+      for (const id of projectIds)
+        await prisma.project.delete({ where: { id } }).catch(() => {});
+      await prisma.client.delete({ where: { id: clientId } }).catch(() => {});
+      await prisma.region.delete({ where: { id: regionId } }).catch(() => {});
+      await prisma.user.delete({ where: { id: "int-test" } }).catch(() => {});
+      await prisma.$disconnect();
+    });
+
+    it("18 allocations created with 18 ff-01k provenance entries", async () => {
+      const rows = await prisma.fundFlowMonthly.findMany();
+      expect(rows).toHaveLength(18);
+      expect(rows[0].month).toBe(7);
+      expect(rows[17].month).toBe(12);
+      expect(rows[17].year).toBe(2027);
+      const ids = rows.map((r) => r.id);
+      const prov = await prisma.auditLog.count({
+        where: {
+          entity: "FundFlowMonthly",
+          entityId: { in: ids },
+          action: "create",
+          metadata: {
+            path: ["source"],
+            equals: "ff-01k-workbook-allocation",
+          },
+        },
+      });
+      expect(prov).toBe(18);
+    });
+
+    it("report rows: income counted, expense derived, net/balance exact", async () => {
+      const inc = (await getMonthlyIncomeSummary()).data as any[];
+      expect(Number(inc[idx(7, 2026)].totalIncome)).toBeCloseTo(1.111111, 6);
+      expect(inc[idx(7, 2026)].unavailableCount).toBe(0); // not excluded
+
+      const exp = (await getMonthlyExpenses()).data as any;
+      expect(Number(exp.expenses[idx(7, 2026)].amount)).toBeCloseTo(1.6);
+
+      const net = (await getMonthlyPlannedNet()).data as any;
+      expect(Number(net.months[idx(7, 2026)].plannedNet)).toBeCloseTo(
+        -0.488889,
+        6
+      );
+
+      const bal = (await getMonthlyRunningBalance()).data as any;
+      expect(
+        Number(bal.months[idx(7, 2026)].runningBalance)
+      ).toBeCloseTo(-0.488889, 6);
+      expect(
+        Number(bal.months[idx(8, 2026)].runningBalance)
+      ).toBeCloseTo(-0.977778, 6);
+    });
+
+    it("re-edit never replaces the saved allocations", async () => {
+      const res = await upsertFundFlow({
+        projectId: pid,
+        miscExp: "0.10", // unrelated-ish edit → Staff Exp 1.65
+      } as never);
+      expect(res.success).toBe(true);
+      const rows = await prisma.fundFlowMonthly.findMany();
+      expect(rows).toHaveLength(18);
+      for (const r of rows)
+        expect(Number(r.income.toString())).toBeCloseTo(1.111111, 6); // untouched
+      const ff = await prisma.fundFlow.findUnique({ where: { projectId: pid } });
+      expect(Number(ff!.staffExp.toString())).toBeCloseTo(1.65); // edit applied
     });
   }
 );
