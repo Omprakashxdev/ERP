@@ -25,6 +25,7 @@ import {
   parseJson,
   getExportFilename,
   MODULE_EXPORT_CONFIGS,
+  CSV_BOM,
 } from "@/lib/export-import";
 
 function parseImportDate(value: string): Date | null {
@@ -1612,8 +1613,8 @@ export async function getModuleTemplate(
       ? sampleValues.map((v) => v.includes(",") ? `"${v}"` : v).join(",")
       : "";
     const content = sampleLine
-      ? `${headerLine}\n${sampleLine}\n`
-      : `${headerLine}\n`;
+      ? `${CSV_BOM}${headerLine}\n${sampleLine}\n`
+      : `${CSV_BOM}${headerLine}\n`;
 
     await audit(user.id, "export", "ExportImport", module, {
       module,

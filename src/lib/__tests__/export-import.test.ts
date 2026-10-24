@@ -236,3 +236,205 @@ describe("Bulk Import — Edge Cases from Real-world CSV", () => {
     expect(rows.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("Brick 4 — UTF-8 BOM & Gujarati export", () => {
+  const config = MODULE_EXPORT_CONFIGS.inOutRegister;
+  const rows = [
+    {
+      documentRefNo: "SAEC/IN/001",
+      details: "ગુજરાતી દસ્તાવેજ",
+      letterPad: "Letter pad - અમદાવાદ",
+      direction: "INWARD",
+      receivedByPersonName: "આવક જાવક રજિસ્ટર",
+      department: "કાર્યવાહી જરૂરી",
+      remarks: 'Mixed, "quoted" text\nwith newline',
+      emptyField: "",
+      amount: "12500.50",
+    },
+  ];
+
+  it("CSV begins with exactly one UTF-8 BOM (EF BB BF)", async () => {
+    const { rowsToCsv, CSV_BOM } = await import("@/lib/export-import");
+    const csv = rowsToCsv(rows as never, config);
+    expect(csv.startsWith(CSV_BOM)).toBe(true);
+    expect(csv.indexOf(CSV_BOM)).toBe(0);
+    expect(csv.indexOf(CSV_BOM, 1)).toBe(-1);
+    const bytes = new TextEncoder().encode(csv);
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  });
+
+  it("preserves Gujarati, Hindi, mixed-language text in exported CSV", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(rows as never, config);
+    expect(csv).toContain("ગુજરાતી દસ્તાવેજ");
+    expect(csv).toContain("Letter pad - અમદાવાદ");
+    expect(csv).toContain("કાર્યવાહી જરૂરી");
+    expect(csv).not.toContain("�"); // no replacement chars / double encoding
+  });
+
+  it("escapes commas, quotes and newlines correctly", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(rows as never, config);
+    expect(csv).toContain('"Mixed, ""quoted"" text\nwith newline"');
+  });
+
+  it("parseCsv strips a leading BOM so the first header is clean", () => {
+    const withBom = "\uFEFFname,phone\nJohn,123";
+    const rows2 = parseCsv(withBom);
+    expect(rows2[0].name).toBe("John");
+    expect(Object.keys(rows2[0])[0]).toBe("name");
+    // and non-BOM input still works
+    expect(parseCsv("name,phone\nJohn,123")[0].name).toBe("John");
+  });
+
+  it("round-trip: Gujarati value → CSV → parseCsv → identical string", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const src = [{ documentRefNo: "X/1", details: "આવક જાવક રજિસ્ટર" }];
+    const csv = rowsToCsv(src as never, config);
+    const parsed = parseCsv(csv);
+    expect(parsed[0].details).toBe("આવક જાવક રજિસ્ટર");
+    expect(parsed[0].documentRefNo).toBe("X/1");
+  });
+
+  it("does not corrupt numbers or date-shaped strings", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [{ documentRefNo: "X/2", details: "note", remarks: "-1250.75", amount: "40000" }] as never,
+      config
+    );
+    const parsed = parseCsv(csv);
+    expect(parsed[0].remarks).toBe("-1250.75");
+    expect(parsed[0].amount).toBe("40000");
+  });
+});
+
+describe("Brick 4 — spreadsheet formula-injection safety", () => {
+  const config = MODULE_EXPORT_CONFIGS.inOutRegister;
+
+  it("prefixes =, +, -, @ formula-leading text with an apostrophe in the raw output", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [
+        { documentRefNo: "=cmd|'/c calc'!A1", details: "=1+1" },
+        { documentRefNo: "@SUM(1)", details: "+danger" },
+      ] as never,
+      config
+    );
+    expect(csv).toContain("'=cmd|'/c calc'!A1");
+    expect(csv).toContain("'=1+1");
+    expect(csv).toContain("'@SUM(1)");
+    expect(csv).toContain("'+danger");
+  });
+
+  it("round-trips guarded values back to the original stored text", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [
+        { documentRefNo: "=cmd|'/c calc'!A1", details: "=1+1" },
+        { documentRefNo: "@SUM(1)", details: "+danger" },
+      ] as never,
+      config
+    );
+    const parsed = parseCsv(csv);
+    expect(parsed[0].documentRefNo).toBe("=cmd|'/c calc'!A1");
+    expect(parsed[0].details).toBe("=1+1");
+    expect(parsed[1].documentRefNo).toBe("@SUM(1)");
+    expect(parsed[1].details).toBe("+danger");
+  });
+
+  it("guards formula chars preceded by spaces, tabs and carriage returns", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [
+        { details: "  =1+1" },
+        { details: "\t=cmd" },
+        { details: "\r+HYPERLINK(1)" },
+        { details: "   @x" },
+      ] as never,
+      config
+    );
+    expect(csv).toContain("'  =1+1");
+    expect(csv).toContain("'\t=cmd");
+    expect(csv).toContain("'\r+HYPERLINK(1)");
+    expect(csv).toContain("'   @x");
+    const parsed = parseCsv(csv);
+    expect(parsed[0].details).toBe("  =1+1");
+    expect(parsed[1].details).toBe("\t=cmd");
+    expect(parsed[2].details).toBe("\r+HYPERLINK(1)");
+    expect(parsed[3].details).toBe("   @x");
+  });
+
+  it("does NOT prefix legitimate negative/positive numbers", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv([{ remarks: "-500", details: "+2.5" }] as never, config);
+    const parsed = parseCsv(csv);
+    expect(parsed[0].remarks).toBe("-500");
+    expect(parsed[0].details).toBe("+2.5");
+    expect(csv).not.toContain("'-500");
+    expect(csv).not.toContain("'+2.5");
+  });
+
+  it("distinguishes user-authored apostrophes from export-added guards", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [
+        { details: "'=user formula" }, // stored literal apostrophe + formula
+        { details: "'plain note" },    // stored literal apostrophe
+        { details: "=real danger" },   // gets the export guard
+      ] as never,
+      config
+    );
+    const parsed = parseCsv(csv);
+    expect(parsed[0].details).toBe("'=user formula");
+    expect(parsed[1].details).toBe("'plain note");
+    expect(parsed[2].details).toBe("=real danger");
+    // a user-supplied CSV apostrophe that was never doubled stays intact
+    const external = parseCsv("id,details\nx,'hello\ny,'=typed\n");
+    expect(external[0].details).toBe("'hello");
+    expect(external[1].details).toBe("=typed");
+  });
+
+  it("round-trips fields containing embedded newlines, commas and quotes", async () => {
+    const { rowsToCsv } = await import("@/lib/export-import");
+    const csv = rowsToCsv(
+      [
+        {
+          documentRefNo: "X/9",
+          details: "line one\nline two, with \"quotes\"",
+          remarks: "plain",
+        },
+      ] as never,
+      config
+    );
+    const parsed = parseCsv(csv);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].details).toBe('line one\nline two, with "quotes"');
+    expect(parsed[0].remarks).toBe("plain");
+  });
+});
+
+describe("Brick 4 — XLSX export preserves Unicode", () => {
+  it("xlsx output is a valid workbook containing Gujarati cells", async () => {
+    const { rowsToXlsx } = await import("@/lib/export-import");
+    const XLSX = await import("xlsx");
+    const buf = rowsToXlsx(
+      [
+        {
+          documentRefNo: "SAEC/IN/7",
+          details: "ગુજરાતી દસ્તાવેજ",
+          letterPad: "Letter pad - અમદાવાદ",
+        },
+      ] as never,
+      MODULE_EXPORT_CONFIGS.inOutRegister
+    );
+    // zip magic
+    expect(buf[0]).toBe(0x50); // 'P'
+    expect(buf[1]).toBe(0x4b); // 'K'
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const parsed = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
+    expect(parsed[0].details).toBe("ગુજરાતી દસ્તાવેજ");
+    expect(parsed[0].letterPad).toBe("Letter pad - અમદાવાદ");
+    expect(parsed[0].documentRefNo).toBe("SAEC/IN/7");
+  });
+});
