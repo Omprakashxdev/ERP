@@ -204,16 +204,67 @@ remote "mkdir -p $DEPLOY_DIR/public/uploads && \
   fi"
 remote "cd $DEPLOY_DIR && npm ci && npx prisma generate && npm run build"
 remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static && cp -r public/. .next/standalone/public/"
-# PM2 runs from .next/standalone, so process.cwd()-relative private_uploads
-# would land inside the wiped build dir. Keep the real dir at the app root
-# (rsync-excluded, survives rebuilds) and point the standalone copy at it.
-remote "mkdir -p $DEPLOY_DIR/private_uploads && \
-  if [ -d $DEPLOY_DIR/.next/standalone/private_uploads ] && [ ! -L $DEPLOY_DIR/.next/standalone/private_uploads ]; then \
-    cp -an $DEPLOY_DIR/.next/standalone/private_uploads/. $DEPLOY_DIR/private_uploads/; \
-  fi; \
-  rm -rf $DEPLOY_DIR/.next/standalone/private_uploads && \
-  ln -sfn $DEPLOY_DIR/private_uploads $DEPLOY_DIR/.next/standalone/private_uploads"
+# PM2 runs from .next/standalone, so process.cwd()-relative storage dirs land
+# inside a wiped build dir — this is the original missing-PDF root cause.
+# Keep BOTH upload roots at the app root (rsync-excluded, survive rebuilds)
+# and point the standalone copies at them via symlinks.
+# Merge is content-verified, not exit-code-trusted: every file present in the
+# real standalone dir must either be absent in the persistent dir or be
+# byte-identical (sha256). A same-named file with different content aborts
+# the deploy instead of silently destroying one version.
+remote_sh '
+  set -e
+  link_persist() {
+    SRC="$1"; DST="$2"
+    mkdir -p "$DST"
+    if [ -L "$SRC" ]; then
+      if [ "$(readlink "$SRC")" != "$DST" ]; then
+        rm -f "$SRC"; ln -s "$DST" "$SRC"
+      fi
+      echo "  $SRC already linked -> $(readlink "$SRC")"
+      return 0
+    fi
+    if [ -d "$SRC" ]; then
+      CONFLICTS=""
+      while IFS= read -r -d "" f; do
+        rel="${f#$SRC/}"
+        if [ -f "$DST/$rel" ]; then
+          cmp -s "$f" "$DST/$rel" || CONFLICTS="$CONFLICTS $rel"
+        fi
+      done < <(find "$SRC" \( -type f -o -type l \) -print0)
+      if [ -n "$CONFLICTS" ]; then
+        echo "FAIL: same-named files with DIFFERENT content — refusing to lose either:$CONFLICTS" >&2
+        exit 1
+      fi
+      cp -a "$SRC/." "$DST/"
+      MISSING=""
+      while IFS= read -r -d "" f; do
+        rel="${f#$SRC/}"
+        [ -e "$DST/$rel" ] || [ -L "$DST/$rel" ] || MISSING="$MISSING $rel"
+      done < <(find "$SRC" \( -type f -o -type l \) -print0)
+      if [ -n "$MISSING" ]; then
+        echo "FAIL: files not present in persistent storage after copy:$MISSING" >&2
+        exit 1
+      fi
+      rm -rf "$SRC"
+    fi
+    ln -sfn "$DST" "$SRC"
+    echo "  $SRC -> $(readlink "$SRC")"
+  }
+  link_persist "'$DEPLOY_DIR'/.next/standalone/private_uploads" "'$DEPLOY_DIR'/private_uploads"
+  link_persist "'$DEPLOY_DIR'/.next/standalone/public/uploads" "'$DEPLOY_DIR'/public/uploads"
+'
 remote "pm2 restart $PM2_APP --update-env"
+
+if [[ $EXECUTE -eq 1 ]]; then
+  for pair in "private_uploads" "public/uploads"; do
+    LINK_T=$($SSH "$REMOTE" "readlink $DEPLOY_DIR/.next/standalone/$pair" | tr -d "[:space:]") || \
+      fail "cannot read $pair symlink"
+    [[ "$LINK_T" == "$DEPLOY_DIR/$pair" ]] || \
+      fail "standalone/$pair -> '$LINK_T' != $DEPLOY_DIR/$pair"
+  done
+  echo "  both upload symlinks verified -> persistent app-root storage"
+fi
 
 # ---------------------------------------------------------------------------
 step "PHASE F — smoke checks"
