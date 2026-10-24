@@ -114,14 +114,19 @@ if [[ $EXECUTE -eq 1 && -n "${EXPECTED_CURRENT_SHA:-}" ]]; then
   echo "  server SHA verified: $SHA_OUT"
 fi
 
-remote_check "PM2 process exists and cwd == DEPLOY_DIR" \
-  "pm2 describe $PM2_APP | grep -E 'exec cwd|pm2 cwd' || true"
+remote_check "PM2 process exists; cwd must be DEPLOY_DIR or DEPLOY_DIR/.next/standalone" \
+  "pm2 describe $PM2_APP | grep -i 'cwd' | head -1"
 if [[ $EXECUTE -eq 1 ]]; then
   PM2_CWD=$($SSH "$REMOTE" "pm2 describe $PM2_APP | grep -i 'cwd' | head -1 | sed 's/.*cwd[^/]*//;s/ *│.*//' | tr -d ' '") || \
     fail "PM2 app '$PM2_APP' not found — refusing to restart an unverified process"
-  [[ "$PM2_CWD" == "$DEPLOY_DIR" ]] || \
-    fail "PM2 cwd '$PM2_CWD' != DEPLOY_DIR '$DEPLOY_DIR' — private_uploads would resolve to the wrong directory"
-  echo "  PM2 cwd verified: $PM2_CWD"
+  if [[ "$PM2_CWD" == "$DEPLOY_DIR/.next/standalone" ]]; then
+    PM2_STANDALONE_CWD=1
+    echo "  PM2 cwd is the standalone build dir — the private_uploads symlink in Phase E is REQUIRED"
+  elif [[ "$PM2_CWD" != "$DEPLOY_DIR" ]]; then
+    fail "PM2 cwd '$PM2_CWD' is neither DEPLOY_DIR nor its .next/standalone — private_uploads would resolve to an unverified directory"
+  else
+    echo "  PM2 cwd verified: $PM2_CWD"
+  fi
 fi
 
 remote_check "upload directories exist and will be preserved" \
@@ -187,6 +192,15 @@ step "PHASE E — build + restart"
 # ---------------------------------------------------------------------------
 remote "cd $DEPLOY_DIR && npm ci && npx prisma generate && npm run build"
 remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static"
+# PM2 runs from .next/standalone, so process.cwd()-relative private_uploads
+# would land inside the wiped build dir. Keep the real dir at the app root
+# (rsync-excluded, survives rebuilds) and point the standalone copy at it.
+remote "mkdir -p $DEPLOY_DIR/private_uploads && \
+  if [ -d $DEPLOY_DIR/.next/standalone/private_uploads ] && [ ! -L $DEPLOY_DIR/.next/standalone/private_uploads ]; then \
+    cp -an $DEPLOY_DIR/.next/standalone/private_uploads/. $DEPLOY_DIR/private_uploads/ 2>/dev/null || true; \
+  fi; \
+  rm -rf $DEPLOY_DIR/.next/standalone/private_uploads && \
+  ln -sfn $DEPLOY_DIR/private_uploads $DEPLOY_DIR/.next/standalone/private_uploads"
 remote "pm2 restart $PM2_APP --update-env"
 
 # ---------------------------------------------------------------------------

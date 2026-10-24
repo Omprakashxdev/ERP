@@ -8,21 +8,24 @@ Release: In-Out Register customer bricks (`f842437..9165791`, branch
 > to or modifies production until every unknown below is verified and
 > recorded in `deploy/production.env` (gitignored).
 
-## 0. Required live configuration (all currently UNVERIFIED)
+## 0. Live configuration (verified read-only on 2026-10-24)
 
-| Value | How to verify on the server |
+| Value | Verified |
 |---|---|
-| `DEPLOY_HOST` / `DEPLOY_USER` | `dig +short erp.adelphostech.com` → `45.113.226.115`; authorized SSH account (root was denied — ask infra) |
-| `DEPLOY_DIR` | `pm2 describe <app>` → `exec cwd`, or locate the git checkout |
-| `PM2_APP` | `pm2 list` |
-| `DB_NAME` / `DB_USER` | `DATABASE_URL` in the app `.env`, or `\l` in psql |
-| `EXPECTED_HOSTNAME` | `hostname` on the server |
-| `EXPECTED_CURRENT_SHA` | `git -C $DEPLOY_DIR rev-parse HEAD` |
+| `DEPLOY_HOST` | `45.113.226.115` (erp.adelphostech.com) |
+| `DEPLOY_USER` | `root` (password auth — provided by operator; consider key auth) |
+| `DEPLOY_DIR` | `/var/www/erp.adelphostech.com` |
+| `PM2_APP` | `erp-adelphos` — **NOT** `saec-erp` as the demo scripts assume |
+| `PM2 cwd` | `/var/www/erp.adelphostech.com/.next/standalone` — the deploy script's private_uploads symlink step is **required** |
+| `DB_NAME` | `saec_erp` @ 127.0.0.1:5432 |
+| `EXPECTED_HOSTNAME` | `ip-45-113-226-115` |
+| `EXPECTED_CURRENT_SHA` | `f84243787084f4686e2e41885eea74d4d644aa6e` (= `origin/main` tip) |
 | `SITE_URL` | `https://erp.adelphostech.com` |
+| Uploads on live | `private_uploads`/`public/uploads` do not exist yet — no files to preserve |
 
-Also confirm: upload directories `$DEPLOY_DIR/private_uploads/` and
-`$DEPLOY_DIR/public/uploads/` (existence + sizes), and that the server git
-remote can fetch `origin`.
+⚠️ The server also hosts unrelated apps (`linkmeu`, `slotcare`,
+`oppoint_booking`) — keep every rsync/restart scoped to `erp-adelphos`
+paths only.
 
 ## 1. Pre-flight (read-only)
 
@@ -123,5 +126,8 @@ first, verify, then swap. Never drop financial or register tables as a
 - `Asset_responsiblePersonId_idx` exists in schema but is missing on the
   live DB (pre-existing drift from past `db push`) — unrelated; flag to
   infra.
-- PM2 cwd, app dir, DB name and deploy mechanism were **unverifiable
-  without SSH** at planning time — all are enforced inputs, not defaults.
+- **Shared host:** `linkmeu`, `slotcare` and `oppoint_booking` run on the
+  same server — never run broad `pm2 restart all`, and keep rsync strictly
+  scoped to `DEPLOY_DIR`.
+- PM2 cwd is the standalone build dir — handled by the persistent
+  `private_uploads` symlink step in Phase E (verified needed on live).
