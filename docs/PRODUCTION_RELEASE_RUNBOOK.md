@@ -21,7 +21,21 @@ Release: In-Out Register customer bricks (`f842437..9165791`, branch
 | `EXPECTED_HOSTNAME` | `ip-45-113-226-115` |
 | `EXPECTED_CURRENT_SHA` | `f84243787084f4686e2e41885eea74d4d644aa6e` (= `origin/main` tip) |
 | `SITE_URL` | `https://erp.adelphostech.com` |
-| Uploads on live | `private_uploads`/`public/uploads` do not exist yet — no files to preserve |
+| `DB_USER` | `postgres` (peer auth — DB commands run via `sudo -u postgres`) |
+
+**Live data snapshot (verified 2026-10-24):** 16 `InOutRegister` rows
+(10 NULL docRefNo, 12 NULL staff, 0 normalized duplicates — the unique
+index applies cleanly), 4 `InOutRegisterDocument` rows on legacy
+`/uploads/` paths, serial counters `INW/2026-27`→13 / `OUT/2026-27`→7,
+23 applied migrations, 0 failed.
+
+**Upload files on live:** only `.next/standalone/public/uploads/
+in-out-register-doc/1792820327010_TABLE-A.pdf` exists (orphan — no doc
+row). The 4 doc rows' referenced PDFs are already absent — wiped by a
+previous `.next` rebuild (the bug this release fixes). Phase B archives
+every upload location including standalone; Phase E rescues files from
+the standalone tree into persistent app-root `public/uploads` BEFORE the
+build.
 
 ⚠️ The server also hosts unrelated apps (`linkmeu`, `slotcare`,
 `oppoint_booking`) — keep every rsync/restart scoped to `erp-adelphos`

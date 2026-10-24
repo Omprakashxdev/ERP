@@ -133,17 +133,17 @@ remote_check "upload directories exist and will be preserved" \
   "for d in ${UPLOAD_DIRS[*]}; do echo \"\$d: \$(test -d $DEPLOY_DIR/\$d && find $DEPLOY_DIR/\$d -type f | wc -l || echo MISSING)\"; done"
 
 step "PHASE A2 — database preflight"
-remote_sh "psql -U $DB_USER -d $DB_NAME -Atc '
+remote_sh "sudo -u postgres psql -d $DB_NAME -Atc '
    SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL'"
-remote_sh "psql -U $DB_USER -d $DB_NAME -Atc '
+remote_sh "sudo -u postgres psql -d $DB_NAME -Atc '
    SELECT lower(btrim(\"documentRefNo\")), count(*) FROM \"InOutRegister\"
    WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1'"
 remote "cd $DEPLOY_DIR && npx prisma migrate status"
 echo "  # pending set must be EXACTLY the 3 in-out migrations per the runbook — abort if anything else appears"
 if [[ $EXECUTE -eq 1 ]]; then
-  FAILED_MIG=$($SSH "$REMOTE" "psql -U $DB_USER -d $DB_NAME -Atc 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL'")
+  FAILED_MIG=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL'")
   [[ "$FAILED_MIG" == "0" ]] || fail "prisma migration history not clean ($FAILED_MIG failed/rolled-back rows) — resolve before deploying"
-  DUPES=$($SSH "$REMOTE" "psql -U $DB_USER -d $DB_NAME -Atc 'SELECT count(*) FROM (SELECT lower(btrim(\"documentRefNo\")) n FROM \"InOutRegister\" WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1) d'")
+  DUPES=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM (SELECT lower(btrim(\"documentRefNo\")) n FROM \"InOutRegister\" WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1) d'")
   [[ "$DUPES" == "0" ]] || fail "$DUPES duplicate normalized document numbers exist — the unique index cannot be applied; fix data first"
   echo "  migration history clean; 0 duplicate document numbers"
 fi
@@ -151,12 +151,16 @@ fi
 # ---------------------------------------------------------------------------
 step "PHASE B — verified backups (DB + uploads + checksums, pulled off-server)"
 # ---------------------------------------------------------------------------
-remote "mkdir -p ~/${DATE_TAG}_backup"
-remote "pg_dump -U $DB_USER -Fc -d $DB_NAME -f ~/${DATE_TAG}_backup/db.dump && sha256sum ~/${DATE_TAG}_backup/db.dump"
-remote "cd $DEPLOY_DIR && tar czf ~/${DATE_TAG}_backup/uploads.tgz ${UPLOAD_DIRS[*]} 2>/dev/null; sha256sum ~/${DATE_TAG}_backup/uploads.tgz"
-remote "psql -U $DB_USER -d $DB_NAME -Atc 'SELECT count(*) FROM \"InOutRegister\"'"
+remote "mkdir -p ~/${DATE_TAG}_backup && chown postgres:postgres ~/${DATE_TAG}_backup"
+remote "sudo -u postgres pg_dump -Fc -d $DB_NAME -f ~/${DATE_TAG}_backup/db.dump && sha256sum ~/${DATE_TAG}_backup/db.dump"
+# Upload files may live under EITHER the app root (persistent target) or the
+# standalone build dir (process.cwd() hazard) — archive every location that
+# exists; missing dirs must not abort the backup.
+remote "cd $DEPLOY_DIR && tar czf ~/${DATE_TAG}_backup/uploads.tgz --ignore-failed-read ${UPLOAD_DIRS[*]} .next/standalone/public/uploads .next/standalone/private_uploads 2>/dev/null; sha256sum ~/${DATE_TAG}_backup/uploads.tgz"
+remote "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM \"InOutRegister\"'"
 run mkdir -p "$BACKUP_DIR"
-run scp "${REMOTE}:~/${DATE_TAG}_backup/db.dump" "${REMOTE}:~/${DATE_TAG}_backup/uploads.tgz" "$BACKUP_DIR/"
+run scp "${REMOTE}:~/${DATE_TAG}_backup/db.dump" "$BACKUP_DIR/"
+run scp "${REMOTE}:~/${DATE_TAG}_backup/uploads.tgz" "$BACKUP_DIR/"
 if [[ $EXECUTE -eq 1 ]]; then
   [[ -s "$BACKUP_DIR/db.dump" && -s "$BACKUP_DIR/uploads.tgz" ]] || \
     fail "backup files not pulled to $BACKUP_DIR — aborting before any code change"
@@ -180,9 +184,9 @@ step "PHASE D — migrations via prisma migrate deploy ONLY"
 # ---------------------------------------------------------------------------
 remote "cd $DEPLOY_DIR && npx prisma migrate deploy"
 IDX_LIST="$(printf "'%s'," "${EXPECTED_INDEXES[@]}")"; IDX_LIST="${IDX_LIST%,}"
-remote_sh "psql -U $DB_USER -d $DB_NAME -Atc 'SELECT indexname FROM pg_indexes WHERE indexname IN ($IDX_LIST)'"
+remote_sh "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT indexname FROM pg_indexes WHERE indexname IN ($IDX_LIST)'"
 if [[ $EXECUTE -eq 1 ]]; then
-  IDX=$($SSH "$REMOTE" "psql -U $DB_USER -d $DB_NAME -Atc \"SELECT count(*) FROM pg_indexes WHERE indexname IN ($IDX_LIST)\"")
+  IDX=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc \"SELECT count(*) FROM pg_indexes WHERE indexname IN ($IDX_LIST)\"")
   [[ "$IDX" == "3" ]] || fail "expected 3 release indexes, found $IDX — functional unique index missing; investigate before restart"
   echo "  all 3 functional/unique indexes verified present"
 fi
@@ -190,14 +194,20 @@ fi
 # ---------------------------------------------------------------------------
 step "PHASE E — build + restart"
 # ---------------------------------------------------------------------------
+# Rescue runtime-written uploads out of the standalone build dir BEFORE the
+# build can wipe .next — move them to persistent app-root paths (rsync-excluded).
+remote "mkdir -p $DEPLOY_DIR/public/uploads && \
+  if [ -d $DEPLOY_DIR/.next/standalone/public/uploads ] && [ ! -L $DEPLOY_DIR/.next/standalone/public/uploads ]; then \
+    cp -an $DEPLOY_DIR/.next/standalone/public/uploads/. $DEPLOY_DIR/public/uploads/; \
+  fi"
 remote "cd $DEPLOY_DIR && npm ci && npx prisma generate && npm run build"
-remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static"
+remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static && cp -r public/. .next/standalone/public/"
 # PM2 runs from .next/standalone, so process.cwd()-relative private_uploads
 # would land inside the wiped build dir. Keep the real dir at the app root
 # (rsync-excluded, survives rebuilds) and point the standalone copy at it.
 remote "mkdir -p $DEPLOY_DIR/private_uploads && \
   if [ -d $DEPLOY_DIR/.next/standalone/private_uploads ] && [ ! -L $DEPLOY_DIR/.next/standalone/private_uploads ]; then \
-    cp -an $DEPLOY_DIR/.next/standalone/private_uploads/. $DEPLOY_DIR/private_uploads/ 2>/dev/null || true; \
+    cp -an $DEPLOY_DIR/.next/standalone/private_uploads/. $DEPLOY_DIR/private_uploads/; \
   fi; \
   rm -rf $DEPLOY_DIR/.next/standalone/private_uploads && \
   ln -sfn $DEPLOY_DIR/private_uploads $DEPLOY_DIR/.next/standalone/private_uploads"
