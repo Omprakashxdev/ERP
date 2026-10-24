@@ -144,6 +144,10 @@ export function InOutRegisterForm({
   const [loadingRefNo, setLoadingRefNo] = useState(false);
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{
+    documentRefNo?: string;
+    actionSuggestedStaffId?: string;
+  }>({});
   const documentListRef = useRef<HTMLDivElement>(null);
   const isEdit = mode === "edit" && Boolean(entry);
 
@@ -216,25 +220,40 @@ export function InOutRegisterForm({
     }));
   }
 
+  const initialInwardType =
+    (entry as Record<string, unknown> | undefined)?.inwardType as
+      | string
+      | null
+      | undefined;
+
   function buildPayload() {
+    // Reply Due Date applies only to Action Required inwards. A deadline
+    // is cleared only when the user actually changes the type to
+    // Informative — an untouched legacy deadline is preserved as saved.
+    const inwardTypeNow = form.direction === "INWARD" && form.inwardType ? form.inwardType : null;
+    const clearedByTypeChange =
+      inwardTypeNow === "INFORMATIVE" && inwardTypeNow !== (initialInwardType ?? null);
+    const replyDueDate =
+      form.direction !== "INWARD" || clearedByTypeChange
+        ? null
+        : form.replyDueDate
+          ? new Date(form.replyDueDate)
+          : null;
+
     const base = {
       direction: form.direction,
       serialNo: emptyToNull(form.serialNo),
       documentDate: form.documentDate || undefined,
       receivedDate: form.receivedDate || undefined,
-      documentRefNo: emptyToNull(form.documentRefNo),
+      documentRefNo: form.documentRefNo.trim(),
       department: emptyToNull(form.department),
-      replyDueDate:
-        form.direction === "INWARD" && form.replyDueDate
-          ? new Date(form.replyDueDate)
-          : null,
+      replyDueDate,
       details: emptyToNull(form.details),
       clientId: form.clientId,
-      actionSuggestedStaffId:
-        form.direction === "OUTWARD" ? null : form.actionSuggestedStaffId || null,
+      actionSuggestedStaffId: form.actionSuggestedStaffId || null,
       ccStaffIds: form.ccStaffIds.length > 0 ? form.ccStaffIds : undefined,
       documents: form.documents.length > 0 ? form.documents : undefined,
-      inwardType: form.direction === "INWARD" && form.inwardType ? form.inwardType : null,
+      inwardType: inwardTypeNow,
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
       parentInwardId: form.parentInwardId || null,
     };
@@ -249,6 +268,20 @@ export function InOutRegisterForm({
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!form.documentRefNo.trim()) {
+      nextFieldErrors.documentRefNo = "Document number is required.";
+    }
+    if (!form.actionSuggestedStaffId) {
+      nextFieldErrors.actionSuggestedStaffId =
+        "Select the staff member the action is suggested to.";
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setSubmitting(false);
+      return;
+    }
 
     if (
       form.replyDueDate &&
@@ -396,20 +429,30 @@ export function InOutRegisterForm({
               <div className="space-y-1.5">
                 <Label htmlFor="documentRefNo">
                   {isOutward ? "Outgoing Document Ref. No" : "Incoming Document Ref. No"}
+                  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </Label>
                 <Input
                   id="documentRefNo"
                   value={form.documentRefNo}
-                  onChange={(e) =>
-                    updateField("documentRefNo", e.target.value)
-                  }
+                  aria-required="true"
+                  onChange={(e) => {
+                    updateField("documentRefNo", e.target.value);
+                    if (fieldErrors.documentRefNo) {
+                      setFieldErrors((p) => ({ ...p, documentRefNo: undefined }));
+                    }
+                  }}
+                  onBlur={() => updateField("documentRefNo", form.documentRefNo.trim())}
                   placeholder={isOutward ? "e.g. SAEC/OUT/2026/101 (filled by employee)" : "e.g. SMC/HEALTH/2026/142 (filled by employee)"}
                 />
-                <p className="text-xs text-zinc-500">
-                  {isOutward
-                    ? "Outgoing letter or client reference number to be filled by employee (optional)."
-                    : "The reference number printed on received letter to be filled by employee (leave blank if none)."}
-                </p>
+                {fieldErrors.documentRefNo ? (
+                  <p className="text-xs text-red-600">{fieldErrors.documentRefNo}</p>
+                ) : (
+                  <p className="text-xs text-zinc-500">
+                    {isOutward
+                      ? "Outgoing letter or client reference number (required — must be unique)."
+                      : "The reference number printed on the received letter (required — must be unique)."}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -502,18 +545,26 @@ export function InOutRegisterForm({
                     <Label htmlFor="inwardType">Inward type</Label>
                     <Select
                       value={form.inwardType}
-                      onValueChange={(v) => updateField("inwardType", v ?? "")}
+                      onValueChange={(v) => updateField("inwardType", v === "__none__" ? "" : (v ?? ""))}
                     >
                       <SelectTrigger id="inwardType">
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">—</SelectItem>
+                        {form.inwardType !== "" && (
+                          <SelectItem value="__none__">— (clear)</SelectItem>
+                        )}
                         <SelectItem value="INFORMATIVE">Informative</SelectItem>
                         <SelectItem value="ACTION_REQUIRED">Action Required</SelectItem>
-                        <SelectItem value="COMPLAINT">Complaint</SelectItem>
-                        <SelectItem value="QUERY">Query</SelectItem>
-                        <SelectItem value="NOTICE">Notice</SelectItem>
+                        {isEdit &&
+                          form.inwardType &&
+                          !["INFORMATIVE", "ACTION_REQUIRED"].includes(form.inwardType) && (
+                            <SelectItem value={form.inwardType} disabled>
+                              {form.inwardType.charAt(0) +
+                                form.inwardType.slice(1).toLowerCase().replace(/_/g, " ")}{" "}
+                              (legacy — cannot be reassigned)
+                            </SelectItem>
+                          )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -528,58 +579,80 @@ export function InOutRegisterForm({
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="actionSuggestedStaffId">Action suggested to</Label>
-                    <Select
-                      value={form.actionSuggestedStaffId}
-                      onValueChange={(v) =>
-                        updateField("actionSuggestedStaffId", v ?? "")
-                      }
-                    >
-                      <SelectTrigger id="actionSuggestedStaffId">
-                        <SelectValue placeholder="Select staff">
-                          {(value: string) =>
-                            value
-                              ? staff.find((s) => s.id === value)?.name ?? "Select staff"
-                              : "Unassigned"
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Unassigned</SelectItem>
-                        {staff.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
-                        Reply Due Date (Deadline)
-                      </Label>
-                      <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
+                  {form.inwardType === "ACTION_REQUIRED" && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
+                          Reply Due Date (Deadline)
+                        </Label>
+                        <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
+                      </div>
+                      <Input
+                        id="replyDueDate"
+                        type="date"
+                        value={form.replyDueDate}
+                        onChange={(e) => updateField("replyDueDate", e.target.value)}
+                        min={form.documentDate || undefined}
+                        className="border-amber-300 focus-visible:ring-amber-500"
+                      />
+                      <p className="text-xs text-zinc-500">
+                        When must the reply be submitted by? (Stays Pending until answered)
+                      </p>
+                      {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
+                        <p className="text-xs text-red-600">Due date cannot be before document date</p>
+                      )}
                     </div>
-                    <Input
-                      id="replyDueDate"
-                      type="date"
-                      value={form.replyDueDate}
-                      onChange={(e) => updateField("replyDueDate", e.target.value)}
-                      min={form.documentDate || undefined}
-                      className="border-amber-300 focus-visible:ring-amber-500"
-                    />
-                    <p className="text-xs text-zinc-500">
-                      When must the reply be submitted by? (Stays Pending until answered)
-                    </p>
-                    {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
-                      <p className="text-xs text-red-600">Due date cannot be before document date</p>
-                    )}
-                  </div>
+                  )}
                 </>
               )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="actionSuggestedStaffId">
+                  Action suggested to
+                  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+                </Label>
+                {staff.length === 0 ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    No staff members are available to assign. Add staff in
+                    Masters before saving this entry.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.actionSuggestedStaffId}
+                    onValueChange={(v) => {
+                      updateField("actionSuggestedStaffId", v ?? "");
+                      if (fieldErrors.actionSuggestedStaffId) {
+                        setFieldErrors((p) => ({ ...p, actionSuggestedStaffId: undefined }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="actionSuggestedStaffId">
+                      <SelectValue placeholder="Select staff (required)">
+                        {(value: string) =>
+                          staff.find((s) => s.id === value)?.name ?? "Select staff (required)"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {form.actionSuggestedStaffId &&
+                        !staff.some((s) => s.id === form.actionSuggestedStaffId) && (
+                          <SelectItem value={form.actionSuggestedStaffId} disabled>
+                            {entry?.actionSuggestedStaff?.name ?? "Previously assigned staff"}
+                            {" "}(inactive — preserved)
+                          </SelectItem>
+                        )}
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {fieldErrors.actionSuggestedStaffId && (
+                  <p className="text-xs text-red-600">{fieldErrors.actionSuggestedStaffId}</p>
+                )}
+              </div>
 
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="in-out-register-cc-marking">CC marking</Label>
@@ -704,7 +777,7 @@ export function InOutRegisterForm({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || staff.length === 0}>
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}

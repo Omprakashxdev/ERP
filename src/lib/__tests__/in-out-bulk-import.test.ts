@@ -46,7 +46,7 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     const csvData = [
       "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo",
       "INWARD,2026-10-01,2026-10-02,INW/TEST/2026/001,Site drawing approval,GSPHC,Engineering,Amit Desai,ACTION_REQUIRED,Ramesh,2026-10-20,",
-      "OUTWARD,2026-10-10,2026-10-10,OUT/TEST/2026/001,Dispatching vetted approval drawing,GSPHC,Engineering,,,,,INW/TEST/2026/001",
+      "OUTWARD,2026-10-10,2026-10-10,OUT/TEST/2026/001,Dispatching vetted approval drawing,GSPHC,Engineering,Amit Desai,,,,INW/TEST/2026/001",
     ].join("\n");
 
     const createdRecords: any[] = [];
@@ -100,14 +100,14 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     expect(outwardRec.direction).toBe("OUTWARD");
     expect(outwardRec.documentRefNo).toBe("OUT/TEST/2026/001");
     expect(outwardRec.replyDueDate).toBeNull(); // Outward must not have reply deadline
-    expect(outwardRec.actionSuggestedStaffId).toBeNull(); // Outward does not suggest action to self
+    expect(outwardRec.actionSuggestedStaffId).toBe("staff-amit-id"); // Customer requirement: mandatory for Outward too
     expect(outwardRec.parentInwardId).toBe("id-1"); // Successfully linked to parent inward record!
   });
 
-  it("auto-generates standard sequential INW/YYYY-YY/XXX when documentRefNo is blank in CSV", async () => {
+  it("auto-generates standard sequential INW/YYYY-YY/XXX serialNo for a valid inward row", async () => {
     const csvData = [
       "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo",
-      "INWARD,2026-10-01,2026-10-02,,Blank ref no letter,GSPHC,Engineering,Amit Desai,ACTION_REQUIRED,Ramesh,2026-10-20,",
+      "INWARD,2026-10-01,2026-10-02,GMB/XEN/C/440,Blank ref no letter,GSPHC,Engineering,Amit Desai,ACTION_REQUIRED,Ramesh,2026-10-20,",
     ].join("\n");
 
     const createdRecords: any[] = [];
@@ -135,12 +135,72 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     expect(createdRecords[0].serialNo).toBe(`INW/${currentFy()}/006`);
   });
 
+  it("rejects an inward row with a blank documentRefNo (now mandatory)", async () => {
+    const csvData = [
+      "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo",
+      "INWARD,2026-10-01,2026-10-02,,Blank ref no letter,GSPHC,Engineering,Amit Desai,ACTION_REQUIRED,Ramesh,2026-10-20,",
+    ].join("\n");
+
+    const createdRecords: any[] = [];
+
+    vi.spyOn(prisma.client, "findFirst").mockResolvedValue({ id: "client-gsphc-id", name: "GSPHC", abbreviation: "GSPHC" } as any);
+    vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({ id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001" } as any);
+    (vi.spyOn(prisma.inOutRegister, "create") as any).mockImplementation(async (args: any) => {
+      const rec = { id: `id-${createdRecords.length + 1}`, ...args.data };
+      createdRecords.push(rec);
+      return rec;
+    });
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: csvData,
+    });
+
+    expect(res.success).toBe(true);
+    if (res.success && res.data) {
+      expect(res.data.imported).toBe(0);
+      expect(res.data.errors.join(" ")).toContain("Document number is required");
+    }
+    expect(createdRecords).toHaveLength(0);
+  });
+
+  it("rejects an inward row with a blank actionSuggestedStaff (now mandatory)", async () => {
+    const csvData = [
+      "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo",
+      "INWARD,2026-10-01,2026-10-02,GMB/XEN/C/441,No staff letter,GSPHC,Engineering,,ACTION_REQUIRED,Ramesh,2026-10-20,",
+    ].join("\n");
+
+    const createdRecords: any[] = [];
+
+    vi.spyOn(prisma.client, "findFirst").mockResolvedValue({ id: "client-gsphc-id", name: "GSPHC", abbreviation: "GSPHC" } as any);
+    vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({ id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001" } as any);
+    (vi.spyOn(prisma.inOutRegister, "create") as any).mockImplementation(async (args: any) => {
+      const rec = { id: `id-${createdRecords.length + 1}`, ...args.data };
+      createdRecords.push(rec);
+      return rec;
+    });
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: csvData,
+    });
+
+    expect(res.success).toBe(true);
+    if (res.success && res.data) {
+      expect(res.data.imported).toBe(0);
+      expect(res.data.errors.join(" ")).toContain("Action suggested to is required");
+    }
+    expect(createdRecords).toHaveLength(0);
+  });
+
   it("auto-heals when parentInwardRefNo is placed in replyDueDate column on outward row", async () => {
-    // 4 commas after department places INW/2026-27/001 into replyDueDate column
+    // Blank inwardType/receivedBy columns place INW/2026-27/001 into replyDueDate column
     const csvData = [
       "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,inwardType,receivedByPersonName,replyDueDate,parentInwardRefNo",
       "INWARD,2026-10-01,2026-10-02,INW/2026-27/001,Site drawing approval,GSPHC,Engineering,Amit Desai,ACTION_REQUIRED,Ramesh,2026-10-20,",
-      "OUTWARD,2026-10-10,2026-10-10,OUT/2026-27/001,Dispatching vetted approval drawing,GSPHC,Engineering,,,,INW/2026-27/001",
+      "OUTWARD,2026-10-10,2026-10-10,OUT/2026-27/001,Dispatching vetted approval drawing,GSPHC,Engineering,Amit Desai,,,INW/2026-27/001",
     ].join("\n");
 
     const createdRecords: any[] = [];

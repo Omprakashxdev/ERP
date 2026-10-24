@@ -587,10 +587,40 @@ export async function importModule(
               if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
             }
 
+            // Customer requirement: document number + action-suggested staff
+            // are mandatory for every imported entry, both directions.
+            if (
+              !cleanData.documentRefNo ||
+              String(cleanData.documentRefNo).trim() === ""
+            ) {
+              throw new Error(
+                "Document number is required — provide the Incoming/Outgoing Document Ref. No."
+              );
+            }
+            cleanData.documentRefNo = String(cleanData.documentRefNo).trim();
+            if (!cleanData.actionSuggestedStaffId) {
+              throw new Error(
+                "Action suggested to is required — provide a staff name in the actionSuggestedStaff column."
+              );
+            }
+
+            // Same inward-type rule as the form: new entries may only be
+            // Informative or Action Required.
+            if (
+              cleanData.direction === "INWARD" &&
+              cleanData.inwardType != null &&
+              !["INFORMATIVE", "ACTION_REQUIRED"].includes(
+                String(cleanData.inwardType)
+              )
+            ) {
+              throw new Error(
+                `Invalid inward type "${cleanData.inwardType}" — allowed: INFORMATIVE, ACTION_REQUIRED`
+              );
+            }
+
             // Outward letters are going outside, so they NEVER have pending reply or deadline
             if (cleanData.direction === "OUTWARD") {
               cleanData.replyDueDate = null;
-              cleanData.actionSuggestedStaffId = null;
 
               // If parent inward ref no was provided in CSV, resolve it to parentInwardId
               const parentRef =
@@ -645,7 +675,16 @@ export async function importModule(
                   `Row ${i + 1}: Auto-generated ${dir} serial number "${cleanData.serialNo}"`
                 );
               }
-              await tx.inOutRegister.create({ data: cleanData as never });
+              await tx.inOutRegister.create({ data: cleanData as never }).catch(
+                (err) => {
+                  if ((err as { code?: string })?.code === "P2002") {
+                    throw new Error(
+                      "This document number is already registered. Please enter a different number."
+                    );
+                  }
+                  throw err;
+                }
+              );
             });
             break;
           }
@@ -1368,6 +1407,12 @@ async function checkDuplicates(
           where: { serialNo: { equals: String(data.serialNo).trim(), mode: "insensitive" } },
         });
         if (existing) return { isDuplicate: true, identifier: `Serial No: ${data.serialNo}` };
+      }
+      if (data.documentRefNo && String(data.documentRefNo).trim()) {
+        const existing = await prisma.inOutRegister.findFirst({
+          where: { documentRefNo: { equals: String(data.documentRefNo).trim(), mode: "insensitive" } },
+        });
+        if (existing) return { isDuplicate: true, identifier: `Document No: ${data.documentRefNo}` };
       }
       return { isDuplicate: false };
     }

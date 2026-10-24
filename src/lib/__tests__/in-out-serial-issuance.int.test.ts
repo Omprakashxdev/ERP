@@ -38,6 +38,8 @@ import {
 const SKIP = !process.env.RUN_INTEGRATION_TESTS;
 let clientId = "";
 const recordIds: string[] = [];
+let staffId = "";
+let refSeq = 0;
 
 // Helpers ----------------------------------------------------------------
 async function createEntry(dir: "INWARD" | "OUTWARD", extra: object = {}) {
@@ -46,6 +48,8 @@ async function createEntry(dir: "INWARD" | "OUTWARD", extra: object = {}) {
     documentDate: new Date("2026-10-15"),
     receivedDate: new Date("2026-10-15"),
     clientId,
+    documentRefNo: `ST-DOC-${++refSeq}`,
+    actionSuggestedStaffId: staffId,
     ...extra,
   });
   if (res.success) recordIds.push(res.data!.id);
@@ -65,6 +69,15 @@ async function serialOf(id: string) {
       data: { name: "SerialTest Client", abbreviation: "STT" },
     });
     clientId = c.id;
+    const s = await prisma.staff.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    staffId =
+      s?.id ??
+      (await prisma.staff.create({
+        data: { name: "SerialTest Staff", employeeCode: "STT-001" },
+      })).id;
   });
   afterAll(async () => {
     await prisma.inOutRegister.deleteMany({ where: { clientId } });
@@ -151,6 +164,8 @@ async function serialOf(id: string) {
       documentDate: new Date("2026-10-15"),
       receivedDate: new Date("2026-10-15"),
       clientId: "cfake0000000000000000000x",
+      documentRefNo: `ST-DOC-FAIL-${++refSeq}`,
+      actionSuggestedStaffId: staffId,
     }).catch(() => {});
     const after = await prisma.registerSerialCounter.findUnique({
       where: { scope: `OUT/${currentFy()}` },

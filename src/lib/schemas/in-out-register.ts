@@ -7,6 +7,11 @@ function isNotFutureCalendarDate(d: Date): boolean {
   return d <= maxAllowed;
 }
 
+const LEGACY_INWARD_TYPES = ["INFORMATIVE", "ACTION_REQUIRED", "COMPLAINT", "QUERY", "NOTICE"] as const;
+// Only these two types may be chosen for NEW inward entries (customer
+// requirement). Older values remain valid on stored records and updates.
+const NEW_INWARD_TYPES = ["INFORMATIVE", "ACTION_REQUIRED"] as const;
+
 const inOutRegisterBaseFields = z.object({
   direction: z.enum(["INWARD", "OUTWARD"]).default("INWARD"),
   documentDate: z.coerce.date({
@@ -22,26 +27,44 @@ const inOutRegisterBaseFields = z.object({
   actionSuggestedStaffId: z.string().cuid().optional().nullable(),
   ccStaffIds: z.array(cuid).optional(),
   documents: z.array(cleanedString(500)).optional(),
-  inwardType: z.enum(["INFORMATIVE", "ACTION_REQUIRED", "COMPLAINT", "QUERY", "NOTICE"]).optional().nullable(),
+  inwardType: z.enum(LEGACY_INWARD_TYPES).optional().nullable(),
   receivedByPersonName: cleanedString(200).optional().nullable(),
   department: cleanedString(200).optional().nullable(),
   replyDueDate: z.coerce.date().optional().nullable(),
   parentInwardId: z.string().cuid().optional().nullable(),
 });
 
-export const inOutRegisterCreateSchema = inOutRegisterBaseFields.refine(
-  (data) => data.receivedDate >= data.documentDate,
-  {
-    message: "Received/Sent date cannot be before document date",
-    path: ["receivedDate"],
-  }
-).refine(
-  (data) => !data.replyDueDate || data.replyDueDate >= data.documentDate,
-  {
-    message: "Reply due date cannot be before document date",
-    path: ["replyDueDate"],
-  }
-);
+export const inOutRegisterCreateSchema = inOutRegisterBaseFields
+  .extend({
+    // Customer requirement: employee-entered document number and the
+    // "Action suggested to" staff assignment are mandatory for every new
+    // entry, inward and outward alike. Legacy NULLs stay untouched.
+    documentRefNo: cleanedString(100),
+    actionSuggestedStaffId: cuid,
+  })
+  .refine(
+    (data) => data.direction !== "INWARD" ||
+      data.inwardType == null ||
+      (NEW_INWARD_TYPES as readonly string[]).includes(data.inwardType),
+    {
+      message: "Inward type must be Informative or Action Required",
+      path: ["inwardType"],
+    }
+  )
+  .refine(
+    (data) => data.receivedDate >= data.documentDate,
+    {
+      message: "Received/Sent date cannot be before document date",
+      path: ["receivedDate"],
+    }
+  )
+  .refine(
+    (data) => !data.replyDueDate || data.replyDueDate >= data.documentDate,
+    {
+      message: "Reply due date cannot be before document date",
+      path: ["replyDueDate"],
+    }
+  );
 
 export const inOutRegisterUpdateSchema = inOutRegisterBaseFields
   .partial()

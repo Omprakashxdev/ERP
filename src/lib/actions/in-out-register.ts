@@ -67,6 +67,60 @@ function computeInOutRegisterFlags(entry: {
   };
 }
 
+const NEW_INWARD_TYPES = ["INFORMATIVE", "ACTION_REQUIRED"];
+
+function normalizeDocumentRefNo(value: string): string {
+  return value.trim();
+}
+
+/**
+ * Customer requirement: the employee-entered document number must be
+ * unique across register entries (trimmed, case-insensitive). The
+ * partial unique index InOutRegister_documentRefNo_key is the final
+ * guard for concurrent inserts; this check gives the friendly message.
+ */
+async function assertDocumentRefNoAvailable(
+  refNo: string,
+  excludeId?: string
+) {
+  const normalized = normalizeDocumentRefNo(refNo);
+  const existing = await prisma.inOutRegister.findFirst({
+    where: {
+      documentRefNo: { equals: normalized, mode: "insensitive" },
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true, serialNo: true },
+  });
+  if (existing) {
+    throw new Error(
+      "This document number is already registered. Please enter a different number."
+    );
+  }
+}
+
+function isDocumentRefNoUniqueViolation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string; meta?: { target?: unknown } };
+  if (e.code !== "P2002") return false;
+  const target = e.meta?.target;
+  const haystacks = [
+    ...(Array.isArray(target) ? target : target ? [String(target)] : []),
+    typeof (err as { message?: string }).message === "string"
+      ? String((err as { message?: string }).message)
+      : "",
+  ];
+  return haystacks.some((t) => t.includes("documentRefNo"));
+}
+
+function documentRefNoTakenMessage(err: unknown): never {
+  if (isDocumentRefNoUniqueViolation(err)) {
+    throw new Error(
+      "This document number is already registered. Please enter a different number."
+    );
+  }
+  throw err;
+}
+
 function buildDocumentCreateInput(
   documents?: string[]
 ): { create: { path: string }[] } | undefined {
@@ -89,6 +143,15 @@ export async function createInOutRegister(
     const { ccStaffIds, documents, ...data } = parsed;
     await checkRateLimit(user.id);
 
+    const staff = await prisma.staff.findUnique({
+      where: { id: data.actionSuggestedStaffId },
+      select: { id: true },
+    });
+    if (!staff) {
+      throw new Error("Action suggested to must be an existing staff member");
+    }
+    await assertDocumentRefNoAvailable(data.documentRefNo);
+
     // Client-supplied serialNo is ignored — serials are server-authoritative,
     // issued from a monotonic per-scope counter inside the same transaction
     // as the row insert. A rollback returns the number unissued.
@@ -104,7 +167,7 @@ export async function createInOutRegister(
           documents: buildDocumentCreateInput(documents),
           ccStaff: buildCcStaffCreateInput(ccStaffIds),
         },
-      });
+      }).catch(documentRefNoTakenMessage);
     });
 
     await audit(user.id, "create", "InOutRegister", entry.id, {
@@ -114,6 +177,8 @@ export async function createInOutRegister(
     await createInOutRegisterLinkedTasks({
       inOutRegisterId: entry.id,
       documentRefNo: entry.documentRefNo || entry.serialNo || "",
+      direction: entry.direction,
+      inwardType: entry.inwardType,
       details: entry.details,
       receivedDate: entry.receivedDate,
       replyDueDate: entry.replyDueDate,
@@ -143,6 +208,49 @@ export async function updateInOutRegister(
       },
     });
     if (!existing) throw new Error("In-out register entry not found");
+
+    // Customer requirement: validate the EFFECTIVE record, not just the
+    // patch — an employee editing an incomplete legacy record must first
+    // complete the newly mandatory fields before it can be resaved.
+    const effectiveRefNo =
+      data.documentRefNo !== undefined
+        ? data.documentRefNo
+        : existing.documentRefNo;
+    if (!effectiveRefNo || !effectiveRefNo.trim()) {
+      throw new Error(
+        "Document number is required. Enter the Incoming/Outgoing Document Ref. No before saving."
+      );
+    }
+    const effectiveStaffId =
+      data.actionSuggestedStaffId !== undefined
+        ? data.actionSuggestedStaffId
+        : existing.actionSuggestedStaffId;
+    if (!effectiveStaffId) {
+      throw new Error(
+        "Action suggested to is required. Select a staff member before saving."
+      );
+    }
+    if (data.actionSuggestedStaffId) {
+      const staff = await prisma.staff.findUnique({
+        where: { id: data.actionSuggestedStaffId },
+        select: { id: true },
+      });
+      if (!staff) {
+        throw new Error("Action suggested to must be an existing staff member");
+      }
+    }
+    await assertDocumentRefNoAvailable(effectiveRefNo, id);
+
+    // Legacy inward types remain valid only while unchanged — they cannot
+    // be newly assigned to a record that did not already carry them.
+    if (
+      data.inwardType !== undefined &&
+      data.inwardType !== existing.inwardType &&
+      data.inwardType !== null &&
+      !NEW_INWARD_TYPES.includes(data.inwardType)
+    ) {
+      throw new Error("Inward type must be Informative or Action Required");
+    }
 
     // Surgical sync — remove only what the user removed, add only what is
     // new. Unchanged document/CC rows keep their original records.
@@ -188,10 +296,12 @@ export async function updateInOutRegister(
     // Ensure serialNo is immutable and cannot be changed on edit
     const { serialNo: _ignoredSerialNo, ...updateData } = data;
 
-    const entry = await prisma.inOutRegister.update({
-      where: { id },
-      data: updateData,
-    });
+    const entry = await prisma.inOutRegister
+      .update({
+        where: { id },
+        data: updateData,
+      })
+      .catch(documentRefNoTakenMessage);
 
     await audit(user.id, "update", "InOutRegister", entry.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
@@ -202,6 +312,8 @@ export async function updateInOutRegister(
     await createInOutRegisterLinkedTasks({
       inOutRegisterId: entry.id,
       documentRefNo: entry.documentRefNo || entry.serialNo || "",
+      direction: entry.direction,
+      inwardType: entry.inwardType,
       details: entry.details,
       receivedDate: entry.receivedDate,
       replyDueDate: entry.replyDueDate,

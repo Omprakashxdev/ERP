@@ -10,12 +10,15 @@ const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
 const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
 const futureDate = new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0];
 
+const validStaffId = "csyyyyyyyyyyyyyyyyyyyyyyy";
+
 const validBase = {
   direction: "INWARD" as const,
   documentDate: yesterday,
   receivedDate: today,
   documentRefNo: "DOC-001",
   clientId: validClientId,
+  actionSuggestedStaffId: validStaffId,
 };
 
 describe("Fix 3: In-out register — future date validation", () => {

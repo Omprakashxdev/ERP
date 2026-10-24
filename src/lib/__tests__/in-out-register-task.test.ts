@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
       create: vi.fn(),
       update: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       delete: vi.fn(),
     },
     inOutRegisterDocument: {
@@ -19,8 +20,11 @@ vi.mock("@/lib/prisma", () => ({
       createMany: vi.fn(),
     },
     task: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findMany: vi.fn() },
-    staff: { findFirst: vi.fn() },
+    staff: { findFirst: vi.fn(), findUnique: vi.fn() },
     auditLog: { create: vi.fn() },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
   },
 }));
 
@@ -145,5 +149,100 @@ describe("In-Out Register → Task linkage (Phase 4B)", () => {
     // unchanged CC staff — no deletes or creates
     expect(prismaMock.inOutRegisterCcStaff.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.inOutRegisterCcStaff.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("Brick 1 — mandatory staff ≠ automatic action task", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    prismaMock.task.findMany.mockResolvedValue([]);
+    prismaMock.task.findFirst.mockResolvedValue(null);
+    prismaMock.task.create.mockResolvedValue({});
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+    prismaMock.$queryRaw.mockResolvedValue([{ lastSeq: 6 }]);
+    prismaMock.$executeRaw.mockResolvedValue(1);
+    mockSession();
+  });
+
+  const base = {
+    inOutRegisterId: REG_ID,
+    documentRefNo: "GMB/XEN/C/339",
+    receivedDate: new Date("2026-10-01"),
+    actionSuggestedStaffId: STAFF_A,
+  };
+
+  it("OUTWARD + assigned staff → no 'Action required' task", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({ ...base, direction: "OUTWARD" });
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
+  });
+
+  it("INWARD + INFORMATIVE + assigned staff → no 'Action required' task", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({ ...base, direction: "INWARD", inwardType: "INFORMATIVE" });
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
+  });
+
+  it("INWARD + ACTION_REQUIRED + assigned staff → HIGH action task", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({ ...base, direction: "INWARD", inwardType: "ACTION_REQUIRED" });
+    expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    const data = prismaMock.task.create.mock.calls[0][0].data;
+    expect(data.title).toContain("Action required");
+    expect(data.priority).toBe("HIGH");
+    expect(data.assignedToId).toBe(STAFF_A);
+  });
+
+  it("INWARD + legacy NULL type + assigned staff → action task preserved", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({ ...base, direction: "INWARD", inwardType: null });
+    expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.create.mock.calls[0][0].data.title).toContain("Action required");
+  });
+
+  it("OUTWARD CC notification says 'outward', never 'inward'", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({ ...base, direction: "OUTWARD", ccStaffIds: [STAFF_B] });
+    expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    const data = prismaMock.task.create.mock.calls[0][0].data;
+    expect(data.title).toContain("CC Notification");
+    expect(data.description).toContain("outward");
+    expect(data.description).not.toContain("inward");
+  });
+
+  it("OUTWARD assigned staff CC'd → CC notice only, no action task", async () => {
+    const { createInOutRegisterLinkedTasks } = await import("../actions/task-linking");
+    await createInOutRegisterLinkedTasks({
+      ...base,
+      direction: "OUTWARD",
+      ccStaffIds: [STAFF_A],
+    });
+    expect(prismaMock.task.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.create.mock.calls[0][0].data.title).toContain("CC Notification");
+  });
+
+  it("createInOutRegister for OUTWARD never calls task.create", async () => {
+    const { createInOutRegister } = await import("../actions/in-out-register");
+    prismaMock.staff.findUnique.mockResolvedValue({ id: STAFF_A });
+    prismaMock.inOutRegister.findFirst.mockResolvedValue(null); // no dup
+    prismaMock.inOutRegister.create.mockResolvedValue({
+      id: REG_ID,
+      direction: "OUTWARD",
+      documentRefNo: "SAEC/OUT/1",
+      details: null,
+      receivedDate: new Date("2026-10-10"),
+      replyDueDate: null,
+      actionSuggestedStaffId: STAFF_A,
+    });
+    const res = await createInOutRegister({
+      direction: "OUTWARD",
+      documentDate: new Date("2026-10-10"),
+      receivedDate: new Date("2026-10-10"),
+      clientId: CLIENT_ID,
+      documentRefNo: "SAEC/OUT/1",
+      actionSuggestedStaffId: STAFF_A,
+    });
+    expect(res.success).toBe(true);
+    expect(prismaMock.task.create).not.toHaveBeenCalled();
   });
 });
