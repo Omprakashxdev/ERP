@@ -136,6 +136,9 @@ const ok = (name, pass, note = "") => {
   await closeDialog(page);
 
   // ── Edit legacy record (inwardType NULL) ──
+  await page.fill("#in-out-search", "OUT/2026-27/001");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(2000);
   const row = page.locator("tr", { hasText: "OUT/2026-27/001" }).first();
   if (await row.count()) {
     await row.getByRole("button", { name: /edit/i }).first().click();

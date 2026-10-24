@@ -39,6 +39,8 @@ import {
 const SKIP = !process.env.RUN_INTEGRATION_TESTS;
 let clientId = "";
 let staffId = "";
+let clientName = "";
+let staffName = "";
 const recordIds: string[] = [];
 
 function base(extra: object = {}) {
@@ -69,28 +71,30 @@ async function createEntry(extra: object = {}) {
         CREATE UNIQUE INDEX IF NOT EXISTS "InOutRegister_documentRefNo_key"
         ON "InOutRegister" (lower(btrim("documentRefNo")))
         WHERE "documentRefNo" IS NOT NULL`;
-      const client = await prisma.client.findFirst({ select: { id: true } });
+      const client = await prisma.client.findFirst({ select: { id: true, name: true } });
       if (client) {
         clientId = client.id;
+        clientName = client.name;
       } else {
-        clientId = (
-          await prisma.client.create({
-            data: { name: "InOut Mandatory Test Client", abbreviation: "IMTC" },
-          })
-        ).id;
+        const created = await prisma.client.create({
+          data: { name: "InOut Mandatory Test Client", abbreviation: "IMTC" },
+        });
+        clientId = created.id;
+        clientName = created.name;
       }
       const staff = await prisma.staff.findFirst({
         where: { isActive: true },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       if (staff) {
         staffId = staff.id;
+        staffName = staff.name;
       } else {
-        staffId = (
-          await prisma.staff.create({
-            data: { name: "Test Staff Member", employeeCode: "TST-999" },
-          })
-        ).id;
+        const created = await prisma.staff.create({
+          data: { name: "Test Staff Member", employeeCode: "TST-999" },
+        });
+        staffId = created.id;
+        staffName = created.name;
       }
     });
 
@@ -236,6 +240,85 @@ async function createEntry(extra: object = {}) {
       expect(ok).toHaveLength(1);
       expect(failed).toHaveLength(1);
       expect(failed[0].error).toMatch(/already registered/i);
+    });
+
+    // Customer requirement: a document number is unique across ALL register
+    // records — Inward and Outward share one uniqueness scope.
+    describe("cross-direction uniqueness", () => {
+      it("Inward then Outward with the same document number → rejected", async () => {
+        const inw = await createEntry({ documentRefNo: "SAEC/2026/101" });
+        expect(inw.success).toBe(true);
+        const out = await createEntry({
+          direction: "OUTWARD",
+          documentRefNo: "SAEC/2026/101",
+        });
+        expect(out.success).toBe(false);
+        expect(out.error).toMatch(/already registered/i);
+      });
+
+      it("rejects cross-direction duplicates ignoring case and spaces", async () => {
+        const out = await createEntry({
+          direction: "OUTWARD",
+          documentRefNo: "  saec/2026/101  ",
+        });
+        expect(out.success).toBe(false);
+        expect(out.error).toMatch(/already registered/i);
+      });
+
+      it("rejects an Inward duplicating an existing Outward (reverse)", async () => {
+        const out = await createEntry({
+          direction: "OUTWARD",
+          documentRefNo: "SAEC/2026/202",
+        });
+        expect(out.success).toBe(true);
+        const inw = await createEntry({ documentRefNo: "SAEC/2026/202" });
+        expect(inw.success).toBe(false);
+        expect(inw.error).toMatch(/already registered/i);
+      });
+
+      it("rejects editing an Outward onto an Inward's document number", async () => {
+        const other = await createEntry({
+          direction: "OUTWARD",
+          documentRefNo: "SAEC/2026/303",
+        });
+        expect(other.success).toBe(true);
+        const res = await updateInOutRegister({
+          id: other.data!.id,
+          documentRefNo: "SAEC/2026/101",
+        });
+        expect(res.success).toBe(false);
+        expect(res.error).toMatch(/already registered/i);
+      });
+
+      it("skips an imported Outward row duplicating an Inward document number", async () => {
+        const { importModule } = await import("../actions/export-import");
+        const csv = [
+          "direction,documentDate,receivedDate,documentRefNo,details,client,actionSuggestedStaff",
+          `OUTWARD,2026-10-20,2026-10-20,SAEC/2026/101,imported dup,${clientName},${staffName}`,
+        ].join("\n");
+        const res = await importModule({
+          module: "inOutRegister",
+          format: "csv",
+          data: csv,
+        });
+        expect(res.success).toBe(true);
+        expect(res.data!.imported).toBe(0);
+        expect(
+          res.data!.corrections.some((e) => /already exists/i.test(e))
+        ).toBe(true);
+      });
+
+      it("functional index rejects concurrent cross-direction duplicates", async () => {
+        const [a, b] = await Promise.all([
+          createEntry({ documentRefNo: "SAEC/2026/404" }),
+          createEntry({ direction: "OUTWARD", documentRefNo: "saec/2026/404" }),
+        ]);
+        const ok = [a, b].filter((r) => r.success);
+        const failed = [a, b].filter((r) => !r.success);
+        expect(ok).toHaveLength(1);
+        expect(failed).toHaveLength(1);
+        expect(failed[0].error).toMatch(/already registered/i);
+      });
     });
 
     it("requires completing mandatory fields when editing an incomplete legacy record", async () => {

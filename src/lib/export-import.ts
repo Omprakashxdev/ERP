@@ -524,8 +524,12 @@ function escapeCsvField(value: string): string {
 }
 
 // Reverses escapeCsvField: drop one leading apostrophe only when the
-// remainder proves it was export-added (starts with another apostrophe or a
-// formula char). A user-supplied apostrophe in an arbitrary CSV survives.
+// remainder marks it as export-added (starts with another apostrophe or a
+// formula char). A user-supplied apostrophe before ordinary text survives.
+// Known limitation: an externally authored cell like "'=SUM(A1:A2)" is
+// indistinguishable from our guarded export and will un-escape to
+// "=SUM(A1:A2)". Resolving that ambiguity would require corrupting real
+// exports, so the rule stays — XLSX is the preferred Excel interchange.
 function unescapeCsvField(value: string): string {
   if (value.startsWith("'")) {
     const rest = value.slice(1);
