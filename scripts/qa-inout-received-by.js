@@ -118,7 +118,24 @@ const searchAndOpen = async (page, text) => {
     .locator('[placeholder*="Search employee"]')
     .waitFor({ state: "visible", timeout: 5000 });
   const totalOptions = await page.locator('[cmdk-item]').count();
-  ok("active employees listed", totalOptions >= 2, `${totalOptions} items`);
+  const allStaffCount = parseInt(psql(`SELECT COUNT(*) FROM "Staff"`), 10);
+  const inactiveCount = parseInt(
+    psql(`SELECT COUNT(*) FROM "Staff" WHERE "isActive"=false`),
+    10
+  );
+  ok(
+    "all employees listed (active + inactive)",
+    totalOptions === allStaffCount,
+    `${totalOptions}/${allStaffCount} items`
+  );
+  const disabledOptions = await page
+    .locator('[cmdk-item][data-disabled="true"]')
+    .count();
+  ok(
+    "inactive employees shown as disabled",
+    disabledOptions === inactiveCount,
+    `${disabledOptions} disabled / ${inactiveCount} inactive`
+  );
   await page.fill('[placeholder*="Search employee"]', staffA.name.slice(0, 5));
   await page.waitForTimeout(400);
   const filtered = await page.locator('[cmdk-item]:visible').count();
@@ -207,11 +224,18 @@ const searchAndOpen = async (page, text) => {
     inactText.includes(staffB.name) && inactText.includes("inactive"),
     inactText.trim().slice(0, 80)
   );
-  // and the dropdown list must NOT offer inactive staff as a pick
+  // and the dropdown must show the inactive staff as a DISABLED item, never pickable
   await page.locator("#receivedByStaffId").click();
   await page.waitForTimeout(400);
+  const inactiveShown = await page
+    .locator(`[cmdk-item][data-disabled="true"]:has-text("${staffB.name}")`)
+    .count();
+  ok(
+    "inactive employee visible but disabled in list",
+    inactiveShown === 1
+  );
   const inactivePickable = await page
-    .locator(`[cmdk-item]:not([data-disabled]):not([aria-disabled="true"]):has-text("${staffB.name}")`)
+    .locator(`[cmdk-item]:not([data-disabled="true"]):has-text("${staffB.name}")`)
     .count();
   ok(
     "inactive employee not selectable for new picks",

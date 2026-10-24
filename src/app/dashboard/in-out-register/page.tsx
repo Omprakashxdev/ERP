@@ -66,6 +66,7 @@ export default async function InOutRegisterPage({
     clients,
     departments,
     staff,
+    allStaff,
     modes,
     allCount,
     inwardCount,
@@ -85,6 +86,10 @@ export default async function InOutRegisterPage({
     prisma.staff.findMany({
       where: { isActive: true },
       select: { id: true, name: true, employeeCode: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.staff.findMany({
+      select: { id: true, name: true, employeeCode: true, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.modeMaster.findMany({
@@ -159,6 +164,7 @@ export default async function InOutRegisterPage({
           clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
           departments={serialize(departments) as { id: string; name: string }[]}
           staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
+          allStaff={serialize(allStaff) as { id: string; name: string; employeeCode: string | null; isActive: boolean }[]}
           modes={serialize(modes) as { id: string; name: string }[]}
           canDelete={session.user.role === "ADMIN"}
         />

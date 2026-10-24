@@ -5,7 +5,8 @@ export const staffCreateSchema = z.object({
   name: cleanedString(120),
   email: z.string().email().optional().nullable(),
   phone: cleanedString(20).optional().nullable(),
-  employeeCode: cleanedString(30).optional().nullable(),
+  // Server-generated (SAECnnn) — supplying a value is rejected.
+  employeeCode: z.undefined().optional(),
   designation: cleanedString(60).optional().nullable(),
   regionId: optionalCuid,
   reportingManagerId: optionalCuid,
@@ -44,7 +45,7 @@ export const staffCreateSchema = z.object({
 
 export const staffUpdateSchema = staffCreateSchema
   .partial()
-  .extend({ id: z.string().cuid() });
+  .extend({ id: z.string().cuid() }); // employeeCode stays non-editable via z.undefined()
 
 export const staffFilterSchema = z.object({
   search: z.string().optional(),

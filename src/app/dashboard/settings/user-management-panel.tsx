@@ -98,7 +98,6 @@ export function UserManagementPanel() {
   const [cuEmail, setCuEmail] = useState("");
   const [cuPassword, setCuPassword] = useState("");
   const [cuRole, setCuRole] = useState("STAFF");
-  const [cuEmployeeCode, setCuEmployeeCode] = useState("");
   const [cuDesignation, setCuDesignation] = useState("");
   const [cuRegionId, setCuRegionId] = useState("");
   const [cuManagerId, setCuManagerId] = useState("");
@@ -160,7 +159,6 @@ export function UserManagementPanel() {
         email: cuEmail,
         password: cuPassword,
         role: cuRole as "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR",
-        employeeCode: cuEmployeeCode || undefined,
         designation: cuDesignation || undefined,
         regionId: cuRegionId || undefined,
         reportingManagerId: cuManagerId || undefined,
@@ -169,7 +167,7 @@ export function UserManagementPanel() {
         toast.success("User created successfully");
         setCreateOpen(false);
         setCuName(""); setCuEmail(""); setCuPassword(""); setCuRole("STAFF");
-        setCuEmployeeCode(""); setCuDesignation(""); setCuRegionId(""); setCuManagerId("");
+        setCuDesignation(""); setCuRegionId(""); setCuManagerId("");
         fetchAll();
       } else {
         toast.error(res.error ?? "Failed to create user");
@@ -442,7 +440,9 @@ export function UserManagementPanel() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Employee Code</Label>
-                  <Input value={cuEmployeeCode} onChange={(e) => setCuEmployeeCode(e.target.value)} />
+                  <div className="flex h-8 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-xs text-zinc-500">
+                    Automatically generated when saved
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Designation</Label>

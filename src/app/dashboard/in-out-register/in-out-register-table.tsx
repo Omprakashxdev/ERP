@@ -52,6 +52,7 @@ interface InOutRegisterTableProps {
   clients: { id: string; name: string; abbreviation: string | null }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
+  allStaff?: { id: string; name: string; employeeCode: string | null; isActive: boolean }[];
   modes?: { id: string; name: string }[];
   canDelete?: boolean;
 }
@@ -80,6 +81,7 @@ export function InOutRegisterTable({
   clients,
   departments,
   staff,
+  allStaff,
   modes,
   canDelete,
 }: InOutRegisterTableProps) {
@@ -499,6 +501,7 @@ export function InOutRegisterTable({
           clients={clients}
           departments={departments}
           staff={staff}
+          allStaff={allStaff}
           modes={modes}
           mode="edit"
           onClose={() => setSelectedEntry(null)}
@@ -512,6 +515,7 @@ export function InOutRegisterTable({
           parentInward={replyParentInward ?? undefined}
           departments={departments}
           staff={staff}
+          allStaff={allStaff}
           modes={modes}
           mode="create"
           onClose={() => {

@@ -6,6 +6,7 @@ import {
   issueRegisterSerialNo,
   bumpRegisterSerialCounter,
 } from "@/lib/register-serial";
+import { issueEmployeeCode } from "@/lib/employee-code";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
   withPermission,
@@ -111,22 +112,7 @@ function parseImportDate(value: string): Date | null {
 }
 
 async function generateImportEmployeeCode(): Promise<string> {
-  const latestStaff = await prisma.staff.findFirst({
-    where: { employeeCode: { startsWith: "EMP" } },
-    orderBy: { employeeCode: "desc" },
-  });
-
-  if (!latestStaff || !latestStaff.employeeCode) {
-    return "EMP001";
-  }
-
-  const match = latestStaff.employeeCode.match(/EMP(\d+)/);
-  if (match && match[1]) {
-    const num = parseInt(match[1], 10);
-    return `EMP${String(num + 1).padStart(3, "0")}`;
-  }
-
-  return `EMP${Date.now().toString().slice(-6)}`;
+  return issueEmployeeCode();
 }
 
 function autoCorrectNumber(value: string): string {
@@ -775,12 +761,13 @@ export async function importModule(
             break;
           }
           case "staff": {
-            if (!data.employeeCode || String(data.employeeCode).trim() === "") {
-              data.employeeCode = await generateImportEmployeeCode();
-              corrections.push(
-                `Row ${i + 1}: Auto-generated Employee Code "${data.employeeCode}"`
-              );
-            }
+            const suppliedCode = data.employeeCode ? String(data.employeeCode).trim() : "";
+            data.employeeCode = await generateImportEmployeeCode();
+            corrections.push(
+              suppliedCode
+                ? `Row ${i + 1}: Supplied Employee Code "${suppliedCode}" ignored — system assigned "${data.employeeCode}"`
+                : `Row ${i + 1}: Auto-generated Employee Code "${data.employeeCode}"`
+            );
             if (data.isActive === undefined) {
               data.isActive = true;
             }
@@ -1142,6 +1129,7 @@ async function resolveRelations(
               OR: [
                 { name: { equals: clean, mode: "insensitive" } },
                 { employeeCode: { equals: clean, mode: "insensitive" } },
+                { previousEmployeeCode: { equals: clean, mode: "insensitive" } },
               ],
               isActive: true,
             },
@@ -1167,7 +1155,10 @@ async function resolveRelations(
           // name matching so duplicate names can't hide a coded pick.
           const byCode = await prisma.staff.findFirst({
             where: {
-              employeeCode: { equals: clean, mode: "insensitive" },
+              OR: [
+                { employeeCode: { equals: clean, mode: "insensitive" } },
+                { previousEmployeeCode: { equals: clean, mode: "insensitive" } },
+              ],
               isActive: true,
             },
             select: { id: true },
@@ -1483,7 +1474,12 @@ async function checkDuplicates(
     case "staff": {
       if (data.employeeCode && String(data.employeeCode).trim()) {
         const existing = await prisma.staff.findFirst({
-          where: { employeeCode: { equals: String(data.employeeCode).trim(), mode: "insensitive" } },
+          where: {
+            OR: [
+              { employeeCode: { equals: String(data.employeeCode).trim(), mode: "insensitive" } },
+              { previousEmployeeCode: { equals: String(data.employeeCode).trim(), mode: "insensitive" } },
+            ],
+          },
         });
         if (existing) return { isDuplicate: true, identifier: `Employee Code: ${data.employeeCode}` };
       }

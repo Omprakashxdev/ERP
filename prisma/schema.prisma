@@ -212,6 +212,7 @@ model Staff {
   email        String?   @unique
   phone        String?
   employeeCode String?   @unique
+  previousEmployeeCode String?
   designation  String?
   regionId     String?
   isActive     Boolean   @default(true)
@@ -625,6 +626,13 @@ model RegisterSerialCounter {
   lastSeq  Int    @default(0)
 
   @@map("RegisterSerialCounter")
+}
+
+model EmployeeCodeCounter {
+  scope    String @id
+  lastSeq  Int    @default(0)
+
+  @@map("EmployeeCodeCounter")
 }
 
 model InOutRegisterDocument {
