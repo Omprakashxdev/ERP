@@ -82,6 +82,73 @@ run() {
 remote() { run $SSH "$REMOTE" "$@"; }
 remote_sh() { run $SSH "$REMOTE" "bash -s" <<< "$1"; }
 
+# Fail-closed merge+symlink procedure, defined ONCE and injected into both
+# the pre-build rescue and the post-build relink so every merge is
+# checksum-verified: unsafe entries abort before anything is copied, a
+# same-named file with different content aborts instead of silently
+# destroying one version, and every copied file is re-verified by SHA-256
+# before the source dir is removed.
+read -r -d '' LINK_PERSIST <<'EOS' || true
+link_persist() {
+  SRC="$1"; DST="$2"
+  mkdir -p "$DST"
+  if [ -L "$SRC" ]; then
+    if [ "$(readlink "$SRC")" != "$DST" ]; then
+      rm -f "$SRC"; ln -s "$DST" "$SRC"
+    fi
+    echo "  $SRC already linked -> $(readlink "$SRC")"
+    return 0
+  fi
+  if [ -d "$SRC" ]; then
+    # Reject unsafe filesystem entries (fifos, sockets, devices) — nothing
+    # is deleted on abort, both locations are preserved untouched.
+    UNSAFE=$(find "$SRC" ! -type f ! -type l ! -type d | head -5)
+    if [ -n "$UNSAFE" ]; then
+      echo "FAIL: unsafe filesystem entries in $SRC — refusing to merge:$UNSAFE" >&2
+      exit 1
+    fi
+    CONFLICTS=""
+    while IFS= read -r -d "" f; do
+      rel="${f#$SRC/}"
+      if [ -f "$f" ] && [ -f "$DST/$rel" ]; then
+        SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
+        DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
+        [ "$SRC_SUM" = "$DST_SUM" ] || CONFLICTS="$CONFLICTS $rel"
+      fi
+    done < <(find "$SRC" \( -type f -o -type l \) -print0)
+    if [ -n "$CONFLICTS" ]; then
+      echo "FAIL: same-named files with DIFFERENT content — refusing to lose either:$CONFLICTS" >&2
+      exit 1
+    fi
+    cp -a "$SRC/." "$DST/"
+    # Post-copy proof, not presence alone: every regular file must match
+    # by SHA-256; every entry must exist (dangling symlinks included).
+    MISSING=""; MISMATCH=""
+    while IFS= read -r -d "" f; do
+      rel="${f#$SRC/}"
+      if [ -f "$f" ]; then
+        if [ -f "$DST/$rel" ]; then
+          SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
+          DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
+          [ "$SRC_SUM" = "$DST_SUM" ] || MISMATCH="$MISMATCH $rel"
+        else
+          MISSING="$MISSING $rel"
+        fi
+      else
+        [ -e "$DST/$rel" ] || [ -L "$DST/$rel" ] || MISSING="$MISSING $rel"
+      fi
+    done < <(find "$SRC" \( -type f -o -type l \) -print0)
+    if [ -n "$MISSING" ] || [ -n "$MISMATCH" ]; then
+      echo "FAIL: post-copy verification — missing:$MISSING sha256-mismatch:$MISMATCH (source dir left intact)" >&2
+      exit 1
+    fi
+    rm -rf "$SRC"
+  fi
+  ln -sfn "$DST" "$SRC"
+  echo "  $SRC -> $(readlink "$SRC")"
+}
+EOS
+
 # remote_check <description> <command> — reads server state (runs even in
 # dry-run? NO — dry run must not connect; these only execute with --execute)
 remote_check() {
@@ -197,11 +264,13 @@ fi
 step "PHASE E — build + restart"
 # ---------------------------------------------------------------------------
 # Rescue runtime-written uploads out of the standalone build dir BEFORE the
-# build can wipe .next — move them to persistent app-root paths (rsync-excluded).
-remote "mkdir -p $DEPLOY_DIR/public/uploads && \
-  if [ -d $DEPLOY_DIR/.next/standalone/public/uploads ] && [ ! -L $DEPLOY_DIR/.next/standalone/public/uploads ]; then \
-    cp -an $DEPLOY_DIR/.next/standalone/public/uploads/. $DEPLOY_DIR/public/uploads/; \
-  fi"
+# build can wipe .next — same fail-closed, SHA-256-verified merge used
+# post-build, applied to BOTH upload roots so nothing is lost if the build
+# aborts midway or a file conflicts.
+remote_sh "$LINK_PERSIST"'
+link_persist "'$DEPLOY_DIR'/.next/standalone/private_uploads" "'$DEPLOY_DIR'/private_uploads"
+link_persist "'$DEPLOY_DIR'/.next/standalone/public/uploads" "'$DEPLOY_DIR'/public/uploads"
+'
 remote "cd $DEPLOY_DIR && npm ci && npx prisma generate && npm run build"
 remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static && cp -r public/. .next/standalone/public/"
 # PM2 runs from .next/standalone, so process.cwd()-relative storage dirs land
@@ -212,66 +281,8 @@ remote "cd $DEPLOY_DIR && cp -r .next/static .next/standalone/.next/static && cp
 # real standalone dir must either be absent in the persistent dir or be
 # byte-identical (sha256). A same-named file with different content aborts
 # the deploy instead of silently destroying one version.
-remote_sh '
+remote_sh "$LINK_PERSIST"'
   set -e
-  link_persist() {
-    SRC="$1"; DST="$2"
-    mkdir -p "$DST"
-    if [ -L "$SRC" ]; then
-      if [ "$(readlink "$SRC")" != "$DST" ]; then
-        rm -f "$SRC"; ln -s "$DST" "$SRC"
-      fi
-      echo "  $SRC already linked -> $(readlink "$SRC")"
-      return 0
-    fi
-    if [ -d "$SRC" ]; then
-      # Reject unsafe filesystem entries (fifos, sockets, devices) — nothing
-      # is deleted on abort, both locations are preserved untouched.
-      UNSAFE=$(find "$SRC" ! -type f ! -type l ! -type d | head -5)
-      if [ -n "$UNSAFE" ]; then
-        echo "FAIL: unsafe filesystem entries in $SRC — refusing to merge:$UNSAFE" >&2
-        exit 1
-      fi
-      CONFLICTS=""
-      while IFS= read -r -d "" f; do
-        rel="${f#$SRC/}"
-        if [ -f "$f" ] && [ -f "$DST/$rel" ]; then
-          SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
-          DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
-          [ "$SRC_SUM" = "$DST_SUM" ] || CONFLICTS="$CONFLICTS $rel"
-        fi
-      done < <(find "$SRC" \( -type f -o -type l \) -print0)
-      if [ -n "$CONFLICTS" ]; then
-        echo "FAIL: same-named files with DIFFERENT content — refusing to lose either:$CONFLICTS" >&2
-        exit 1
-      fi
-      cp -a "$SRC/." "$DST/"
-      # Post-copy proof, not presence alone: every regular file must match
-      # by SHA-256; every entry must exist (dangling symlinks included).
-      MISSING=""; MISMATCH=""
-      while IFS= read -r -d "" f; do
-        rel="${f#$SRC/}"
-        if [ -f "$f" ]; then
-          if [ -f "$DST/$rel" ]; then
-            SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
-            DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
-            [ "$SRC_SUM" = "$DST_SUM" ] || MISMATCH="$MISMATCH $rel"
-          else
-            MISSING="$MISSING $rel"
-          fi
-        else
-          [ -e "$DST/$rel" ] || [ -L "$DST/$rel" ] || MISSING="$MISSING $rel"
-        fi
-      done < <(find "$SRC" \( -type f -o -type l \) -print0)
-      if [ -n "$MISSING" ] || [ -n "$MISMATCH" ]; then
-        echo "FAIL: post-copy verification — missing:$MISSING sha256-mismatch:$MISMATCH (source dir left intact)" >&2
-        exit 1
-      fi
-      rm -rf "$SRC"
-    fi
-    ln -sfn "$DST" "$SRC"
-    echo "  $SRC -> $(readlink "$SRC")"
-  }
   link_persist "'$DEPLOY_DIR'/.next/standalone/private_uploads" "'$DEPLOY_DIR'/private_uploads"
   link_persist "'$DEPLOY_DIR'/.next/standalone/public/uploads" "'$DEPLOY_DIR'/public/uploads"
   # Static serving would follow a symlink left INSIDE the persistent upload
