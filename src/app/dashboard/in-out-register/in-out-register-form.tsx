@@ -29,12 +29,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   createInOutRegister,
   updateInOutRegister,
   getNextRegisterRefNo,
   getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock, Eye, Download } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock, Eye, Download, Check, ChevronsUpDown } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
 import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
 import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
@@ -46,6 +59,7 @@ interface InOutRegisterFormProps {
   entry?: InOutRegister & {
     client?: Client;
     actionSuggestedStaff?: Staff | null;
+    receivedByStaff?: { id: string; name: string; isActive: boolean } | null;
     mode?: { id: string; name: string; isActive: boolean } | null;
     documents?: InOutRegisterDocument[];
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
@@ -67,7 +81,7 @@ interface InOutRegisterFormProps {
   };
   clients: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
-  staff: { id: string; name: string }[];
+  staff: { id: string; name: string; employeeCode?: string | null }[];
   modes?: { id: string; name: string }[];
   mode: "create" | "edit";
   onClose: () => void;
@@ -108,6 +122,7 @@ function getInitialForm(
       replyDueDate: "",
       inwardType: "",
       receivedByPersonName: "",
+      receivedByStaffId: "",
       parentInwardId: parentInward?.id ?? null,
     };
   }
@@ -128,6 +143,7 @@ function getInitialForm(
     replyDueDate: toInputDate((entry as Record<string, unknown>)?.replyDueDate as Date | null | undefined),
     inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
+    receivedByStaffId: (entry as Record<string, unknown>)?.receivedByStaffId as string ?? "",
     parentInwardId: (entry as Record<string, unknown>)?.parentInwardId as string ?? null,
   };
 }
@@ -153,6 +169,7 @@ export function InOutRegisterForm({
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [receiverPickerOpen, setReceiverPickerOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     documentRefNo?: string;
     actionSuggestedStaffId?: string;
@@ -266,6 +283,7 @@ export function InOutRegisterForm({
       documents: form.documents.length > 0 ? form.documents : undefined,
       inwardType: inwardTypeNow,
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
+      receivedByStaffId: form.direction === "INWARD" ? form.receivedByStaffId || null : null,
       parentInwardId: form.parentInwardId || null,
     };
 
@@ -356,6 +374,16 @@ export function InOutRegisterForm({
     : "Log an inward document with source, CC marking, and action assignment.";
 
   const selectedCcStaff = staff.filter((s) => form.ccStaffIds.includes(s.id));
+  const selectedReceiver = staff.find((s) => s.id === form.receivedByStaffId);
+  const preservedReceiver =
+    form.receivedByStaffId && !selectedReceiver ? entry?.receivedByStaff : null;
+  const receiverTriggerLabel = selectedReceiver
+    ? `${selectedReceiver.name}${selectedReceiver.employeeCode ? ` (${selectedReceiver.employeeCode})` : ""}`
+    : preservedReceiver
+      ? `${preservedReceiver.name} (inactive — preserved)`
+      : !form.receivedByStaffId && form.receivedByPersonName
+        ? `${form.receivedByPersonName} (manual entry)`
+        : null;
   const linkedInward = parentInward || entry?.parentInward;
 
   return (
@@ -633,13 +661,94 @@ export function InOutRegisterForm({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="receivedByPersonName">Received by (person)</Label>
-                    <Input
-                      id="receivedByPersonName"
-                      value={form.receivedByPersonName}
-                      onChange={(e) => updateField("receivedByPersonName", e.target.value)}
-                      placeholder="Name of person who received"
-                    />
+                    <Label htmlFor="receivedByStaffId">Received by (employee)</Label>
+                    {staff.length === 0 ? (
+                      <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
+                        No employees available — add staff in Masters to link
+                        this field. Manual entries on old records stay visible.
+                      </p>
+                    ) : (
+                      <>
+                        <Popover open={receiverPickerOpen} onOpenChange={setReceiverPickerOpen}>
+                          <PopoverTrigger
+                            id="receivedByStaffId"
+                            className="inline-flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-700 hover:bg-zinc-50"
+                          >
+                            <span className={`truncate ${receiverTriggerLabel ? "" : "text-zinc-500"}`}>
+                              {receiverTriggerLabel ?? "Select employee…"}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[90vw] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search employee name or code…" />
+                              <CommandList>
+                                <CommandEmpty>No employee found.</CommandEmpty>
+                                <CommandGroup>
+                                  {form.receivedByStaffId && (
+                                    <CommandItem
+                                      value="__none__"
+                                      onSelect={() => {
+                                        updateField("receivedByStaffId", "");
+                                        setReceiverPickerOpen(false);
+                                      }}
+                                    >
+                                      — (clear)
+                                    </CommandItem>
+                                  )}
+                                  {preservedReceiver && (
+                                    <CommandItem value={preservedReceiver.name} disabled>
+                                      <Check className="mr-2 h-4 w-4 opacity-100" />
+                                      <span className="min-w-0 flex-1 truncate">
+                                        {preservedReceiver.name}{" "}
+                                        <span className="text-xs text-zinc-500">(inactive — preserved)</span>
+                                      </span>
+                                    </CommandItem>
+                                  )}
+                                  {staff.map((s) => (
+                                    <CommandItem
+                                      key={s.id}
+                                      value={`${s.name} ${s.employeeCode ?? ""}`}
+                                      onSelect={() => {
+                                        updateField("receivedByStaffId", s.id);
+                                        setReceiverPickerOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          form.receivedByStaffId === s.id ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm text-zinc-800">
+                                          {s.name}
+                                        </span>
+                                        {s.employeeCode && (
+                                          <span className="block truncate text-xs text-zinc-500">
+                                            {s.employeeCode}
+                                          </span>
+                                        )}
+                                      </span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {!form.receivedByStaffId && form.receivedByPersonName && (
+                          <p className="text-xs text-zinc-500">
+                            Manual entry from before this field was added — preserved.
+                            Pick an employee to link, or leave as is.
+                          </p>
+                        )}
+                        {form.receivedByStaffId && form.receivedByPersonName && (
+                          <p className="text-xs text-zinc-500">
+                            Also recorded manually: {form.receivedByPersonName}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   {form.inwardType === "ACTION_REQUIRED" && (

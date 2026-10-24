@@ -228,6 +228,7 @@ model Staff {
   wipAssignments  WipAssignment[]
   ccMarkings             InOutRegisterCcStaff[]
   actionSuggestedEntries InOutRegister[]        @relation("ActionSuggestedStaff")
+  receivedByEntries      InOutRegister[]        @relation("ReceivedByStaff")
   tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
   tasksAssigned          Task[]                 @relation("TaskAssignedTo")
   taskCoAssignments      TaskCoAssignee[]
@@ -583,6 +584,7 @@ model InOutRegister {
   letterPad              String?
   inwardType             String?
   receivedByPersonName   String?
+  receivedByStaffId      String?
   department             String?
   replyDueDate           DateTime?
   replyDate              DateTime?
@@ -594,6 +596,7 @@ model InOutRegister {
 
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
+  receivedByStaff        Staff?                  @relation("ReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
   mode                   ModeMaster?             @relation(fields: [modeId], references: [id], onDelete: Restrict)
   parentInward           InOutRegister?          @relation("InwardOutwardLink", fields: [parentInwardId], references: [id], onDelete: SetNull)
   replies                InOutRegister[]         @relation("InwardOutwardLink")
@@ -605,6 +608,7 @@ model InOutRegister {
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
+  @@index([receivedByStaffId])
   @@index([modeId])
   @@index([department])
   @@index([replyDueDate])

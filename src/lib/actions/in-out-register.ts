@@ -201,6 +201,18 @@ export async function createInOutRegister(
         throw new Error("Selected mode is inactive and cannot be used for new entries");
       }
     }
+    // "Received by" is a new staff link — only an existing, active
+    // employee may be chosen on create.
+    if (data.receivedByStaffId) {
+      const receiver = await prisma.staff.findUnique({
+        where: { id: data.receivedByStaffId },
+        select: { isActive: true },
+      });
+      if (!receiver) throw new Error("Received-by employee does not exist");
+      if (!receiver.isActive) {
+        throw new Error("Received-by employee is inactive and cannot be used for new entries");
+      }
+    }
     await assertDocumentRefNoAvailable(data.documentRefNo);
     await assertPrivatePathsAttachable(documents ?? [], user.id);
 
@@ -303,6 +315,23 @@ export async function updateInOutRegister(
       if (!mode) throw new Error("Selected mode does not exist");
       if (!mode.isActive) {
         throw new Error("Selected mode is inactive and cannot be used for new entries");
+      }
+    }
+    // Same rule for "Received by": a changed pick must be an existing
+    // active employee; an unchanged saved link is preserved even if the
+    // employee has since been deactivated. Passing null clears the link.
+    if (
+      data.receivedByStaffId !== undefined &&
+      data.receivedByStaffId !== null &&
+      data.receivedByStaffId !== existing.receivedByStaffId
+    ) {
+      const receiver = await prisma.staff.findUnique({
+        where: { id: data.receivedByStaffId },
+        select: { isActive: true },
+      });
+      if (!receiver) throw new Error("Received-by employee does not exist");
+      if (!receiver.isActive) {
+        throw new Error("Received-by employee is inactive and cannot be used for new entries");
       }
     }
     await assertDocumentRefNoAvailable(effectiveRefNo, id);
@@ -442,6 +471,7 @@ export async function getInOutRegisters(
         include: {
           client: true,
           actionSuggestedStaff: true,
+          receivedByStaff: { select: { id: true, name: true, isActive: true } },
           mode: { select: { id: true, name: true, isActive: true } },
           documents: true,
           ccStaff: {
@@ -480,6 +510,7 @@ export async function getInOutRegisterById(
       include: {
         client: true,
         actionSuggestedStaff: true,
+        receivedByStaff: { select: { id: true, name: true, isActive: true } },
         mode: { select: { id: true, name: true, isActive: true } },
         documents: true,
         ccStaff: {

@@ -31,6 +31,7 @@ const inOutRegisterBaseFields = z.object({
   documents: z.array(cleanedString(500)).optional(),
   inwardType: z.enum(LEGACY_INWARD_TYPES).optional().nullable(),
   receivedByPersonName: cleanedString(200).optional().nullable(),
+  receivedByStaffId: z.string().cuid().optional().nullable(),
   department: cleanedString(200).optional().nullable(),
   replyDueDate: z.coerce.date().optional().nullable(),
   parentInwardId: z.string().cuid().optional().nullable(),
