@@ -14,6 +14,8 @@ rsync -avz --delete \
   --exclude='.env' \
   --exclude='.env.local' \
   --exclude='scripts/' \
+  --exclude='private_uploads/' \
+  --exclude='public/uploads/' \
   -e "ssh -o ConnectTimeout=10" \
   ./ "$SERVER:$REMOTE_DIR/"
 

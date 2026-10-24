@@ -20,6 +20,7 @@ import {
 } from "./wrapper";
 import { createInOutRegisterLinkedTasks, deleteLinkedTasks } from "./task-linking";
 import { issueRegisterSerialNo } from "@/lib/register-serial";
+import { INOUT_PRIVATE_PREFIX } from "@/lib/in-out-documents";
 import {
   computeAgeInDaysIST,
   toInputDateIST,
@@ -135,6 +136,46 @@ function buildCcStaffCreateInput(
   return { create: ccStaffIds.map((staffId) => ({ staffId })) };
 }
 
+// A private upload may only be attached by the user who uploaded it —
+// knowing another user's pending filename must not grant it. Paths
+// already linked to a register document may be re-attached normally.
+async function assertPrivatePathsAttachable(paths: string[], userId: string) {
+  const candidates = paths.filter((p) => p.startsWith(INOUT_PRIVATE_PREFIX));
+  if (candidates.length === 0) return;
+  const names = candidates.map((p) => p.slice(INOUT_PRIVATE_PREFIX.length));
+  const [owned, linked] = await Promise.all([
+    prisma.pendingInOutUpload.findMany({
+      where: { storedName: { in: names }, uploadedById: userId },
+      select: { storedName: true },
+    }),
+    prisma.inOutRegisterDocument.findMany({
+      where: { path: { in: candidates } },
+      select: { path: true },
+    }),
+  ]);
+  const allowed = new Set([
+    ...owned.map((o) => INOUT_PRIVATE_PREFIX + o.storedName),
+    ...linked.map((l) => l.path),
+  ]);
+  if (candidates.some((p) => !allowed.has(p))) {
+    throw new Error(
+      "One or more attachments are not available. Re-upload the file and try again."
+    );
+  }
+}
+
+// Once a pending file is linked to a register entry its access rule
+// moves to the document record — drop the pending row (file untouched).
+async function clearConsumedPendingUploads(paths: string[]) {
+  const names = paths
+    .filter((p) => p.startsWith(INOUT_PRIVATE_PREFIX))
+    .map((p) => p.slice(INOUT_PRIVATE_PREFIX.length));
+  if (names.length === 0) return;
+  await prisma.pendingInOutUpload
+    .deleteMany({ where: { storedName: { in: names } } })
+    .catch(() => {});
+}
+
 export async function createInOutRegister(
   input: InOutRegisterCreateInput
 ): Promise<ActionResult<{ id: string }>> {
@@ -161,6 +202,7 @@ export async function createInOutRegister(
       }
     }
     await assertDocumentRefNoAvailable(data.documentRefNo);
+    await assertPrivatePathsAttachable(documents ?? [], user.id);
 
     // Client-supplied serialNo is ignored — serials are server-authoritative,
     // issued from a monotonic per-scope counter inside the same transaction
@@ -179,6 +221,8 @@ export async function createInOutRegister(
         },
       }).catch(documentRefNoTakenMessage);
     });
+
+    await clearConsumedPendingUploads(documents ?? []);
 
     await audit(user.id, "create", "InOutRegister", entry.id, {
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
@@ -289,9 +333,11 @@ export async function updateInOutRegister(
       });
     }
     if (addedPaths.length > 0) {
+      await assertPrivatePathsAttachable(addedPaths, user.id);
       await prisma.inOutRegisterDocument.createMany({
         data: addedPaths.map((path) => ({ inOutRegisterId: id, path })),
       });
+      await clearConsumedPendingUploads(addedPaths);
     }
 
     const keepStaffIds = ccStaffIds ?? [];

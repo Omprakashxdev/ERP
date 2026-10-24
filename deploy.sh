@@ -14,6 +14,8 @@ rsync -avz --delete \
   --exclude 'ERP-Credentials*' \
   --exclude 'ERP-Fixes*' \
   --exclude 'deploy.sh' \
+  --exclude 'private_uploads/' \
+  --exclude 'public/uploads/' \
   -e "ssh -o StrictHostKeyChecking=no" \
   ./ "$REMOTE:$REMOTE_PATH/"
 

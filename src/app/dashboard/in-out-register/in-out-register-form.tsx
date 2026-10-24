@@ -34,9 +34,10 @@ import {
   getNextRegisterRefNo,
   getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock, Eye, Download } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
 import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
+import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import { toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
@@ -151,6 +152,7 @@ export function InOutRegisterForm({
   const [loadingRefNo, setLoadingRefNo] = useState(false);
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     documentRefNo?: string;
     actionSuggestedStaffId?: string;
@@ -771,6 +773,7 @@ export function InOutRegisterForm({
                   id="in-out-register-doc"
                   label="Attach document"
                   value={newDocument}
+                  uploadEndpoint="/api/in-out-documents"
                   onChange={(path) => {
                     if (path) {
                       setForm((prev) => ({
@@ -783,40 +786,84 @@ export function InOutRegisterForm({
                   placeholder="Click browse to attach a document"
                 />
                 {form.documents.length > 0 && (
-                  <div ref={documentListRef} className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-                    {form.documents.map((document, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
-                      >
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-mono text-zinc-500 font-medium shrink-0">
-                            {index + 1}.
-                          </span>
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
-                          <span className="truncate" title={documentDisplayName(document)}>
-                            {documentDisplayName(document)}
-                          </span>
-                          <a
-                            href={withBasePath(document)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-0.5 text-teal-600 hover:text-teal-700 hover:underline shrink-0"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => removeDocument(index)}
+                  <div ref={documentListRef} className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+                    {form.documents.map((document, index) => {
+                      const isPdf = document.toLowerCase().endsWith(".pdf");
+                      const viewUrl = withBasePath(
+                        `/api/in-out-documents?path=${encodeURIComponent(document)}`
+                      );
+                      const downloadUrl = `${viewUrl}&download=1`;
+                      return (
+                        <div
+                          key={index}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 text-xs"
                         >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="font-mono text-zinc-500 font-medium shrink-0">
+                              {index + 1}.
+                            </span>
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            <span
+                              className="truncate text-sm"
+                              title={documentDisplayName(document)}
+                            >
+                              {documentDisplayName(document)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isPdf ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-9 gap-1 px-2.5 text-xs"
+                                onClick={() => setPreviewPath(document)}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View PDF
+                              </Button>
+                            ) : (
+                              <a href={viewUrl} target="_blank" rel="noopener noreferrer">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="min-h-9 gap-1 px-2.5 text-xs"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  View
+                                </Button>
+                              </a>
+                            )}
+                            <a
+                              href={downloadUrl}
+                              download={documentDisplayName(document)}
+                              title="Download document"
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-9 gap-1 px-2.5 text-xs"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download
+                              </Button>
+                            </a>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-9 w-9 p-0"
+                              onClick={() => removeDocument(index)}
+                              title="Remove document"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -846,6 +893,13 @@ export function InOutRegisterForm({
             </Button>
           </div>
         </form>
+        <PdfPreviewDialog
+          documentPath={previewPath}
+          open={previewPath !== null}
+          onOpenChange={(open) => {
+            if (!open) setPreviewPath(null);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

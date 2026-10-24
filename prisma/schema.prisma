@@ -60,6 +60,7 @@ model User {
   notifications Notification[]
   tasksAssignedBy Task[]       @relation("TaskAssignedBy")
   taskAttachments TaskAttachment[]
+  pendingInOutUploads PendingInOutUpload[]
   forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
   reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
 }
@@ -631,6 +632,19 @@ model InOutRegisterDocument {
   inOutRegister   InOutRegister @relation(fields: [inOutRegisterId], references: [id], onDelete: Cascade)
 
   @@index([inOutRegisterId])
+}
+
+// Unsaved In-Out Register uploads — binds a private file to its uploader
+// until the file becomes linked to an InOutRegisterDocument on save.
+model PendingInOutUpload {
+  id           String   @id @default(cuid())
+  storedName   String   @unique
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([uploadedById])
 }
 
 model InOutRegisterCcStaff {
