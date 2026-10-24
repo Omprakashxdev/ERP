@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Loader2, Search, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Search, Upload, Power } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
@@ -59,6 +60,7 @@ export type ExtendedMasterType = MasterType | "employee" | "clients";
 interface MasterItem {
   id: string;
   name?: string;
+  isActive?: boolean;
   referenceNumber?: string;
   url?: string;
   phone?: string;
@@ -80,6 +82,7 @@ interface MasterConfig {
   hasState?: boolean;
   hasMake?: boolean;
   hasContact?: boolean;
+  hasActive?: boolean;
 }
 
 const MASTER_CONFIGS: MasterConfig[] = [
@@ -103,6 +106,7 @@ const MASTER_CONFIGS: MasterConfig[] = [
   { type: "workOrderMaster", label: "Work Order Master", singularLabel: "Work Order", field: "name" },
   { type: "drawingMaster", label: "Drawing Master", singularLabel: "Drawing", field: "name" },
   { type: "contactMaster", label: "Contact Master", singularLabel: "Contact", field: "name", hasContact: true },
+  { type: "modeMaster", label: "Mode Master", singularLabel: "Mode", field: "name", hasActive: true },
 ];
 
 interface MastersManagerProps {
@@ -278,6 +282,24 @@ export function MastersManager({
     loadItems();
   }
 
+  async function handleToggleActive(item: MasterItem) {
+    setSubmitting(true);
+    setError(null);
+    const next = !(item.isActive ?? true);
+    const res = await updateMaster(activeType as MasterType, {
+      id: item.id,
+      isActive: next,
+    });
+    if (!res.success) {
+      setError(res.error ?? "Failed to update status");
+      toast.error(res.error ?? "Failed to update status");
+    } else {
+      toast.success(next ? "Activated" : "Deactivated");
+    }
+    setSubmitting(false);
+    loadItems();
+  }
+
   function getDisplayValue(item: MasterItem): string {
     if (activeConfig.field === "referenceNumber") return item.referenceNumber ?? "";
     return item.name ?? "";
@@ -402,6 +424,7 @@ export function MastersManager({
                     {activeConfig.hasState && <TableHead>State</TableHead>}
                     {activeConfig.hasMake && <TableHead>Make</TableHead>}
                     {activeConfig.hasUrl && <TableHead>URL</TableHead>}
+                    {activeConfig.hasActive && <TableHead>Status</TableHead>}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -424,8 +447,33 @@ export function MastersManager({
                           {item.url ?? "—"}
                         </TableCell>
                       )}
+                      {activeConfig.hasActive && (
+                        <TableCell>
+                          {item.isActive ?? true ? (
+                            <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50/50">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-zinc-200 text-zinc-500 bg-zinc-50">
+                              Inactive
+                            </Badge>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {activeConfig.hasActive && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`h-7 w-7 p-0 ${item.isActive ?? true ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"}`}
+                              onClick={() => handleToggleActive(item)}
+                              disabled={submitting}
+                              title={item.isActive ?? true ? "Deactivate" : "Activate"}
+                            >
+                              <Power className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

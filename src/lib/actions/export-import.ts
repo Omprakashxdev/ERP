@@ -225,6 +225,7 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
         include: {
           client: { select: { name: true, id: true } },
           actionSuggestedStaff: { select: { name: true, id: true } },
+          mode: { select: { name: true, id: true } },
           documents: { select: { path: true } },
           ccStaff: { include: { staff: { select: { name: true } } } },
           parentInward: { select: { documentRefNo: true } },
@@ -262,8 +263,22 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
         include: { region: true, reportingManager: true },
       }) as Promise<Record<string, unknown>[]>;
 
-    default:
+    default: {
+      // Generic masters_* modules fetch straight from their model.
+      const config = MODULE_EXPORT_CONFIGS[module];
+      if (config && module.startsWith("masters_")) {
+        const model = (prisma as any)[config.model];
+        if (!model) throw new Error(`Unknown module: ${module}`);
+        const orderBy =
+          module === "masters_dprMaster" || module === "masters_tsAaMaster"
+            ? { referenceNumber: "asc" as const }
+            : { name: "asc" as const };
+        return model.findMany({ orderBy }) as Promise<
+          Record<string, unknown>[]
+        >;
+      }
       throw new Error(`Unknown module: ${module}`);
+    }
   }
 }
 
@@ -579,7 +594,7 @@ export async function importModule(
             }
             const allowedFields = [
               "direction", "serialNo", "documentDate", "receivedDate", "documentRefNo", "clientId",
-              "details", "actionSuggestedStaffId",
+              "details", "actionSuggestedStaffId", "modeId", "letterPad",
               "inwardType", "receivedByPersonName", "department", "replyDueDate", "parentInwardId"
             ];
             const cleanData: Record<string, unknown> = {};
@@ -616,6 +631,25 @@ export async function importModule(
               throw new Error(
                 `Invalid inward type "${cleanData.inwardType}" — allowed: INFORMATIVE, ACTION_REQUIRED`
               );
+            }
+
+            // A modeId arriving as a raw column (rather than resolved from
+            // the "mode" name column) must still exist and be active.
+            if (cleanData.modeId) {
+              const modeRow = await prisma.modeMaster.findUnique({
+                where: { id: String(cleanData.modeId) },
+                select: { isActive: true },
+              });
+              if (!modeRow) {
+                throw new Error("Selected mode does not exist — check the mode column");
+              }
+              if (!modeRow.isActive) {
+                throw new Error("Selected mode is inactive and cannot be used for new entries");
+              }
+            }
+            if (cleanData.letterPad !== undefined && cleanData.letterPad !== null) {
+              const lp = String(cleanData.letterPad).trim();
+              cleanData.letterPad = lp === "" ? null : lp;
             }
 
             // Outward letters are going outside, so they NEVER have pending reply or deadline
@@ -813,6 +847,28 @@ export async function importModule(
           case "masters_contactMaster":
             await (prisma as any).contactMaster.create({ data: data as never });
             break;
+          case "masters_modeMaster": {
+            // Mode names dedupe on trimmed + case-insensitive comparison,
+            // matching the ModeMaster lower(btrim(name)) unique index.
+            const modeName = data.name ? String(data.name).trim() : "";
+            if (!modeName) throw new Error("Mode name is required");
+            const existing = await prisma.modeMaster.findFirst({
+              where: { name: { equals: modeName, mode: "insensitive" } },
+            });
+            if (existing) {
+              throw new Error(`Mode "${modeName}" already exists. Mode names must be unique.`);
+            }
+            await prisma.modeMaster.create({
+              data: {
+                name: modeName,
+                isActive:
+                  data.isActive === undefined || data.isActive === null
+                    ? true
+                    : Boolean(data.isActive),
+              },
+            });
+            break;
+          }
           default:
             errors.push(`Row ${i + 1}: Import not supported for module ${parsed.module}`);
             continue;
@@ -1100,6 +1156,25 @@ async function resolveRelations(
           });
           return s?.id ?? null;
         },
+      },
+      mode: {
+        masterLabel: "Mode Master",
+        lookup: async (name: string) => {
+          const clean = name.trim();
+          const m = await prisma.modeMaster.findFirst({
+            where: { name: { equals: clean, mode: "insensitive" } },
+            select: { id: true, isActive: true },
+          });
+          if (m && !m.isActive) {
+            throw new Error(
+              `Mode "${clean}" exists but is inactive — activate it in Mode Master or choose a different mode`
+            );
+          }
+          return m?.id ?? null;
+        },
+        // No fuzzy matching for modes — a near-miss name must not silently
+        // map to a different mode; unknown names fail with a row error.
+        fuzzyLookup: async () => null,
       },
     },
     tadaBills: {
@@ -1502,6 +1577,7 @@ async function checkDuplicates(
         masters_workOrderMaster: "workOrderMaster",
         masters_drawingMaster: "drawingMaster",
         masters_contactMaster: "contactMaster",
+        masters_modeMaster: "modeMaster",
       };
       const modelName = masterModelMap[module];
       if (modelName && data.name) {
@@ -1559,7 +1635,7 @@ function getTemplateFields(module: string): string[] {
     dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
     wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
     vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
-    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "inwardType", "receivedByPersonName", "replyDueDate", "parentInwardRefNo"],
+    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "mode", "letterPad", "inwardType", "receivedByPersonName", "replyDueDate", "parentInwardRefNo"],
     tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
     tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],
@@ -1578,6 +1654,7 @@ function getTemplateFields(module: string): string[] {
     masters_workMaster: ["name"],
     masters_dprMaster: ["referenceNumber"],
     masters_tsAaMaster: ["referenceNumber"],
+    masters_modeMaster: ["name", "isActive"],
   };
   return fieldMap[module] ?? [];
 }
@@ -1592,7 +1669,7 @@ function getTemplateSampleRow(module: string): string[] {
     dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
     wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
     vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
-    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
+    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "By Post", "Head Office", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
     tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
     tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],
@@ -1611,6 +1688,7 @@ function getTemplateSampleRow(module: string): string[] {
     masters_workMaster: ["Building Work"],
     masters_dprMaster: ["DPR-2025-001"],
     masters_tsAaMaster: ["TSAA-2025-001"],
+    masters_modeMaster: ["By Post", "Active"],
   };
   return sampleMap[module] ?? [];
 }

@@ -45,6 +45,7 @@ interface InOutRegisterFormProps {
   entry?: InOutRegister & {
     client?: Client;
     actionSuggestedStaff?: Staff | null;
+    mode?: { id: string; name: string; isActive: boolean } | null;
     documents?: InOutRegisterDocument[];
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
     parentInward?: {
@@ -66,6 +67,7 @@ interface InOutRegisterFormProps {
   clients: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string }[];
+  modes?: { id: string; name: string }[];
   mode: "create" | "edit";
   onClose: () => void;
 }
@@ -98,6 +100,8 @@ function getInitialForm(
         : "",
       clientId: parentInward?.clientId ?? clients[0]?.id ?? "",
       actionSuggestedStaffId: "",
+      modeId: "",
+      letterPad: "",
       ccStaffIds: [] as string[],
       documents: [] as string[],
       replyDueDate: "",
@@ -116,6 +120,8 @@ function getInitialForm(
     details: entry.details ?? "",
     clientId: entry.clientId,
     actionSuggestedStaffId: entry.actionSuggestedStaffId ?? "",
+    modeId: entry.modeId ?? "",
+    letterPad: (entry as Record<string, unknown>)?.letterPad as string ?? "",
     ccStaffIds: entry.ccStaff?.map((cs) => cs.staffId) ?? [],
     documents: entry.documents?.map((d) => d.path) ?? [],
     replyDueDate: toInputDate((entry as Record<string, unknown>)?.replyDueDate as Date | null | undefined),
@@ -132,6 +138,7 @@ export function InOutRegisterForm({
   clients,
   departments,
   staff,
+  modes = [],
   mode,
   onClose,
 }: InOutRegisterFormProps) {
@@ -251,6 +258,8 @@ export function InOutRegisterForm({
       details: emptyToNull(form.details),
       clientId: form.clientId,
       actionSuggestedStaffId: form.actionSuggestedStaffId || null,
+      modeId: form.modeId || null,
+      letterPad: emptyToNull(form.letterPad),
       ccStaffIds: form.ccStaffIds.length > 0 ? form.ccStaffIds : undefined,
       documents: form.documents.length > 0 ? form.documents : undefined,
       inwardType: inwardTypeNow,
@@ -526,6 +535,58 @@ export function InOutRegisterForm({
                     ))}
                   </datalist>
                 )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="modeId">Mode</Label>
+                {modes.length === 0 && !form.modeId ? (
+                  <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
+                    No active modes available. Add or activate modes in
+                    Masters &rarr; Mode Master — this field is optional.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.modeId}
+                    onValueChange={(v) => updateField("modeId", v === "__none__" ? "" : (v ?? ""))}
+                  >
+                    <SelectTrigger id="modeId" className="min-h-11 w-full">
+                      <SelectValue placeholder="Select mode">
+                        {(value: string) =>
+                          modes.find((m) => m.id === value)?.name ??
+                          entry?.mode?.name ??
+                          "Select mode"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {form.modeId && (
+                        <SelectItem value="__none__">— (clear)</SelectItem>
+                      )}
+                      {form.modeId && !modes.some((m) => m.id === form.modeId) && (
+                        <SelectItem value={form.modeId} disabled>
+                          {entry?.mode?.name ?? "Previously selected mode"}
+                          {" "}(inactive — preserved)
+                        </SelectItem>
+                      )}
+                      {modes.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="letterPad">Letter pad</Label>
+                <Input
+                  id="letterPad"
+                  value={form.letterPad}
+                  maxLength={200}
+                  onChange={(e) => updateField("letterPad", e.target.value)}
+                  placeholder="e.g. Head Office / Rajkot branch letterhead"
+                />
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">

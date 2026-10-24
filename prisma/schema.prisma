@@ -578,6 +578,8 @@ model InOutRegister {
   details                String?
   clientId               String
   actionSuggestedStaffId String?
+  modeId                 String?
+  letterPad              String?
   inwardType             String?
   receivedByPersonName   String?
   department             String?
@@ -591,6 +593,7 @@ model InOutRegister {
 
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
+  mode                   ModeMaster?             @relation(fields: [modeId], references: [id], onDelete: Restrict)
   parentInward           InOutRegister?          @relation("InwardOutwardLink", fields: [parentInwardId], references: [id], onDelete: SetNull)
   replies                InOutRegister[]         @relation("InwardOutwardLink")
   documents              InOutRegisterDocument[]
@@ -601,6 +604,7 @@ model InOutRegister {
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
+  @@index([modeId])
   @@index([department])
   @@index([replyDueDate])
   @@index([replyDate])
@@ -1302,6 +1306,18 @@ model WorkOrderMaster {
   contractors     Contractor[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model ModeMaster {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inOutRegisters InOutRegister[]
+
+  @@index([name])
 }
 
 model ContactMaster {

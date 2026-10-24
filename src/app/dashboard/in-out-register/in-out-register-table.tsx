@@ -52,6 +52,7 @@ interface InOutRegisterTableProps {
   clients: { id: string; name: string; abbreviation: string | null }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
+  modes?: { id: string; name: string }[];
   canDelete?: boolean;
 }
 
@@ -79,6 +80,7 @@ export function InOutRegisterTable({
   clients,
   departments,
   staff,
+  modes,
   canDelete,
 }: InOutRegisterTableProps) {
   const router = useRouter();
@@ -497,6 +499,7 @@ export function InOutRegisterTable({
           clients={clients}
           departments={departments}
           staff={staff}
+          modes={modes}
           mode="edit"
           onClose={() => setSelectedEntry(null)}
         />
@@ -509,6 +512,7 @@ export function InOutRegisterTable({
           parentInward={replyParentInward ?? undefined}
           departments={departments}
           staff={staff}
+          modes={modes}
           mode="create"
           onClose={() => {
             setCreateEntryOpen(false);

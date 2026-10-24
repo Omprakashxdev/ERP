@@ -150,6 +150,16 @@ export async function createInOutRegister(
     if (!staff) {
       throw new Error("Action suggested to must be an existing staff member");
     }
+    if (data.modeId) {
+      const mode = await prisma.modeMaster.findUnique({
+        where: { id: data.modeId },
+        select: { isActive: true },
+      });
+      if (!mode) throw new Error("Selected mode does not exist");
+      if (!mode.isActive) {
+        throw new Error("Selected mode is inactive and cannot be used for new entries");
+      }
+    }
     await assertDocumentRefNoAvailable(data.documentRefNo);
 
     // Client-supplied serialNo is ignored — serials are server-authoritative,
@@ -237,6 +247,18 @@ export async function updateInOutRegister(
       });
       if (!staff) {
         throw new Error("Action suggested to must be an existing staff member");
+      }
+    }
+    // A newly chosen mode must exist and be active; an unchanged saved
+    // reference (even to a since-deactivated mode) is preserved.
+    if (data.modeId && data.modeId !== existing.modeId) {
+      const mode = await prisma.modeMaster.findUnique({
+        where: { id: data.modeId },
+        select: { isActive: true },
+      });
+      if (!mode) throw new Error("Selected mode does not exist");
+      if (!mode.isActive) {
+        throw new Error("Selected mode is inactive and cannot be used for new entries");
       }
     }
     await assertDocumentRefNoAvailable(effectiveRefNo, id);
@@ -374,6 +396,7 @@ export async function getInOutRegisters(
         include: {
           client: true,
           actionSuggestedStaff: true,
+          mode: { select: { id: true, name: true, isActive: true } },
           documents: true,
           ccStaff: {
             include: { staff: true },
@@ -411,6 +434,7 @@ export async function getInOutRegisterById(
       include: {
         client: true,
         actionSuggestedStaff: true,
+        mode: { select: { id: true, name: true, isActive: true } },
         documents: true,
         ccStaff: {
           include: { staff: true },

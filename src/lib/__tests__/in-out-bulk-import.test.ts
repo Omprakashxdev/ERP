@@ -240,3 +240,118 @@ describe("In-Out Register Bulk Import with Linked Inward/Outward", () => {
     expect(createdRecords[1].replyDueDate).toBeNull();
   });
 });
+
+describe("In-Out Register Bulk Import — Mode + Letter pad", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (vi.spyOn(prisma, "$transaction") as any).mockImplementation(
+      async (fn: any) => fn(prisma)
+    );
+    (vi.spyOn(prisma, "$queryRaw") as any).mockResolvedValue([{ lastSeq: 6 }]);
+    (vi.spyOn(prisma, "$executeRaw") as any).mockResolvedValue(1);
+    vi.spyOn(prisma.client, "findFirst").mockResolvedValue({
+      id: "client-gsphc-id", name: "GSPHC", abbreviation: "GSPHC",
+    } as any);
+    vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({
+      id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001",
+    } as any);
+    (vi.spyOn(prisma.inOutRegister, "findFirst") as any).mockResolvedValue(null);
+  });
+
+  const header =
+    "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,mode,letterPad";
+
+  function collect() {
+    const createdRecords: any[] = [];
+    (vi.spyOn(prisma.inOutRegister, "create") as any).mockImplementation(
+      async (args: any) => {
+        const rec = { id: `id-${createdRecords.length + 1}`, ...args.data };
+        createdRecords.push(rec);
+        return rec;
+      }
+    );
+    return createdRecords;
+  }
+
+  it("resolves an active mode name and persists letter pad incl. Unicode", async () => {
+    const createdRecords = collect();
+    vi.spyOn(prisma.modeMaster, "findFirst").mockResolvedValue({
+      id: "mode-bypost-id", name: "By Post", isActive: true,
+    } as any);
+    vi.spyOn(prisma.modeMaster, "findUnique").mockResolvedValue({
+      id: "mode-bypost-id", isActive: true,
+    } as any);
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        `INWARD,2026-10-01,2026-10-02,INW/MODE/001,Site letter,GSPHC,Eng,Amit Desai,By Post,ગુજરાતી પેડ`,
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0].modeId).toBe("mode-bypost-id");
+    expect(createdRecords[0].letterPad).toBe("ગુજરાતી પેડ");
+  });
+
+  it("rejects an inactive mode name with a row-level error", async () => {
+    collect();
+    vi.spyOn(prisma.modeMaster, "findFirst").mockResolvedValue({
+      id: "mode-fax-id", name: "Fax", isActive: false,
+    } as any);
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "INWARD,2026-10-01,2026-10-02,INW/MODE/002,Site letter,GSPHC,Eng,Amit Desai,Fax,pad",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data!.imported).toBe(0);
+    expect(res.data!.errors.join(" ")).toMatch(/inactive/i);
+  });
+
+  it("rejects an unknown mode name with a row-level error", async () => {
+    collect();
+    vi.spyOn(prisma.modeMaster, "findFirst").mockResolvedValue(null);
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "INWARD,2026-10-01,2026-10-02,INW/MODE/003,Site letter,GSPHC,Eng,Amit Desai,Teleport,pad",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data!.imported).toBe(0);
+    expect(res.data!.errors.join(" ")).toMatch(/Mode Master.*not found|not found/i);
+  });
+
+  it("imports a legacy-style row with no mode and no letter pad", async () => {
+    const createdRecords = collect();
+    const modeSpy = vi.spyOn(prisma.modeMaster, "findFirst").mockResolvedValue(null);
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff",
+        "INWARD,2026-10-01,2026-10-02,INW/MODE/004,Site letter,GSPHC,Eng,Amit Desai",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0].modeId).toBeUndefined();
+    expect(createdRecords[0].letterPad).toBeUndefined();
+    expect(modeSpy).not.toHaveBeenCalled();
+  });
+});

@@ -1,8 +1,9 @@
-import { InOutRegister, Client, Staff, InOutRegisterDocument, InOutRegisterCcStaff } from "@prisma/client";
+import { InOutRegister, Client, Staff, ModeMaster, InOutRegisterDocument, InOutRegisterCcStaff } from "@prisma/client";
 
 export type InOutRegisterListRow = InOutRegister & {
   client: Client;
   actionSuggestedStaff: Staff | null;
+  mode?: Pick<ModeMaster, "id" | "name" | "isActive"> | null;
   documents: InOutRegisterDocument[];
   ccStaff: (InOutRegisterCcStaff & { staff: Staff })[];
   parentInward?: {

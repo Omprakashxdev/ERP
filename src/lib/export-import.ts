@@ -181,7 +181,7 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
       direction: ["INWARD", "OUTWARD"],
     },
     booleanFields: [],
-    relationFields: ["client", "actionSuggestedStaff", "documents", "ccStaff", "parentInward", "replies"],
+    relationFields: ["client", "actionSuggestedStaff", "mode", "documents", "ccStaff", "parentInward", "replies"],
   },
   auditLogs: {
     label: "Audit Logs",
@@ -435,6 +435,17 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     intFields: [],
     enumFields: {},
     relationFields: [],
+  },
+  masters_modeMaster: {
+    label: "Master - Mode Master",
+    model: "modeMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+    booleanFields: ["isActive"],
   },
 };
 

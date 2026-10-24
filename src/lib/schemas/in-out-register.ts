@@ -25,6 +25,8 @@ const inOutRegisterBaseFields = z.object({
   details: cleanedString(500).optional().nullable(),
   clientId: cuid,
   actionSuggestedStaffId: z.string().cuid().optional().nullable(),
+  modeId: z.string().cuid().optional().nullable(),
+  letterPad: cleanedString(200).optional().nullable(),
   ccStaffIds: z.array(cuid).optional(),
   documents: z.array(cleanedString(500)).optional(),
   inwardType: z.enum(LEGACY_INWARD_TYPES).optional().nullable(),
