@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, stat } from "fs/promises";
+import { readFile, realpath, stat } from "fs/promises";
 import path from "path";
 import { auth } from "@/lib/auth";
 import { INOUT_LEGACY_PUBLIC_DIR } from "@/lib/in-out-documents";
@@ -8,7 +8,8 @@ import { INOUT_LEGACY_PUBLIC_DIR } from "@/lib/in-out-documents";
 // started — runtime uploads under public/uploads 404 until restart. This
 // route reads from disk on every request, so files are available the moment
 // they are uploaded. On production, public/uploads is a symlink to the
-// persistent app-root directory, so requests resolve to durable storage.
+// persistent app-root directory; realpath() resolves it (and any nested
+// symlinks) so containment is checked against the real verified storage root.
 const MIME_BY_EXT: Record<string, string> = {
   ".pdf": "application/pdf",
   ".jpg": "image/jpeg",
@@ -30,14 +31,29 @@ export async function GET(
   }
 
   const { path: segments } = await params;
-  const rel = segments.join("/");
-  const root = path.resolve(INOUT_LEGACY_PUBLIC_DIR);
-  const abs = path.resolve(root, rel);
+  const root = await realpath(INOUT_LEGACY_PUBLIC_DIR).catch(() => null);
+  if (!root) {
+    return NextResponse.json(
+      { error: "This document could not be found on the server." },
+      { status: 404 }
+    );
+  }
+
+  // Lexical containment check first, then a realpath check so nested
+  // symlinks cannot escape the upload root into private_uploads or elsewhere.
+  const abs = path.resolve(root, segments.join("/"));
   if (!abs.startsWith(root + path.sep)) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
+  const real = await realpath(abs).catch(() => null);
+  if (!real || !real.startsWith(root + path.sep)) {
+    return NextResponse.json(
+      { error: "This document could not be found on the server." },
+      { status: 404 }
+    );
+  }
 
-  const info = await stat(abs).catch(() => null);
+  const info = await stat(real).catch(() => null);
   if (!info?.isFile()) {
     return NextResponse.json(
       { error: "This document could not be found on the server." },
@@ -45,9 +61,9 @@ export async function GET(
     );
   }
 
-  const bytes = await readFile(abs);
-  const ext = path.extname(abs).toLowerCase();
-  const safeName = path.basename(abs).replace(/"/g, "_");
+  const bytes = await readFile(real);
+  const ext = path.extname(real).toLowerCase();
+  const safeName = path.basename(real).replace(/"/g, "_");
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": MIME_BY_EXT[ext] ?? "application/octet-stream",

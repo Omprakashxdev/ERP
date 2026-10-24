@@ -225,6 +225,13 @@ remote_sh '
       return 0
     fi
     if [ -d "$SRC" ]; then
+      # Reject unsafe filesystem entries (fifos, sockets, devices) — nothing
+      # is deleted on abort, both locations are preserved untouched.
+      UNSAFE=$(find "$SRC" ! -type f ! -type l ! -type d | head -5)
+      if [ -n "$UNSAFE" ]; then
+        echo "FAIL: unsafe filesystem entries in $SRC — refusing to merge:$UNSAFE" >&2
+        exit 1
+      fi
       CONFLICTS=""
       while IFS= read -r -d "" f; do
         rel="${f#$SRC/}"
@@ -239,13 +246,25 @@ remote_sh '
         exit 1
       fi
       cp -a "$SRC/." "$DST/"
-      MISSING=""
+      # Post-copy proof, not presence alone: every regular file must match
+      # by SHA-256; every entry must exist (dangling symlinks included).
+      MISSING=""; MISMATCH=""
       while IFS= read -r -d "" f; do
         rel="${f#$SRC/}"
-        [ -e "$DST/$rel" ] || [ -L "$DST/$rel" ] || MISSING="$MISSING $rel"
+        if [ -f "$f" ]; then
+          if [ -f "$DST/$rel" ]; then
+            SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
+            DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
+            [ "$SRC_SUM" = "$DST_SUM" ] || MISMATCH="$MISMATCH $rel"
+          else
+            MISSING="$MISSING $rel"
+          fi
+        else
+          [ -e "$DST/$rel" ] || [ -L "$DST/$rel" ] || MISSING="$MISSING $rel"
+        fi
       done < <(find "$SRC" \( -type f -o -type l \) -print0)
-      if [ -n "$MISSING" ]; then
-        echo "FAIL: files not present in persistent storage after copy:$MISSING" >&2
+      if [ -n "$MISSING" ] || [ -n "$MISMATCH" ]; then
+        echo "FAIL: post-copy verification — missing:$MISSING sha256-mismatch:$MISMATCH (source dir left intact)" >&2
         exit 1
       fi
       rm -rf "$SRC"
@@ -255,6 +274,19 @@ remote_sh '
   }
   link_persist "'$DEPLOY_DIR'/.next/standalone/private_uploads" "'$DEPLOY_DIR'/private_uploads"
   link_persist "'$DEPLOY_DIR'/.next/standalone/public/uploads" "'$DEPLOY_DIR'/public/uploads"
+  # Static serving would follow a symlink left INSIDE the persistent upload
+  # dir out of the storage root, bypassing the realpath guard in the
+  # /uploads route — refuse to deploy if any link escapes its own root.
+  for root in "'$DEPLOY_DIR'/public/uploads" "'$DEPLOY_DIR'/private_uploads"; do
+    root="$(realpath "$root")"
+    while IFS= read -r -d "" l; do
+      tgt="$(realpath "$l" 2>/dev/null || echo ESCAPE)"
+      case "$tgt" in "$root"/*|"$root") ;; *)
+        echo "FAIL: symlink escapes storage root or is dangling: $l -> $tgt" >&2; exit 1;;
+      esac
+    done < <(find "$root" -type l -print0)
+  done
+  echo "  no escaping symlinks inside persistent storage"
 '
 remote "pm2 restart $PM2_APP --update-env"
 
