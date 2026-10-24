@@ -151,8 +151,10 @@ fi
 # ---------------------------------------------------------------------------
 step "PHASE B — verified backups (DB + uploads + checksums, pulled off-server)"
 # ---------------------------------------------------------------------------
-remote "mkdir -p ~/${DATE_TAG}_backup && chown postgres:postgres ~/${DATE_TAG}_backup"
-remote "sudo -u postgres pg_dump -Fc -d $DB_NAME -f ~/${DATE_TAG}_backup/db.dump && sha256sum ~/${DATE_TAG}_backup/db.dump"
+remote "mkdir -p ~/${DATE_TAG}_backup"
+remote "sudo -u postgres pg_dump -Fc -d $DB_NAME -f /tmp/${DATE_TAG}_db.dump && \
+  mv /tmp/${DATE_TAG}_db.dump ~/${DATE_TAG}_backup/db.dump && \
+  sha256sum ~/${DATE_TAG}_backup/db.dump"
 # Upload files may live under EITHER the app root (persistent target) or the
 # standalone build dir (process.cwd() hazard) — archive every location that
 # exists; missing dirs must not abort the backup.
@@ -176,7 +178,7 @@ RSYNC_EXCLUDES=(
   --exclude 'private_uploads/' --exclude 'public/uploads/'
   --exclude 'deploy/backups/' --exclude 'backups/' --exclude 'qa-shots/'
 )
-run rsync -avz --delete "${RSYNC_EXCLUDES[@]}" ./ "$REMOTE:$DEPLOY_DIR/"
+run rsync -rlptvz --delete --no-owner --no-group "${RSYNC_EXCLUDES[@]}" ./ "$REMOTE:$DEPLOY_DIR/"
 echo "  upload dirs, env files and build output are excluded — rsync --delete cannot remove them"
 
 # ---------------------------------------------------------------------------
@@ -184,7 +186,7 @@ step "PHASE D — migrations via prisma migrate deploy ONLY"
 # ---------------------------------------------------------------------------
 remote "cd $DEPLOY_DIR && npx prisma migrate deploy"
 IDX_LIST="$(printf "'%s'," "${EXPECTED_INDEXES[@]}")"; IDX_LIST="${IDX_LIST%,}"
-remote_sh "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT indexname FROM pg_indexes WHERE indexname IN ($IDX_LIST)'"
+remote_sh "sudo -u postgres psql -d $DB_NAME -Atc \"SELECT indexname FROM pg_indexes WHERE indexname IN ($IDX_LIST)\""
 if [[ $EXECUTE -eq 1 ]]; then
   IDX=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc \"SELECT count(*) FROM pg_indexes WHERE indexname IN ($IDX_LIST)\"")
   [[ "$IDX" == "3" ]] || fail "expected 3 release indexes, found $IDX — functional unique index missing; investigate before restart"
