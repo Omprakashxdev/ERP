@@ -228,8 +228,10 @@ remote_sh '
       CONFLICTS=""
       while IFS= read -r -d "" f; do
         rel="${f#$SRC/}"
-        if [ -f "$DST/$rel" ]; then
-          cmp -s "$f" "$DST/$rel" || CONFLICTS="$CONFLICTS $rel"
+        if [ -f "$f" ] && [ -f "$DST/$rel" ]; then
+          SRC_SUM="$(sha256sum "$f" | cut -d" " -f1)"
+          DST_SUM="$(sha256sum "$DST/$rel" | cut -d" " -f1)"
+          [ "$SRC_SUM" = "$DST_SUM" ] || CONFLICTS="$CONFLICTS $rel"
         fi
       done < <(find "$SRC" \( -type f -o -type l \) -print0)
       if [ -n "$CONFLICTS" ]; then
