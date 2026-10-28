@@ -75,6 +75,8 @@ import {
   GET as photosGet,
 } from "@/app/api/mobile/v1/photos/route";
 import { GET as photoContentGet } from "@/app/api/mobile/v1/photos/[photoId]/content/route";
+import { GET as siteCoverGet } from "@/app/api/mobile/v1/sites/[siteId]/cover/route";
+import { writePhotoFile } from "@/lib/progress-photos";
 
 const RUN = process.env.RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
@@ -1004,6 +1006,43 @@ RUN("Brick 4 — mobile backend", () => {
       p({ photoId: lb.items[0].id })
     );
     expect(denied.status).toBe(404);
+  });
+
+  it("site cover: assigned user reads bytes, others denied", async () => {
+    const key = `2026/01/${crypto.randomUUID()}.png`;
+    await writePhotoFile(key, PNG_1PX);
+    await prisma.progressSite.update({
+      where: { id: site.id },
+      data: { coverImagePath: key },
+    });
+    try {
+      const ok = await siteCoverGet(
+        req(`/api/mobile/v1/sites/${site.id}/cover`, { token: fieldToken }),
+        p({ siteId: site.id })
+      );
+      expect(ok.status).toBe(200);
+      expect(ok.headers.get("content-type")).toBe("image/png");
+
+      const denied = await siteCoverGet(
+        req(`/api/mobile/v1/sites/${site.id}/cover`, {
+          token: unassignedToken,
+        }),
+        p({ siteId: site.id })
+      );
+      expect(denied.status).toBe(404);
+
+      const anon = await siteCoverGet(
+        req(`/api/mobile/v1/sites/${site.id}/cover`),
+        p({ siteId: site.id })
+      );
+      expect(anon.status).toBe(401);
+    } finally {
+      await prisma.progressSite.update({
+        where: { id: site.id },
+        data: { coverImagePath: null },
+      });
+      await deletePhotoFile(key);
+    }
   });
 
   /* ─── Brick 5D: photo evidence integrity ─── */
