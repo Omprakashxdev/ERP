@@ -16,6 +16,7 @@ import {
   Users,
   Database,
   UserCog,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -126,6 +127,23 @@ export const navGroups: NavGroup[] = [
         href: "/dashboard/tasks",
         icon: CheckSquare,
         description: "Team assignments",
+      },
+    ],
+  },
+  {
+    label: "Progress App",
+    items: [
+      {
+        label: "Site Management",
+        href: "/dashboard/progress-app",
+        icon: Building2,
+        description: "Construction site master",
+      },
+      {
+        label: "Checklist Templates",
+        href: "/dashboard/progress-app/templates",
+        icon: CheckSquare,
+        description: "Activity checklists for rooms",
       },
     ],
   },

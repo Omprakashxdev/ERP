@@ -31,6 +31,7 @@ const modules = [
   { key: "notifications", label: "Notifications" },
   { key: "auditLog", label: "Audit Log" },
   { key: "userManagement", label: "User Management" },
+  { key: "progressApp", label: "Progress App" },
 ];
 
 const roles = ["ADMIN", "MANAGER", "STAFF", "AUDITOR"] as const;
