@@ -172,7 +172,13 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
       expect(at(1, 2027)).toBe(1.6);
       expect(at(12, 2027)).toBe(1.6);
       expect(at(1, 2028)).toBe(0);
-      expect(data.missingExpenseConfig).toEqual([
+      // scoped to this file's "MR " fixtures — the shared disposable DB
+      // also holds projects from other test files
+      expect(
+        data.missingExpenseConfig.filter((m: any) =>
+          m.projectName.startsWith("MR ")
+        )
+      ).toEqual([
         {
           projectName: "MR Legacy",
           missing: ["Start month", "Target Time Limit (In Month)"],
@@ -603,9 +609,11 @@ async function alloc(fundFlowId: string, month: number, year: number, income: st
       // missing timing (PW Legacy) makes the run provisional — a project
       // with no fund flow record contributes no expense and is not flagged
       // (it has no Staff Exp. to schedule)
-      expect(r.missingExpenseConfig.map((m: any) => m.projectName)).toEqual(
-        ["PW Legacy"]
-      );
+      expect(
+        r.missingExpenseConfig
+          .map((m: any) => m.projectName)
+          .filter((n: string) => n.startsWith("PW "))
+      ).toEqual(["PW Legacy"]);
       expect(r.closingProvisional).toBe(true);
       expect(r.months.every((m: any) => m.cumulativeProvisional)).toBe(true);
       // ambiguous Nov record excluded but visibly counted, not fabricated
