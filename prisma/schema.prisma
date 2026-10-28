@@ -63,6 +63,17 @@ model User {
   pendingInOutUploads PendingInOutUpload[]
   forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
   reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
+  progressSitesCreated ProgressSite[]
+  progressActivityTemplates ProgressActivityTemplate[]
+  progressRoomChecklistsAssigned ProgressRoomChecklist[]
+  progressRoomActivitiesUpdated ProgressRoomActivity[]
+  progressActivityHistory ProgressActivityHistory[]
+  progressSiteAssignments ProgressSiteAssignment[] @relation("SiteAssignmentUser")
+  progressSiteAssignmentsGranted ProgressSiteAssignment[] @relation("SiteAssignmentsGranted")
+  progressSiteAssignmentsRevoked ProgressSiteAssignment[] @relation("SiteAssignmentsRevoked")
+  progressSiteAssignmentEvents ProgressSiteAssignmentEvent[]
+  mobileRefreshTokens MobileRefreshToken[]
+  progressPhotos ProgressPhoto[]
 }
 
 model AuditLog {
@@ -704,6 +715,7 @@ model Project {
   dueBills    DueBill[]
   wip         WorkInProgress?
   tasks       Task[]          @relation("TaskProject")
+  progressSites ProgressSite[]
 
   @@unique([clientId, name])
   @@index([regionId])
@@ -1459,4 +1471,366 @@ model ForwardRecord {
   @@index([entityType, entityId])
   @@index([toStaffId])
   @@index([status])
+}
+
+// Progress App module — ERP-controlled site master for construction
+// progress reporting (foundation for the Android app hierarchy:
+// ProgressSite → ProgressWing → ProgressFloor → ProgressFlat →
+// ProgressRoom → ProgressRoomActivity).
+
+enum ProgressSiteStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+model ProgressSite {
+  id             String             @id @default(cuid())
+  siteCode       String             @unique
+  siteName       String
+  description    String?
+  address        String?
+  city           String?
+  state          String?
+  latitude       Float?
+  longitude      Float?
+  locationNotes  String?
+  status         ProgressSiteStatus @default(PLANNED)
+  coverImagePath String?
+  projectId      String?
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy User     @relation(fields: [createdById], references: [id])
+  wings     ProgressWing[]
+
+  assignments ProgressSiteAssignment[]
+  photos      ProgressPhoto[]
+
+  @@index([status])
+  @@index([siteName])
+  @@index([projectId])
+  @@map("ProgressSite")
+}
+
+// Dynamic building hierarchy — every level is ERP-managed, counts and
+// naming are fully data-driven (no hardcoded structures).
+
+model ProgressWing {
+  id           String   @id @default(cuid())
+  siteId       String
+  code         String
+  name         String
+  description  String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  site   ProgressSite    @relation(fields: [siteId], references: [id])
+  floors ProgressFloor[]
+
+  @@unique([siteId, code])
+  @@index([siteId])
+  @@map("ProgressWing")
+}
+
+model ProgressFloor {
+  id              String   @id @default(cuid())
+  wingId          String
+  floorIdentifier String
+  displayName     String?
+  displayOrder    Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  wing  ProgressWing   @relation(fields: [wingId], references: [id])
+  flats ProgressFlat[]
+
+  @@unique([wingId, floorIdentifier])
+  @@index([wingId])
+  @@map("ProgressFloor")
+}
+
+model ProgressFlat {
+  id           String   @id @default(cuid())
+  floorId      String
+  flatNumber   String
+  flatType     String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  floor ProgressFloor  @relation(fields: [floorId], references: [id])
+  rooms ProgressRoom[]
+
+  photos ProgressPhoto[]
+
+  @@unique([floorId, flatNumber])
+  @@index([floorId])
+  @@map("ProgressFlat")
+}
+
+model ProgressRoom {
+  id           String   @id @default(cuid())
+  flatId       String
+  roomName     String
+  roomType     String? // free text — ERP-configurable, not a hardcoded enum
+  displayOrder Int      @default(0)
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  flat ProgressFlat @relation(fields: [flatId], references: [id])
+
+  checklists ProgressRoomChecklist[]
+  photos     ProgressPhoto[]
+
+  @@unique([flatId, roomName])
+  @@index([flatId])
+  @@map("ProgressRoom")
+}
+
+enum ProgressActivityStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+}
+
+model ProgressActivityTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  version     Int      @default(1) // bumped on item edits — snapshot records it
+  isActive    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy  User                           @relation(fields: [createdById], references: [id])
+  items      ProgressActivityTemplateItem[]
+  checklists ProgressRoomChecklist[]
+
+  @@index([isActive])
+  @@index([name])
+  @@map("ProgressActivityTemplate")
+}
+
+model ProgressActivityTemplateItem {
+  id           String   @id @default(cuid())
+  templateId   String
+  activityName String
+  description  String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  template           ProgressActivityTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  snapshotActivities ProgressRoomActivity[]
+
+  @@index([templateId])
+  @@map("ProgressActivityTemplateItem")
+}
+
+model ProgressRoomChecklist {
+  id              String   @id @default(cuid())
+  roomId          String
+  templateId      String
+  templateVersion Int // template.version captured at assignment time
+  assignedById    String
+  assignedAt      DateTime @default(now())
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  room       ProgressRoom             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  template   ProgressActivityTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  assignedBy User                     @relation(fields: [assignedById], references: [id])
+  activities ProgressRoomActivity[]
+
+  @@index([roomId])
+  @@index([templateId])
+  @@map("ProgressRoomChecklist")
+}
+
+model ProgressRoomActivity {
+  id                   String                 @id @default(cuid())
+  roomChecklistId      String
+  sourceTemplateItemId String?
+  activityNameSnapshot String
+  descriptionSnapshot  String?
+  displayOrder         Int                    @default(0)
+  status               ProgressActivityStatus @default(NOT_STARTED)
+  revision             Int                    @default(0) // optimistic concurrency token
+  updatedById          String?
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  roomChecklist      ProgressRoomChecklist         @relation(fields: [roomChecklistId], references: [id], onDelete: Restrict)
+  sourceTemplateItem ProgressActivityTemplateItem? @relation(fields: [sourceTemplateItemId], references: [id], onDelete: SetNull)
+  updatedBy          User?                         @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  history            ProgressActivityHistory[]
+  photos             ProgressPhoto[]
+
+  @@index([roomChecklistId])
+  @@index([status])
+  @@map("ProgressRoomActivity")
+}
+
+model ProgressActivityHistory {
+  id             String                 @id @default(cuid())
+  roomActivityId String
+  eventId        String                 @unique // idempotency key
+  previousStatus ProgressActivityStatus
+  newStatus      ProgressActivityStatus
+  changedById    String
+  notes          String?
+  createdAt      DateTime               @default(now())
+
+  roomActivity ProgressRoomActivity @relation(fields: [roomActivityId], references: [id], onDelete: Restrict)
+  changedBy    User                 @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([roomActivityId])
+  @@map("ProgressActivityHistory")
+}
+
+/* ────────────────────────── Brick 4: mobile backend ────────────────────────
+   Site-staff assignments, mobile auth sessions and progress photo evidence.
+   All historical rows are preserved — lifecycle is soft (isActive/deletedAt/
+   revokedAt), and every FK into progress evidence uses Restrict.          */
+
+// Which ERP users may see/update a site's progress through the mobile API.
+// View and update scopes are explicit per-assignment flags — mobile writes
+// are never implied by the ERP role alone.
+model ProgressSiteAssignment {
+  id              String    @id @default(cuid())
+  siteId          String
+  userId          String
+  canView         Boolean   @default(true)
+  canUpdate       Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  assignedById    String
+  assignedAt      DateTime  @default(now())
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  site          ProgressSite                  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  user          User                          @relation("SiteAssignmentUser", fields: [userId], references: [id], onDelete: Restrict)
+  assignedBy    User                          @relation("SiteAssignmentsGranted", fields: [assignedById], references: [id])
+  deactivatedBy User?                         @relation("SiteAssignmentsRevoked", fields: [deactivatedById], references: [id])
+  events        ProgressSiteAssignmentEvent[]
+
+  @@unique([siteId, userId])
+  @@index([userId])
+  @@index([siteId])
+  @@index([isActive])
+  @@map("ProgressSiteAssignment")
+}
+
+enum ProgressSiteAssignmentEventType {
+  GRANTED
+  SCOPE_UPDATED
+  REVOKED
+  REACTIVATED
+}
+
+// Append-only audit trail of every assignment change — reassignment cycles
+// stay fully traceable instead of collapsing into one row.
+model ProgressSiteAssignmentEvent {
+  id           String                           @id @default(cuid())
+  assignmentId String
+  type         ProgressSiteAssignmentEventType
+  canView      Boolean
+  canUpdate    Boolean
+  changedById  String
+  createdAt    DateTime                         @default(now())
+
+  assignment ProgressSiteAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  changedBy  User                   @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([assignmentId])
+  @@index([changedById])
+  @@map("ProgressSiteAssignmentEvent")
+}
+
+// Rotating mobile refresh tokens. The raw token is never stored — only a
+// SHA-256 hash. All tokens minted from one login share familyId, so replay
+// of a revoked token can revoke the whole family (refresh-rotation reuse
+// detection). Short-lived JWT access tokens are stateless.
+model MobileRefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  familyId     String
+  tokenHash    String    @unique
+  deviceLabel  String?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokedReason String?
+  replacedById String?
+  lastUsedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("MobileRefreshToken")
+}
+
+enum ProgressPhotoTargetType {
+  SITE
+  FLAT
+  ROOM
+  ACTIVITY
+}
+
+// Construction photo evidence. Hierarchy columns are resolved server-side
+// from the declared target — the client-supplied target id is never trusted
+// for ancestry. siteId is always populated so assignment checks are a single
+// indexed lookup. storageKey is a server-generated random relative path —
+// original filesystem locations and filenames are never exposed.
+model ProgressPhoto {
+  id               String                   @id @default(cuid())
+  siteId           String
+  flatId           String?
+  roomId           String?
+  roomActivityId   String?
+  targetType       ProgressPhotoTargetType
+  storageKey       String                   @unique
+  originalFilename String
+  mimeType         String
+  fileSize         Int
+  contentHash      String // sha256 of stored bytes — dedupe + integrity
+  clientEventId    String?                  @unique // client upload idempotency key
+  caption          String?
+  uploadedById     String
+  uploadedAt       DateTime                 @default(now())
+  deletedAt        DateTime? // soft deletion preserves evidence trail
+  createdAt        DateTime                 @default(now())
+
+  site         ProgressSite          @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  flat         ProgressFlat?         @relation(fields: [flatId], references: [id], onDelete: Restrict)
+  room         ProgressRoom?         @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  roomActivity ProgressRoomActivity? @relation(fields: [roomActivityId], references: [id], onDelete: Restrict)
+  uploadedBy   User                  @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([siteId])
+  @@index([flatId])
+  @@index([roomId])
+  @@index([roomActivityId])
+  @@index([contentHash])
+  @@index([uploadedById])
+  @@map("ProgressPhoto")
 }
