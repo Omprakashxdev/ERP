@@ -35,6 +35,7 @@ import {
   Plus,
   Archive,
   Loader2,
+  Layers,
 } from "lucide-react";
 
 interface SiteRow {
@@ -204,9 +205,23 @@ export function SitesTable({
                     <TableCell className="whitespace-nowrap font-medium">
                       <Link
                         href={`/dashboard/progress-app/sites/${site.id}`}
-                        className="text-zinc-900 hover:text-zinc-600 hover:underline"
+                        className="inline-flex items-center gap-2.5 text-zinc-900 hover:text-zinc-600"
                       >
-                        {site.siteName}
+                        {site.coverImagePath ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/api/site-covers/${site.id}`}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-md border border-zinc-200 object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-zinc-100">
+                            <Building2 className="h-4 w-4 text-zinc-400" />
+                          </span>
+                        )}
+                        <span className="hover:underline">
+                          {site.siteName}
+                        </span>
                       </Link>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -238,6 +253,18 @@ export function SitesTable({
                             title="View site"
                           >
                             <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                        <Link
+                          href={`/dashboard/progress-app/sites/${site.id}#site-structure`}
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5"
+                            title="Manage Site Structure"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
                         {canManage && (

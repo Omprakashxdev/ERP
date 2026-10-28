@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProgressSiteStatus } from "@prisma/client";
 import {
@@ -24,8 +24,10 @@ import {
 import {
   createProgressSite,
   updateProgressSite,
+  uploadSiteCover,
+  removeSiteCover,
 } from "@/lib/actions/progress-site";
-import { Loader2 } from "lucide-react";
+import { Loader2, Building2, ImagePlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
@@ -33,6 +35,7 @@ interface SiteFormSite {
   id: string;
   siteCode: string;
   siteName: string;
+  coverImagePath?: string | null;
   description?: string | null;
   address?: string | null;
   city?: string | null;
@@ -86,6 +89,42 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
   const [form, setForm] = useState(() => getInitialForm(site));
   const [submitting, setSubmitting] = useState(false);
   const { error, setError, askAi, askingAi, aiResponse } = useErrorHandler();
+  // Cover: staged file + preview; applied on save. coverRemoved is also
+  // staged — it deletes the stored cover only once the form is saved.
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverRemoved, setCoverRemoved] = useState(false);
+  const [coverRemoveConfirm, setCoverRemoveConfirm] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const hasSavedCover = isEdit && !!site?.coverImagePath;
+
+  function pickCover(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Cover image must be a JPEG, PNG or WebP file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Cover image must be 5 MB or smaller.");
+      return;
+    }
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+    setCoverRemoved(false);
+    setError(null);
+  }
+
+  function stageCoverRemoval() {
+    setCoverRemoveConfirm(false);
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview(null);
+    setCoverRemoved(true);
+  }
 
   function updateField<K extends keyof typeof form>(
     key: K,
@@ -118,6 +157,7 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    let savedSiteId: string | null = null;
 
     try {
       const payload = buildPayload();
@@ -134,6 +174,7 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
         toast.error(result.error ?? "Failed to save site.");
         return;
       }
+      savedSiteId = isEdit ? site!.id : result.data!.id;
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "An unexpected error occurred.";
@@ -144,11 +185,34 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
       setSubmitting(false);
     }
 
-    toast.success(
-      mode === "create"
-        ? "Site created successfully"
-        : "Site updated successfully"
-    );
+    // Apply staged cover changes now that the site exists. A cover failure
+    // must not undo the saved site — surface it and keep the saved record.
+    let coverError: string | null = null;
+    if (coverRemoved && hasSavedCover) {
+      const res = await removeSiteCover(savedSiteId);
+      if (!res.success) coverError = res.error ?? "Could not remove cover.";
+    }
+    if (!coverRemoved && coverFile) {
+      const fd = new FormData();
+      fd.set("file", coverFile);
+      const res = await uploadSiteCover(savedSiteId, fd);
+      if (!res.success) coverError = res.error ?? "Could not upload cover.";
+    }
+
+    if (coverError) {
+      toast.warning(`Site saved — cover change failed: ${coverError}`);
+    } else {
+      toast.success(
+        mode === "create"
+          ? "Site created successfully"
+          : "Site updated successfully"
+      );
+    }
+    if (mode === "create") {
+      // Land the administrator on the site's setup page so building
+      // structure can be configured immediately.
+      router.push(`/dashboard/progress-app/sites/${savedSiteId}`);
+    }
     router.refresh();
     onClose();
   }
@@ -334,6 +398,71 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
                   placeholder="Landmark, directions, or geo-notes for site staff"
                 />
               </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Site cover image</Label>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-24 w-32 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+                    {coverPreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={coverPreview}
+                        alt="New cover preview"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : hasSavedCover && !coverRemoved ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`/api/site-covers/${site!.id}`}
+                        alt={`${site?.siteName} cover`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Building2 className="h-8 w-8 text-zinc-300" />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      ref={coverInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={pickCover}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => coverInputRef.current?.click()}
+                    >
+                      <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                      {coverPreview || hasSavedCover
+                        ? "Replace image"
+                        : "Choose image"}
+                    </Button>
+                    {(coverPreview || (hasSavedCover && !coverRemoved)) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => setCoverRemoveConfirm(true)}
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Remove cover
+                      </Button>
+                    )}
+                    {coverRemoved && hasSavedCover && (
+                      <p className="text-xs text-amber-600">
+                        The saved cover will be removed when you save.
+                      </p>
+                    )}
+                    <p className="text-[11px] text-zinc-400">
+                      JPEG, PNG or WebP, up to 5 MB.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -353,6 +482,33 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
           </div>
         </form>
       </DialogContent>
+
+      <Dialog
+        open={coverRemoveConfirm}
+        onOpenChange={setCoverRemoveConfirm}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove site cover</DialogTitle>
+            <DialogDescription>
+              Remove the cover image for <strong>{site?.siteName}</strong>?
+              The stored file is deleted when you save the site. This does
+              not affect site progress data or photos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCoverRemoveConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={stageCoverRemoval}>
+              Remove cover
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

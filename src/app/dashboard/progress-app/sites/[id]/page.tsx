@@ -6,6 +6,8 @@ import { hasPermission } from "@/lib/authz";
 import {
   getProgressSiteById,
   getProgressAppProjects,
+  getSiteSetupCounts,
+  SiteSetupCounts,
 } from "@/lib/actions/progress-site";
 import { getProgressWings } from "@/lib/actions/progress-hierarchy";
 import {
@@ -22,8 +24,9 @@ import { serialize } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, MapPin, ArrowLeft } from "lucide-react";
+import { Building2, MapPin, ArrowLeft, Layers } from "lucide-react";
 import { SiteDetailActions } from "./site-detail-actions";
+import { SiteSetupCard } from "./site-setup-card";
 import { HierarchyChildren } from "../../hierarchy-children";
 import { ProgressSummaryCard } from "../../progress-summary-card";
 import { RollupLike } from "../../progress-bar";
@@ -91,6 +94,7 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
 
   const [
     siteResult,
+    setupResult,
     projectsResult,
     wingsResult,
     progressResult,
@@ -101,6 +105,7 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
     photosResult,
   ] = await Promise.all([
     getProgressSiteById(id),
+    getSiteSetupCounts(id),
     canManage ? getProgressAppProjects() : Promise.resolve(null),
     getProgressWings(id),
     getScopeProgress({ siteId: id }),
@@ -138,6 +143,9 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
   const projects =
     projectsResult && projectsResult.success ? (projectsResult.data ?? []) : [];
   const wings = wingsResult.success ? (wingsResult.data ?? []) : [];
+  const setupCounts = (
+    setupResult.success ? setupResult.data : null
+  ) as SiteSetupCounts | null;
   const rollup = (
     progressResult.success ? progressResult.data : null
   ) as RollupLike | null;
@@ -159,9 +167,18 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-sm">
-            <Building2 className="h-5 w-5" />
-          </div>
+          {site.coverImagePath ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/site-covers/${site.id}`}
+              alt={`${site.siteName} cover`}
+              className="h-14 w-14 shrink-0 rounded-lg border border-zinc-200 object-cover shadow-sm"
+            />
+          ) : (
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-sm">
+              <Building2 className="h-6 w-6" />
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
@@ -179,13 +196,29 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
             </p>
           </div>
         </div>
-        {canManage && (
-          <SiteDetailActions
-            site={serialize(site) as never}
-            projects={serialize(projects) as never}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <Link href="#site-structure">
+            <Button variant="outline" size="sm">
+              <Layers className="mr-1.5 h-3.5 w-3.5" />
+              Manage Site Structure
+            </Button>
+          </Link>
+          {canManage && (
+            <SiteDetailActions
+              site={serialize(site) as never}
+              projects={serialize(projects) as never}
+            />
+          )}
+        </div>
       </div>
+
+      {setupCounts && (
+        <SiteSetupCard
+          siteId={site.id}
+          counts={setupCounts}
+          canManage={canManage}
+        />
+      )}
 
       {site.description && (
         <Card className="shadow-sm">
@@ -245,15 +278,18 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
 
       {rollup && <ProgressSummaryCard title="Site progress" rollup={rollup} />}
 
-      <HierarchyChildren
-        kind="wing"
-        parentId={site.id}
-        rows={serialize(wings) as never}
-        canManage={canManage}
-        progressMap={progressMap}
-      />
+      <div id="site-structure">
+        <HierarchyChildren
+          kind="wing"
+          parentId={site.id}
+          rows={serialize(wings) as never}
+          canManage={canManage}
+          progressMap={progressMap}
+        />
+      </div>
 
-      <SiteAssignments
+      <div id="site-assignments">
+        <SiteAssignments
         siteId={site.id}
         assignments={
           serialize(
@@ -269,7 +305,8 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
           ) as never
         }
         canManage={canManage}
-      />
+        />
+      </div>
 
       <PhotoGallery
         photos={
