@@ -150,7 +150,11 @@ class _CoverBanner extends ConsumerWidget {
               borderRadius: BorderRadius.circular(16),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
-                child: Image.memory(b, fit: BoxFit.cover),
+                child: Image.memory(
+                  b,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
               ),
             ),
       orElse: () => const SizedBox.shrink(),

@@ -132,8 +132,12 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
                     );
                   }
                   return RefreshIndicator(
-                    onRefresh: () async =>
-                        ref.invalidate(assignedSitesProvider),
+                    onRefresh: () async {
+                      ref.invalidate(assignedSitesProvider);
+                      for (final s in filtered) {
+                        ref.invalidate(siteCoverBytesProvider(s.id));
+                      }
+                    },
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       itemCount: filtered.length,

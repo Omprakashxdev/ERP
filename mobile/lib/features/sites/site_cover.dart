@@ -41,7 +41,15 @@ class SiteCover extends ConsumerWidget {
     return bytes.when(
       data: (b) => b == null
           ? const Icon(Icons.apartment, color: AppColors.faint, size: 26)
-          : Image.memory(b, fit: BoxFit.cover, gaplessPlayback: true),
+          : Image.memory(
+              b,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              // Stored bytes could be unreadable — fall back to the icon
+              // rather than leaving an unexplained empty well.
+              errorBuilder: (_, __, ___) => const Icon(
+                  Icons.apartment, color: AppColors.faint, size: 26),
+            ),
       loading: () => const Center(
         child: SizedBox(
           width: 16,
