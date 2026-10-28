@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
       city: a.site.city,
       state: a.site.state,
       coverImagePath: a.site.coverImagePath,
+      coverUrl: a.site.coverImagePath
+        ? `/api/mobile/v1/sites/${a.site.id}/cover`
+        : null,
       canUpdate: a.canUpdate,
       progress: rollupRooms(await roomsInScope({ siteId: a.siteId })),
     }))

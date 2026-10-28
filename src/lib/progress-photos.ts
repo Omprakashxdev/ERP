@@ -28,6 +28,7 @@ export const PROGRESS_PHOTO_DIR = process.env.PROGRESS_PHOTO_DIR
   : path.join(process.cwd(), "private_uploads", "progress-photos");
 
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10MB
+export const MAX_COVER_BYTES = 5 * 1024 * 1024; // 5MB — site cover images
 
 export type SniffedImage = "jpeg" | "png" | "webp";
 

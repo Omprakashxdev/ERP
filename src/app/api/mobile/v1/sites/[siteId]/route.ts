@@ -38,7 +38,14 @@ export async function GET(
 
   const rooms = await roomsInScope({ siteId });
   return apiOk({
-    site: { ...site, wingsCount: site._count.wings, _count: undefined },
+    site: {
+      ...site,
+      wingsCount: site._count.wings,
+      coverUrl: site.coverImagePath
+        ? `/api/mobile/v1/sites/${site.id}/cover`
+        : null,
+      _count: undefined,
+    },
     permissions: scope.assignment,
     progress: rollupRooms(rooms),
   });
