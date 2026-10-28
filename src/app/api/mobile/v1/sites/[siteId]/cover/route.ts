@@ -42,7 +42,11 @@ export async function GET(
     headers: {
       "Content-Type": type ? mimeFor(type) : "application/octet-stream",
       "Content-Length": String(bytes.length),
-      "Cache-Control": "private, max-age=3600",
+      // The storage key is unique per upload — it is a strong validator,
+      // and no-cache forces revalidation so a replaced cover is never
+      // served stale.
+      ETag: `"${site.coverImagePath}"`,
+      "Cache-Control": "private, no-cache",
       "X-Content-Type-Options": "nosniff",
     },
   });

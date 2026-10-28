@@ -413,7 +413,7 @@ export function SiteForm({ site, mode, projects, onClose }: SiteFormProps) {
                     ) : hasSavedCover && !coverRemoved ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={`/api/site-covers/${site!.id}`}
+                        src={`/api/site-covers/${site!.id}?v=${encodeURIComponent(site!.coverImagePath!)}`}
                         alt={`${site?.siteName} cover`}
                         className="h-full w-full object-cover"
                       />

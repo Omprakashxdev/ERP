@@ -170,7 +170,7 @@ export default async function SiteDetailPage({ params }: SiteDetailPageProps) {
           {site.coverImagePath ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/api/site-covers/${site.id}`}
+              src={`/api/site-covers/${site.id}?v=${encodeURIComponent(site.coverImagePath)}`}
               alt={`${site.siteName} cover`}
               className="h-14 w-14 shrink-0 rounded-lg border border-zinc-200 object-cover shadow-sm"
             />

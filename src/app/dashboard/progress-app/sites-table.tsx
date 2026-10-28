@@ -210,7 +210,7 @@ export function SitesTable({
                         {site.coverImagePath ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={`/api/site-covers/${site.id}`}
+                            src={`/api/site-covers/${site.id}?v=${encodeURIComponent(site.coverImagePath)}`}
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-md border border-zinc-200 object-cover"
                           />
