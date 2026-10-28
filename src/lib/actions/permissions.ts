@@ -29,6 +29,7 @@ const defaultPermissions: Record<string, Record<string, string[]>> = {
   notifications: { ADMIN: ["create", "read", "update", "delete", "admin"], MANAGER: ["read", "update"], STAFF: ["read"], AUDITOR: ["read"] },
   auditLog: { ADMIN: ["read", "admin"], AUDITOR: ["read"] },
   userManagement: { ADMIN: ["create", "read", "update", "delete", "admin"] },
+  progressApp: { ADMIN: ["create", "read", "update", "delete", "admin"], MANAGER: ["read"], STAFF: ["read"], AUDITOR: ["read"] },
 };
 
 export async function getAllPermissions(): Promise<{
