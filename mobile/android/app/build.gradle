@@ -1,0 +1,82 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// Release signing reads android/key.properties (gitignored), which points at
+// the release keystore kept outside the repo:
+//   storeFile=/absolute/path/saec-progress-upload.jks
+//   keyAlias=upload
+//   storePassword=...   keyPassword=...
+// A release build can NEVER silently ship a debug-signed APK: without
+// key.properties the build fails unless the developer explicitly passes
+//   flutter build apk --release -PallowDebugSignedRelease=true
+// for throwaway testing.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+// Only fail when a release artifact is actually being assembled — debug
+// builds, IDE sync and `flutter pub get` must keep working for developers.
+def releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains("release")
+}
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+} else if (releaseBuildRequested && !project.hasProperty("allowDebugSignedRelease")) {
+    throw new GradleException(
+        "Release builds must be signed. Create android/key.properties " +
+        "pointing at the upload keystore, or pass " +
+        "-PallowDebugSignedRelease for a non-distribution build.")
+}
+
+android {
+    namespace = "com.saec.saec_progress"
+    // flutter_secure_storage 10.x requires compileSdk 36.
+    compileSdk = 36
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.saec.saec_progress"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // flutter_secure_storage requires API 23+ for the AndroidKeyStore.
+        minSdkVersion = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            release {
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+                storeFile = keystoreProperties["storeFile"] ? file(keystoreProperties["storeFile"]) : null
+                storePassword = keystoreProperties["storePassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = keystorePropertiesFile.exists()
+                ? signingConfigs.release
+                : signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
