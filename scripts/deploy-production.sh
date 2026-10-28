@@ -23,15 +23,25 @@
 set -euo pipefail
 
 EXECUTE=0
+BACKUP_ONLY=0
 [[ "${1:-}" == "--execute" ]] && EXECUTE=1
+# --backup-only runs Phases A–B for real (fresh DB + uploads backup pulled
+# and checksum-verified), then stops — this is how the operator produces
+# the artifact the restore rehearsal attests BEFORE --execute is allowed.
+[[ "${1:-}" == "--backup-only" ]] && BACKUP_ONLY=1
 [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { sed -n '2,20p' "$0"; exit 0; }
 
 ENV_FILE="deploy/production.env"
 KNOWN_DEMO_HOST="156.67.105.64"
 EXPECTED_INDEXES=(
+  # In-Out release (already live — re-verified each deploy)
   "InOutRegister_documentRefNo_key"
   "ModeMaster_name_key"
   "PendingInOutUpload_storedName_key"
+  # Progress App release — the invariants this deploy adds
+  "ProgressRoomChecklist_one_active_per_room"
+  "ProgressActivityHistory_eventId_key"
+  "ProgressPhoto_clientEventId_key"
 )
 UPLOAD_DIRS=("private_uploads" "public/uploads")
 
@@ -59,9 +69,12 @@ done
 # A backup that was never restore-tested is not a backup. The operator must
 # attest (in the env file or environment) that the latest db.dump restored
 # cleanly into a disposable database with matching record counts.
-if [[ $EXECUTE -eq 1 && "${RESTORE_REHEARSAL_DONE:-}" != "yes" ]]; then
+# --backup-only is the step that produces the artifact the rehearsal
+# verifies — requiring the attestation up front would be circular.
+if [[ $EXECUTE -eq 1 && $BACKUP_ONLY -eq 0 && "${RESTORE_REHEARSAL_DONE:-}" != "yes" ]]; then
   fail "RESTORE_REHEARSAL_DONE=yes required in $ENV_FILE — restore the latest backup into a disposable DB and verify record counts before releasing"
 fi
+[[ $BACKUP_ONLY -eq 1 ]] && EXECUTE=1
 
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=10"
@@ -71,7 +84,7 @@ BACKUP_DIR="deploy/backups/${DATE_TAG}"
 echo "  target:   ${REMOTE}:${DEPLOY_DIR}"
 echo "  pm2 app:  ${PM2_APP}"
 echo "  database: ${DB_NAME} (role ${DB_USER})"
-echo "  mode:     $([ $EXECUTE -eq 1 ] && echo EXECUTE || echo DRY-RUN)"
+echo "  mode:     $([ $BACKUP_ONLY -eq 1 ] && echo BACKUP-ONLY || ([ $EXECUTE -eq 1 ] && echo EXECUTE || echo DRY-RUN))"
 
 # run <ssh command...> — always printed, executed only with --execute
 run() {
@@ -205,9 +218,17 @@ remote_sh "sudo -u postgres psql -d $DB_NAME -Atc '
 remote_sh "sudo -u postgres psql -d $DB_NAME -Atc '
    SELECT lower(btrim(\"documentRefNo\")), count(*) FROM \"InOutRegister\"
    WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1'"
-remote "cd $DEPLOY_DIR && npx prisma migrate status"
-echo "  # pending set must be EXACTLY the 3 in-out migrations per the runbook — abort if anything else appears"
+# migrate status exits non-zero when migrations are pending — that is the
+# expected pre-deploy state, so tolerate it and enforce the pending set below.
+remote "cd $DEPLOY_DIR && npx prisma migrate status || true"
+echo "  # pending set must be EXACTLY the 4 progress-app migrations"
+echo "  # (site_master, hierarchy, checklists, mobile_photos) — abort if anything else appears"
 if [[ $EXECUTE -eq 1 ]]; then
+  UNEXPECTED=$($SSH "$REMOTE" "cd $DEPLOY_DIR && for d in prisma/migrations/*/; do \
+    n=\$(basename \"\$d\"); \
+    sudo -u postgres psql -d $DB_NAME -Atc \"SELECT 1 FROM _prisma_migrations WHERE migration_name='\$n'\" | grep -q 1 || echo \"\$n\"; \
+  done | grep -vE 'progress_(site_master|hierarchy|checklists|mobile_photos)' || true")
+  [[ -z "$UNEXPECTED" ]] || fail "pending migrations outside the progress-app set: $UNEXPECTED"
   FAILED_MIG=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL'")
   [[ "$FAILED_MIG" == "0" ]] || fail "prisma migration history not clean ($FAILED_MIG failed/rolled-back rows) — resolve before deploying"
   DUPES=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM (SELECT lower(btrim(\"documentRefNo\")) n FROM \"InOutRegister\" WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1) d'")
@@ -222,6 +243,10 @@ remote "mkdir -p ~/${DATE_TAG}_backup"
 remote "sudo -u postgres pg_dump -Fc -d $DB_NAME -f /tmp/${DATE_TAG}_db.dump && \
   mv /tmp/${DATE_TAG}_db.dump ~/${DATE_TAG}_backup/db.dump && \
   sha256sum ~/${DATE_TAG}_backup/db.dump"
+# Archive-level integrity: a dump pg_restore cannot list is useless —
+# verify the TOC parses before it is ever needed. Run as the SSH user —
+# the backup lives under ~/, which postgres may not be able to read.
+remote "pg_restore --list ~/${DATE_TAG}_backup/db.dump > /dev/null && echo 'dump TOC parses'"
 # Upload files may live under EITHER the app root (persistent target) or the
 # standalone build dir (process.cwd() hazard) — archive every location that
 # exists; missing dirs must not abort the backup.
@@ -233,7 +258,24 @@ run scp "${REMOTE}:~/${DATE_TAG}_backup/uploads.tgz" "$BACKUP_DIR/"
 if [[ $EXECUTE -eq 1 ]]; then
   [[ -s "$BACKUP_DIR/db.dump" && -s "$BACKUP_DIR/uploads.tgz" ]] || \
     fail "backup files not pulled to $BACKUP_DIR — aborting before any code change"
-  echo "  local backup copies verified present in $BACKUP_DIR"
+  # Checksum the pulled copies against the remote originals — a backup
+  # that only exists on the machine being modified is not a backup, and
+  # a truncated transfer is not one either.
+  for f in db.dump uploads.tgz; do
+    RSHA=$($SSH "$REMOTE" "sha256sum ~/${DATE_TAG}_backup/$f | cut -d' ' -f1") || \
+      fail "cannot read remote checksum for $f"
+    LSHA=$(shasum -a 256 "$BACKUP_DIR/$f" | cut -d' ' -f1)
+    [[ "$RSHA" == "$LSHA" ]] || \
+      fail "$f checksum mismatch (remote ${RSHA:0:12}… local ${LSHA:0:12}…) — pulled copy is not trustworthy"
+  done
+  echo "  local backup copies verified present + checksum-matched in $BACKUP_DIR"
+fi
+if [[ $BACKUP_ONLY -eq 1 ]]; then
+  echo
+  echo "BACKUP-ONLY complete. Next: restore $BACKUP_DIR/db.dump into a"
+  echo "disposable database, verify record counts, then set"
+  echo "RESTORE_REHEARSAL_DONE=yes in $ENV_FILE before running --execute."
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------
@@ -244,6 +286,10 @@ RSYNC_EXCLUDES=(
   --exclude '.env' --exclude '.env.*' --exclude 'docs'
   --exclude 'private_uploads/' --exclude 'public/uploads/'
   --exclude 'deploy/backups/' --exclude 'backups/' --exclude 'qa-shots/'
+  --exclude 'mobile/build/' --exclude 'mobile/.dart_tool/'
+  --exclude 'mobile/android/.gradle/' --exclude 'mobile/android/local.properties'
+  --exclude 'mobile/android/key.properties' --exclude 'mobile/android/app/*.jks'
+  --exclude 'mobile/android/app/*.keystore'
 )
 run rsync -rlptvz --delete --no-owner --no-group "${RSYNC_EXCLUDES[@]}" ./ "$REMOTE:$DEPLOY_DIR/"
 echo "  upload dirs, env files and build output are excluded — rsync --delete cannot remove them"
@@ -256,8 +302,8 @@ IDX_LIST="$(printf "'%s'," "${EXPECTED_INDEXES[@]}")"; IDX_LIST="${IDX_LIST%,}"
 remote_sh "sudo -u postgres psql -d $DB_NAME -Atc \"SELECT indexname FROM pg_indexes WHERE indexname IN ($IDX_LIST)\""
 if [[ $EXECUTE -eq 1 ]]; then
   IDX=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc \"SELECT count(*) FROM pg_indexes WHERE indexname IN ($IDX_LIST)\"")
-  [[ "$IDX" == "3" ]] || fail "expected 3 release indexes, found $IDX — functional unique index missing; investigate before restart"
-  echo "  all 3 functional/unique indexes verified present"
+  [[ "$IDX" == "${#EXPECTED_INDEXES[@]}" ]] || fail "expected ${#EXPECTED_INDEXES[@]} release indexes, found $IDX — index missing; investigate before restart"
+  echo "  all ${#EXPECTED_INDEXES[@]} functional/unique indexes verified present"
 fi
 
 # ---------------------------------------------------------------------------
@@ -299,6 +345,25 @@ remote_sh "$LINK_PERSIST"'
   done
   echo "  no escaping symlinks inside persistent storage"
 '
+# Mobile-API runtime env must exist BEFORE the restart: with no bearer
+# secret the routes cannot sign tokens, and src/instrumentation.ts is
+# fail-closed — the app refuses to boot if rate limiting is unconfigured.
+# Checking key names only; values are never read or printed.
+remote_check "server .env must define MOBILE_TOKEN_SECRET, PROGRESS_PHOTO_DIR and a rate-limit backend (names only)" \
+  "cd $DEPLOY_DIR && grep -cE '^(MOBILE_TOKEN_SECRET|PROGRESS_PHOTO_DIR|UPSTASH_REDIS_REST_URL|RATE_LIMIT_FALLBACK)=' .env"
+if [[ $EXECUTE -eq 1 ]]; then
+  ENV_MISSING=$($SSH "$REMOTE" "cd $DEPLOY_DIR && \
+    for v in MOBILE_TOKEN_SECRET PROGRESS_PHOTO_DIR; do \
+      grep -q \"^\$v=.\" .env || echo \$v; \
+    done; \
+    grep -q '^RATE_LIMIT_FALLBACK=memory' .env || \
+      { grep -q '^UPSTASH_REDIS_REST_URL=.' .env && \
+        grep -q '^UPSTASH_REDIS_REST_TOKEN=.' .env || \
+        echo RATE_LIMIT_BACKEND; }")
+  [[ -z "$ENV_MISSING" ]] || \
+    fail "server .env missing required runtime keys: $ENV_MISSING — set them (no secrets in this output) before restarting"
+  echo "  server .env has MOBILE_TOKEN_SECRET, PROGRESS_PHOTO_DIR and a rate-limit backend"
+fi
 remote "pm2 restart $PM2_APP --update-env"
 
 if [[ $EXECUTE -eq 1 ]]; then
@@ -316,6 +381,9 @@ step "PHASE F — smoke checks"
 # ---------------------------------------------------------------------------
 remote "sleep 4; curl -s -o /dev/null -w '%{http_code}' $SITE_URL/login"
 remote "curl -s -o /dev/null -w '%{http_code}' $SITE_URL"
+# Mobile API must answer with a JSON 401 — a 307 to /login would mean the
+# proxy exemption for /api/mobile/ did not deploy.
+remote "curl -s -o /dev/null -w '%{http_code}' $SITE_URL/api/mobile/v1/me"
 
 echo
 if [[ $EXECUTE -eq 1 ]]; then
