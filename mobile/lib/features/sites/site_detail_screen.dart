@@ -46,6 +46,7 @@ class SiteDetailScreen extends ConsumerWidget {
         data: (b) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(siteDetailProvider(siteId));
+            ref.invalidate(siteCoverBytesProvider(siteId));
             ref.invalidate(photosProvider(
                 (target: PhotoTarget.site, targetId: siteId)));
             ref.invalidate(photoOpsProvider(
@@ -54,6 +55,11 @@ class SiteDetailScreen extends ConsumerWidget {
           child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (b.site.coverUrl != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _CoverBanner(siteId: siteId),
+              ),
             AppCard(
               child: Row(
                 children: [
@@ -124,6 +130,30 @@ class SiteDetailScreen extends ConsumerWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Full-width cover banner above the site summary — hides itself when
+/// the cover bytes are unavailable rather than showing a broken frame.
+class _CoverBanner extends ConsumerWidget {
+  const _CoverBanner({required this.siteId});
+  final String siteId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bytes = ref.watch(siteCoverBytesProvider(siteId));
+    return bytes.maybeWhen(
+      data: (b) => b == null
+          ? const SizedBox.shrink()
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.memory(b, fit: BoxFit.cover),
+              ),
+            ),
+      orElse: () => const SizedBox.shrink(),
     );
   }
 }

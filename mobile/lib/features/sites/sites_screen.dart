@@ -8,6 +8,7 @@ import '../../core/offline/offline_widgets.dart';
 import '../../core/routing/router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
+import 'site_cover.dart';
 import 'site_providers.dart';
 
 class SitesScreen extends ConsumerStatefulWidget {
@@ -225,7 +226,10 @@ class _SiteCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ImageThumb(size: 76, url: site.coverImagePath),
+              SiteCover(
+                  siteId: site.id,
+                  hasCover: site.coverUrl != null,
+                  size: 76),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

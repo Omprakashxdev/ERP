@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
@@ -23,6 +26,25 @@ final assignedSitesProvider =
         .map((e) => AssignedSite.fromJson(e as Map<String, dynamic>))
         .toList(),
   );
+});
+
+/// GET /sites/:id/cover — authenticated cover bytes; null when the site
+/// has no cover or the file is unavailable (icon fallback is rendered).
+final siteCoverBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List?, String>((ref, siteId) async {
+  if (ref.watch(authControllerProvider) is! AuthSignedIn) return null;
+  final dio = ref.watch(dioProvider);
+  try {
+    final res = await dio.get<List<int>>(
+      '/sites/$siteId/cover',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (res.statusCode != 200 || res.data == null) return null;
+    return Uint8List.fromList(res.data!);
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 404) return null;
+    throw ApiException.fromDio(e);
+  }
 });
 
 class SiteDetailBundle {

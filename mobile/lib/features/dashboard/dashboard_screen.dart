@@ -10,6 +10,7 @@ import '../../core/routing/router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../sites/current_site.dart';
+import '../sites/site_cover.dart';
 import '../sites/site_providers.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -172,15 +173,8 @@ class _CurrentSiteCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.blueBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.apartment, color: AppColors.blue, size: 22),
-          ),
+          SiteCover(
+              siteId: site.id, hasCover: site.coverUrl != null, size: 44),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

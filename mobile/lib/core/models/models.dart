@@ -135,6 +135,7 @@ class AssignedSite {
     required this.city,
     required this.state,
     required this.coverImagePath,
+    this.coverUrl,
     required this.canUpdate,
     required this.progress,
   });
@@ -146,6 +147,9 @@ class AssignedSite {
   final String? city;
   final String? state;
   final String? coverImagePath;
+  /// Authenticated relative endpoint — fetch with bearer token, never
+  /// via plain Image.network.
+  final String? coverUrl;
   final bool canUpdate;
   final SiteProgress progress;
 
@@ -160,6 +164,7 @@ class AssignedSite {
         city: j['city'] as String?,
         state: j['state'] as String?,
         coverImagePath: j['coverImagePath'] as String?,
+        coverUrl: j['coverUrl'] as String?,
         canUpdate: j['canUpdate'] as bool? ?? false,
         progress: SiteProgress.fromJson(j['progress'] as Map<String, dynamic>?),
       );
@@ -176,6 +181,7 @@ class SiteDetail {
     this.city,
     this.state,
     this.coverImagePath,
+    this.coverUrl,
     required this.wingsCount,
     required this.progress,
   });
@@ -189,6 +195,7 @@ class SiteDetail {
   final String? city;
   final String? state;
   final String? coverImagePath;
+  final String? coverUrl;
   final int wingsCount;
   final SiteProgress progress;
 
@@ -203,6 +210,7 @@ class SiteDetail {
         city: j['city'] as String?,
         state: j['state'] as String?,
         coverImagePath: j['coverImagePath'] as String?,
+        coverUrl: j['coverUrl'] as String?,
         wingsCount: (j['wingsCount'] as num?)?.toInt() ?? 0,
         progress: p,
       );
