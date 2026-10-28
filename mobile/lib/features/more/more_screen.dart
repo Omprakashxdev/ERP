@@ -8,11 +8,30 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 
 /// More tab — profile + sign out (session revocation via /auth/logout).
-class MoreScreen extends ConsumerWidget {
+class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MoreScreen> createState() => _MoreScreenState();
+}
+
+class _MoreScreenState extends ConsumerState<MoreScreen> {
+  bool _refreshing = false;
+
+  /// Explicit refresh of every read surface + a queue drain — the
+  /// visible "make sure I have the latest ERP data" action.
+  Future<void> _refreshNow(WidgetRef ref) async {
+    setState(() => _refreshing = true);
+    try {
+      refreshAllReads(ref);
+      await ref.read(syncServiceProvider).syncNow();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final user = auth is AuthSignedIn ? auth.user : null;
     return Scaffold(
@@ -80,6 +99,14 @@ class MoreScreen extends ConsumerWidget {
                       style: TextStyle(
                           fontSize: 11, color: AppColors.faint),
                     ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _refreshing ? null : () => _refreshNow(ref),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: Text(_refreshing
+                        ? 'Refreshing…'
+                        : 'Refresh data now'),
+                  ),
                 ],
               ),
             ),

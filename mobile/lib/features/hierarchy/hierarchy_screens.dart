@@ -302,10 +302,16 @@ class FloorsScreen extends ConsumerWidget {
                     subtitle: '${f.flatsCount} flats',
                     progress: f.progress,
                     isActive: f.isActive,
-                    onTap: () => context.push(
-                      Routes.flats(f.id),
-                      extra: ctx.withFloor(f.label),
-                    ),
+                    onTap: () => context
+                        .push(
+                          Routes.flats(f.id),
+                          extra: ctx.withFloor(f.label),
+                        )
+                        .then((_) {
+                      if (context.mounted) {
+                        ref.invalidate(wingFloorsProvider(wingId));
+                      }
+                    }),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -378,10 +384,16 @@ class FlatsScreen extends ConsumerWidget {
                         '${f.roomsCount} rooms${f.flatType != null ? ' · ${f.flatType}' : ''}',
                     progress: f.progress,
                     isActive: f.isActive,
-                    onTap: () => context.push(
-                      Routes.rooms(f.id),
-                      extra: ctx.withFlat('Flat ${f.flatNumber}'),
-                    ),
+                    onTap: () => context
+                        .push(
+                          Routes.rooms(f.id),
+                          extra: ctx.withFlat('Flat ${f.flatNumber}'),
+                        )
+                        .then((_) {
+                      if (context.mounted) {
+                        ref.invalidate(floorFlatsProvider(floorId));
+                      }
+                    }),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -463,10 +475,16 @@ class RoomsScreen extends ConsumerWidget {
                         r.progress?.configured == true ? 'Checklist' : null,
                     thirdStatValue:
                         r.progress?.configured == true ? 'Yes' : null,
-                    onTap: () => context.push(
-                      Routes.activities(r.id),
-                      extra: ctx.withCanUpdate(bundle.canUpdate),
-                    ),
+                    onTap: () => context
+                        .push(
+                          Routes.activities(r.id),
+                          extra: ctx.withCanUpdate(bundle.canUpdate),
+                        )
+                        .then((_) {
+                      if (context.mounted) {
+                        ref.invalidate(flatRoomsProvider(flatId));
+                      }
+                    }),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -597,15 +615,21 @@ class RoomDetailScreen extends ConsumerWidget {
                   for (final a in d.activities) ...[
                     _ActivityRow(
                       activity: a,
-                      onTap: () => context.push(
-                        Routes.activity(a.id),
-                        extra: (
-                          activity: a,
-                          roomId: roomId,
-                          canUpdate: d.canUpdate,
-                          context_: ctx.withRoom(d.roomName),
-                        ),
-                      ),
+                      onTap: () => context
+                          .push(
+                            Routes.activity(a.id),
+                            extra: (
+                              activity: a,
+                              roomId: roomId,
+                              canUpdate: d.canUpdate,
+                              context_: ctx.withRoom(d.roomName),
+                            ),
+                          )
+                          .then((_) {
+                        if (context.mounted) {
+                          ref.invalidate(roomDetailProvider(roomId));
+                        }
+                      }),
                     ),
                     const SizedBox(height: 10),
                   ],

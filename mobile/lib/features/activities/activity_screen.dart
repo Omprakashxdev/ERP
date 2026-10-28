@@ -74,6 +74,11 @@ class _ActivityDetailScreenState
     }
     ref.invalidate(assignedSitesProvider);
     ref.invalidate(summaryProvider);
+    // Progress rollups changed at every ancestor level — family
+    // invalidation refetches whichever levels are still watched.
+    ref.invalidate(flatRoomsProvider);
+    ref.invalidate(floorFlatsProvider);
+    ref.invalidate(wingFloorsProvider);
   }
 
   Future<void> _refresh() async {

@@ -58,6 +58,22 @@ final unsyncedCountProvider = FutureProvider.autoDispose<int>((ref) async {
 /// Result of the most recent drain — drives "Synced"/offline banners.
 final lastSyncReportProvider = StateProvider<se.SyncReport?>((ref) => null);
 
+/// Invalidate every read provider so a resume/tab-return/explicit
+/// refresh shows current ERP state rather than a stale in-memory
+/// snapshot. Family-wide invalidation only refetches providers that
+/// still have listeners.
+void refreshAllReads(WidgetRef ref) {
+  ref.invalidate(assignedSitesProvider);
+  ref.invalidate(siteDetailProvider);
+  ref.invalidate(siteCoverBytesProvider);
+  ref.invalidate(wingFloorsProvider);
+  ref.invalidate(floorFlatsProvider);
+  ref.invalidate(flatRoomsProvider);
+  ref.invalidate(roomDetailProvider);
+  ref.invalidate(activityHistoryProvider);
+  ref.invalidate(summaryProvider);
+}
+
 /// Queued photo ops for one gallery target — pending/uploading/failed/
 /// blocked cards live next to the confirmed photos.
 final photoOpsProvider = FutureProvider.autoDispose
@@ -333,8 +349,12 @@ class SyncService {
         // Server-confirmed values changed — refresh every surface
         // that shows progress rather than masking them with cache.
         _ref.invalidate(assignedSitesProvider);
+        _ref.invalidate(siteDetailProvider);
         _ref.invalidate(summaryProvider);
         _ref.invalidate(roomDetailProvider);
+        _ref.invalidate(flatRoomsProvider);
+        _ref.invalidate(floorFlatsProvider);
+        _ref.invalidate(wingFloorsProvider);
       }
       unawaited(recordServerContact(_ref, userId));
       return report;
@@ -380,7 +400,11 @@ class SyncService {
   void reviewLatest(PendingOp op) {
     _ref.invalidate(roomDetailProvider);
     _ref.invalidate(assignedSitesProvider);
+    _ref.invalidate(siteDetailProvider);
     _ref.invalidate(summaryProvider);
+    _ref.invalidate(flatRoomsProvider);
+    _ref.invalidate(floorFlatsProvider);
+    _ref.invalidate(wingFloorsProvider);
   }
 }
 

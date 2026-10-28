@@ -22,6 +22,13 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
   String _query = '';
   SiteStatus? _filter;
 
+  /// Family-wide cover invalidation — replaced covers carry a new
+  /// storage key anyway, and this also drops bytes for removed covers.
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(assignedSitesProvider);
+    ref.invalidate(siteCoverBytesProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final sites = ref.watch(assignedSitesProvider);
@@ -31,19 +38,32 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const OfflineBanner(cacheKey: 'sites'),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Column(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 0),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Sites',
-                      style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.ink)),
-                  Text('Select a site to view progress',
-                      style:
-                          TextStyle(fontSize: 13, color: AppColors.muted)),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Sites',
+                            style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.ink)),
+                        Text('Select a site to view progress',
+                            style: TextStyle(
+                                fontSize: 13, color: AppColors.muted)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _refresh(ref),
+                    tooltip: 'Refresh',
+                    icon: const Icon(Icons.refresh,
+                        color: AppColors.muted),
+                  ),
                 ],
               ),
             ),
@@ -132,12 +152,7 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
                     );
                   }
                   return RefreshIndicator(
-                    onRefresh: () async {
-                      ref.invalidate(assignedSitesProvider);
-                      for (final s in filtered) {
-                        ref.invalidate(siteCoverBytesProvider(s.id));
-                      }
-                    },
+                    onRefresh: () async => _refresh(ref),
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       itemCount: filtered.length,
@@ -215,15 +230,20 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _SiteCard extends StatelessWidget {
+class _SiteCard extends ConsumerWidget {
   const _SiteCard({required this.site});
   final AssignedSite site;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = site.progress;
     return AppCard(
-      onTap: () => context.push(Routes.site(site.id)),
+      onTap: () => context.push(Routes.site(site.id)).then((_) {
+        if (context.mounted) {
+          ref.invalidate(assignedSitesProvider);
+          ref.invalidate(siteCoverBytesProvider);
+        }
+      }),
       padding: const EdgeInsets.all(14),
       child: Column(
         children: [
@@ -232,7 +252,7 @@ class _SiteCard extends StatelessWidget {
             children: [
               SiteCover(
                   siteId: site.id,
-                  hasCover: site.coverUrl != null,
+                  coverKey: site.coverImagePath,
                   size: 76),
               const SizedBox(width: 12),
               Expanded(

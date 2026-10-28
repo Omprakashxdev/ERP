@@ -9,6 +9,7 @@ import '../../core/offline/offline_widgets.dart';
 import '../../core/routing/router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
+import '../reports/reports_screen.dart' show summaryProvider;
 import '../sites/current_site.dart';
 import '../sites/site_cover.dart';
 import '../sites/site_providers.dart';
@@ -39,14 +40,16 @@ class DashboardScreen extends ConsumerWidget {
             orElse: () => list.first,
           );
           return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(assignedSitesProvider);
-              ref.invalidate(siteDetailProvider(site.id));
-            },
+            onRefresh: () async => _refresh(ref, site.id),
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _Hero(user: user, onMore: () => context.go(Routes.more)),
+                _Hero(
+                  user: user,
+                  site: site,
+                  onMore: () => context.go(Routes.more),
+                  onRefresh: () => _refresh(ref, site.id),
+                ),
                 Transform.translate(
                   offset: const Offset(0, -28),
                   child: Padding(
@@ -83,15 +86,37 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Refreshes every read surface the dashboard draws from — sites,
+  /// detail, covers and the reports rollup — so ERP-side edits show up
+  /// on one explicit refresh without reinstall/restart.
+  static void _refresh(WidgetRef ref, String siteId) {
+    ref.invalidate(assignedSitesProvider);
+    ref.invalidate(siteDetailProvider(siteId));
+    ref.invalidate(siteCoverBytesProvider);
+    ref.invalidate(summaryProvider);
+  }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({required this.user, required this.onMore});
+class _Hero extends ConsumerWidget {
+  const _Hero({
+    required this.user,
+    required this.site,
+    required this.onMore,
+    required this.onRefresh,
+  });
   final MobileUser? user;
+  final AssignedSite site;
   final VoidCallback onMore;
+  final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cover = site.coverImagePath == null
+        ? null
+        : ref.watch(siteCoverBytesProvider(
+            (siteId: site.id, coverKey: site.coverImagePath!)));
+    final bytes = cover?.value;
     return Container(
       height: 210,
       decoration: const BoxDecoration(
@@ -102,13 +127,36 @@ class _Hero extends StatelessWidget {
         ),
       ),
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned(
-            right: -30,
-            top: 10,
-            child: Icon(Icons.apartment,
-                size: 200, color: Colors.white.withValues(alpha: 0.08)),
-          ),
+          // Current-site cover as the hero background; the navy/teal
+          // overlay keeps header text readable over any photo.
+          if (bytes != null) ...[
+            Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xE61B3A4E),
+                    Color(0xB32E5A75),
+                    Color(0x8C3E7291),
+                  ],
+                ),
+              ),
+            ),
+          ] else
+            Positioned(
+              right: -30,
+              top: 10,
+              child: Icon(Icons.apartment,
+                  size: 200, color: Colors.white.withValues(alpha: 0.08)),
+            ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -137,6 +185,12 @@ class _Hero extends StatelessWidget {
                                     color: Colors.white70, fontSize: 13)),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        onPressed: onRefresh,
+                        tooltip: 'Refresh',
+                        icon: const Icon(Icons.refresh,
+                            color: Colors.white),
                       ),
                       IconButton(
                         onPressed: onMore,
@@ -174,7 +228,7 @@ class _CurrentSiteCard extends StatelessWidget {
       child: Row(
         children: [
           SiteCover(
-              siteId: site.id, hasCover: site.coverUrl != null, size: 44),
+              siteId: site.id, coverKey: site.coverImagePath, size: 44),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -303,12 +357,12 @@ class _SkeletonTile extends StatelessWidget {
       const AppCard(child: SizedBox(height: 36));
 }
 
-class _ProgressOverview extends StatelessWidget {
+class _ProgressOverview extends ConsumerWidget {
   const _ProgressOverview({required this.site});
   final AssignedSite site;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = site.progress;
     final remaining = p.totalActivities - p.completedActivities;
     return Column(
@@ -324,7 +378,11 @@ class _ProgressOverview extends StatelessWidget {
                       color: AppColors.ink)),
             ),
             GestureDetector(
-              onTap: () => context.push(Routes.site(site.id)),
+              onTap: () => context.push(Routes.site(site.id)).then((_) {
+                if (context.mounted) {
+                  DashboardScreen._refresh(ref, site.id);
+                }
+              }),
               child: const Text('View Details →',
                   style: TextStyle(
                       fontSize: 13,
@@ -399,19 +457,25 @@ class _ProgressOverview extends StatelessWidget {
   }
 }
 
-class _QuickTiles extends StatelessWidget {
+class _QuickTiles extends ConsumerWidget {
   const _QuickTiles({required this.siteId});
   final String siteId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    void openSite() {
+      context.push(Routes.site(siteId)).then((_) {
+        if (context.mounted) DashboardScreen._refresh(ref, siteId);
+      });
+    }
+
     final tiles = [
       (Icons.apartment, 'Blocks', AppColors.blueBg, AppColors.blue,
-          () => context.push(Routes.site(siteId))),
+          openSite),
       (Icons.home_outlined, 'Flats', AppColors.greenBg, AppColors.greenText,
-          () => context.push(Routes.site(siteId))),
+          openSite),
       (Icons.checklist, 'Activities', AppColors.amberBg, AppColors.amberText,
-          () => context.push(Routes.site(siteId))),
+          openSite),
       (Icons.leaderboard_outlined, 'Reports', AppColors.purpleBg,
           AppColors.purple, () => context.go(Routes.reports)),
     ];
@@ -469,7 +533,11 @@ class _BlocksOverview extends ConsumerWidget {
                       color: AppColors.ink)),
             ),
             GestureDetector(
-              onTap: () => context.push(Routes.site(siteId)),
+              onTap: () => context.push(Routes.site(siteId)).then((_) {
+                if (context.mounted) {
+                  DashboardScreen._refresh(ref, siteId);
+                }
+              }),
               child: const Text('View All →',
                   style: TextStyle(
                       fontSize: 13,
@@ -503,20 +571,28 @@ class _BlocksOverview extends ConsumerWidget {
   }
 }
 
-class _WingRow extends StatelessWidget {
+class _WingRow extends ConsumerWidget {
   const _WingRow({required this.wing, required this.siteId});
   final Wing wing;
   final String siteId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return AppCard(
-      onTap: () => context.push(
-        Routes.floors(wing.id),
-        extra: HierarchyContext(
-          wingName: wing.name.isEmpty ? 'Block ${wing.code}' : wing.name,
-        ),
-      ),
+      onTap: () => context
+          .push(
+            Routes.floors(wing.id),
+            extra: HierarchyContext(
+              siteId: siteId,
+              wingName:
+                  wing.name.isEmpty ? 'Block ${wing.code}' : wing.name,
+            ),
+          )
+          .then((_) {
+        if (context.mounted) {
+          DashboardScreen._refresh(ref, siteId);
+        }
+      }),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [

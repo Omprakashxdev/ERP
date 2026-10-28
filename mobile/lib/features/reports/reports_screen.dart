@@ -36,19 +36,32 @@ class ReportsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const OfflineBanner(cacheKey: 'summary'),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 16),
-              child: Column(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 16),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Reports',
-                      style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.ink)),
-                  Text('Progress across your assigned sites',
-                      style:
-                          TextStyle(fontSize: 13, color: AppColors.muted)),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Reports',
+                            style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.ink)),
+                        Text('Progress across your assigned sites',
+                            style: TextStyle(
+                                fontSize: 13, color: AppColors.muted)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => ref.invalidate(summaryProvider),
+                    tooltip: 'Refresh',
+                    icon: const Icon(Icons.refresh,
+                        color: AppColors.muted),
+                  ),
                 ],
               ),
             ),
@@ -62,16 +75,27 @@ class ReportsScreen extends ConsumerWidget {
                     style: const TextStyle(color: AppColors.muted),
                   ),
                 ),
-                data: (items) => items.isEmpty
-                    ? const Center(
-                        child: Text('No assigned sites.',
-                            style: TextStyle(color: AppColors.muted)))
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (_, i) {
+                data: (items) => RefreshIndicator(
+                  onRefresh: () async =>
+                      ref.invalidate(summaryProvider),
+                  child: items.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 120),
+                            Center(
+                              child: Text('No assigned sites.',
+                                  style:
+                                      TextStyle(color: AppColors.muted)),
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          padding:
+                              const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (_, i) {
                           final it = items[i];
                           final p = SiteProgress.fromJson(
                               it['progress'] as Map<String, dynamic>?);
@@ -124,6 +148,7 @@ class ReportsScreen extends ConsumerWidget {
                           );
                         },
                       ),
+                ),
               ),
             ),
           ],

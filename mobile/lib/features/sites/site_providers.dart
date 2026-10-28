@@ -28,15 +28,21 @@ final assignedSitesProvider =
   );
 });
 
-/// GET /sites/:id/cover — authenticated cover bytes; null when the site
-/// has no cover or the file is unavailable (icon fallback is rendered).
+/// Family argument for cover bytes. [coverKey] is the server storage
+/// key (`coverImagePath`) — unique on every upload — so replacing a
+/// cover in ERP produces a new provider instance that fetches fresh
+/// bytes instead of serving the previous image.
+typedef CoverRef = ({String siteId, String coverKey});
+
+/// GET /sites/:id/cover — authenticated cover bytes; null when the file
+/// is unavailable (icon fallback is rendered).
 final siteCoverBytesProvider = FutureProvider.autoDispose
-    .family<Uint8List?, String>((ref, siteId) async {
+    .family<Uint8List?, CoverRef>((ref, arg) async {
   if (ref.watch(authControllerProvider) is! AuthSignedIn) return null;
   final dio = ref.watch(dioProvider);
   try {
     final res = await dio.get<List<int>>(
-      '/sites/$siteId/cover',
+      '/sites/${arg.siteId}/cover',
       options: Options(responseType: ResponseType.bytes),
     );
     if (res.statusCode != 200 || res.data == null) return null;

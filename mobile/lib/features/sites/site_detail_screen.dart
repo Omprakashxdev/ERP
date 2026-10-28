@@ -46,7 +46,7 @@ class SiteDetailScreen extends ConsumerWidget {
         data: (b) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(siteDetailProvider(siteId));
-            ref.invalidate(siteCoverBytesProvider(siteId));
+            ref.invalidate(siteCoverBytesProvider);
             ref.invalidate(photosProvider(
                 (target: PhotoTarget.site, targetId: siteId)));
             ref.invalidate(photoOpsProvider(
@@ -55,10 +55,11 @@ class SiteDetailScreen extends ConsumerWidget {
           child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (b.site.coverUrl != null)
+            if (b.site.coverImagePath != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _CoverBanner(siteId: siteId),
+                child: _CoverBanner(
+                    siteId: siteId, coverKey: b.site.coverImagePath!),
               ),
             AppCard(
               child: Row(
@@ -116,7 +117,12 @@ class SiteDetailScreen extends ConsumerWidget {
                     wing: w,
                     siteName: b.site.siteName,
                     siteId: siteId,
-                    canUpdate: b.canUpdate),
+                    canUpdate: b.canUpdate,
+                    // Edits deeper in the hierarchy (or a queued sync
+                    // landing while away) change this site's rollups —
+                    // refetch them when the pushed route pops.
+                    onReturn: () =>
+                        ref.invalidate(siteDetailProvider(siteId))),
                 const SizedBox(height: 12),
               ],
             PhotoSection(
@@ -137,12 +143,14 @@ class SiteDetailScreen extends ConsumerWidget {
 /// Full-width cover banner above the site summary — hides itself when
 /// the cover bytes are unavailable rather than showing a broken frame.
 class _CoverBanner extends ConsumerWidget {
-  const _CoverBanner({required this.siteId});
+  const _CoverBanner({required this.siteId, required this.coverKey});
   final String siteId;
+  final String coverKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bytes = ref.watch(siteCoverBytesProvider(siteId));
+    final bytes = ref.watch(siteCoverBytesProvider(
+        (siteId: siteId, coverKey: coverKey)));
     return bytes.maybeWhen(
       data: (b) => b == null
           ? const SizedBox.shrink()
@@ -168,25 +176,33 @@ class _WingCard extends StatelessWidget {
     required this.siteName,
     required this.siteId,
     required this.canUpdate,
+    this.onReturn,
   });
   final Wing wing;
   final String siteName;
   final String siteId;
   final bool canUpdate;
+  final VoidCallback? onReturn;
 
   @override
   Widget build(BuildContext context) {
     final p = wing.progress;
     final label = wing.name.isEmpty ? 'Block ${wing.code}' : wing.name;
     return AppCard(
-      onTap: () => context.push(
-        Routes.floors(wing.id),
-        extra: HierarchyContext(
-            siteId: siteId,
-            siteName: siteName,
-            wingName: label,
-            canUpdate: canUpdate),
-      ),
+      onTap: () {
+        context
+            .push(
+          Routes.floors(wing.id),
+          extra: HierarchyContext(
+              siteId: siteId,
+              siteName: siteName,
+              wingName: label,
+              canUpdate: canUpdate),
+        )
+            .then((_) {
+          if (context.mounted) onReturn?.call();
+        });
+      },
       padding: const EdgeInsets.all(14),
       child: Column(
         children: [

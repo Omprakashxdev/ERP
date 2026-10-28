@@ -6,11 +6,38 @@ import '../core/offline/sync_providers.dart';
 import '../core/routing/router.dart';
 import '../core/theme/app_theme.dart';
 
-class SaecProgressApp extends ConsumerWidget {
+class SaecProgressApp extends ConsumerStatefulWidget {
   const SaecProgressApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SaecProgressApp> createState() => _SaecProgressAppState();
+}
+
+class _SaecProgressAppState extends ConsumerState<SaecProgressApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // ERP edits made while the app was parked must be visible on
+    // return — drop every read snapshot and drain queued writes.
+    refreshAllReads(ref);
+    ref.read(syncServiceProvider).syncNow();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final auth = ref.watch(authControllerProvider);
     // Keep the queue orchestrator alive for the app lifetime — it
