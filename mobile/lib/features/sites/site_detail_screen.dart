@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../photos/photo_providers.dart';
 import '../photos/photo_widgets.dart';
+import 'site_cover.dart';
 import 'site_providers.dart';
 
 /// Site detail — the "Select a block" screen from the reference design.
@@ -205,7 +206,7 @@ class _WingCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const ImageThumb(size: 64),
+              SiteCoverById(siteId: siteId, size: 64),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

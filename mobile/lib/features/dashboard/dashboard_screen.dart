@@ -639,7 +639,7 @@ class _WingRow extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
-          const ImageThumb(size: 52),
+          SiteCoverById(siteId: siteId, size: 52),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

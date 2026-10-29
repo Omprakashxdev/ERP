@@ -13,6 +13,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../photos/photo_providers.dart';
 import '../photos/photo_widgets.dart';
+import '../sites/site_cover.dart';
 import 'hierarchy_providers.dart';
 
 /// "Site › Wing A › Floor 2" — built from the HierarchyContext `extra`
@@ -151,6 +152,7 @@ class _ChildCard extends StatelessWidget {
     required this.onTap,
     this.thirdStatLabel = 'Rooms',
     this.thirdStatValue,
+    this.siteId,
   });
 
   final String title;
@@ -160,6 +162,10 @@ class _ChildCard extends StatelessWidget {
   final VoidCallback onTap;
   final String? thirdStatLabel;
   final String? thirdStatValue;
+
+  /// Site this card belongs to — the shared site cover fills the icon
+  /// tile when one exists; the generic placeholder stays otherwise.
+  final String? siteId;
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +177,9 @@ class _ChildCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              ImageThumb(size: 56),
+              siteId == null
+                  ? const ImageThumb(size: 56)
+                  : SiteCoverById(siteId: siteId!, size: 56),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -299,6 +307,7 @@ class FloorsScreen extends ConsumerWidget {
               else
                 for (final f in list) ...[
                   _ChildCard(
+                    siteId: ctx.siteId,
                     title: f.label,
                     subtitle: '${f.flatsCount} flats',
                     progress: f.progress,
@@ -380,6 +389,7 @@ class FlatsScreen extends ConsumerWidget {
               else
                 for (final f in list) ...[
                   _ChildCard(
+                    siteId: ctx.siteId,
                     title: 'Flat ${f.flatNumber}',
                     subtitle:
                         '${f.roomsCount} rooms${f.flatType != null ? ' · ${f.flatType}' : ''}',
@@ -469,6 +479,7 @@ class RoomsScreen extends ConsumerWidget {
               else
                 for (final r in bundle.rooms) ...[
                   _ChildCard(
+                    siteId: ctx.siteId,
                     title: r.roomName,
                     subtitle: r.roomType ?? 'Room',
                     progress: r.progress,

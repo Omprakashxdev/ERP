@@ -59,3 +59,29 @@ class _CoverPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) =>
       const Icon(Icons.apartment, color: AppColors.faint, size: 26);
 }
+
+/// Cover thumb for any site-context child (wing/floor/flat/room cards)
+/// — resolves `coverImagePath` from the assigned-sites list so a cover
+/// swap updates every thumbnail automatically without threading the
+/// key through navigation extras. Falls back to the same building-icon
+/// well when the site has no cover yet.
+class SiteCoverById extends ConsumerWidget {
+  const SiteCoverById({super.key, required this.siteId, this.size = 56});
+
+  final String siteId;
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sites = ref.watch(assignedSitesProvider).value;
+    if (sites != null) {
+      for (final s in sites) {
+        if (s.id == siteId) {
+          return SiteCover(
+              siteId: siteId, coverKey: s.coverImagePath, size: size);
+        }
+      }
+    }
+    return SiteCover(siteId: siteId, coverKey: null, size: size);
+  }
+}
