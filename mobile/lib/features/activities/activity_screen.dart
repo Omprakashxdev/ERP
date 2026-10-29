@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/offline/cache_db.dart';
 import '../../core/offline/offline_widgets.dart';
 import '../../core/offline/sync_providers.dart';
@@ -88,6 +89,8 @@ class _ActivityDetailScreenState
         photosProvider((target: PhotoTarget.activity, targetId: a.id)));
     ref.invalidate(photoOpsProvider(
         (target: PhotoTarget.activity, targetId: a.id)));
+    ref.invalidate(roomDetailProvider(widget.args.roomId));
+    await ref.read(roomDetailProvider(widget.args.roomId).future);
   }
 
   Future<void> _save() async {
@@ -403,14 +406,18 @@ class _StatusOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = statusThemeOf(status);
     return Material(
-      color: selected ? t.bg : AppColors.card,
+      color: AppColors.card,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Container(
+        child: AnimatedContainer(
+          duration: AppMotion.reduced(context)
+              ? Duration.zero
+              : AppMotion.fast,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
+            color: selected ? t.bg : AppColors.card,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
                 color: selected ? t.solid : AppColors.hairline,
@@ -427,8 +434,18 @@ class _StatusOption extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: selected ? t.fg : AppColors.ink)),
               ),
-              if (selected)
-                Icon(Icons.check_circle, size: 18, color: t.solid),
+              AnimatedSwitcher(
+                duration: AppMotion.reduced(context)
+                    ? Duration.zero
+                    : AppMotion.fast,
+                child: selected
+                    ? Icon(Icons.check_circle,
+                        key: const ValueKey('on'),
+                        size: 18,
+                        color: t.solid)
+                    : const SizedBox(
+                        key: ValueKey('off'), width: 18, height: 18),
+              ),
             ],
           ),
         ),
@@ -445,7 +462,7 @@ class _HistoryList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(activityHistoryProvider(activityId));
     return history.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const SkeletonCard(lines: 3),
       error: (_, __) => const SizedBox.shrink(),
       data: (items) {
         if (items.isEmpty) {

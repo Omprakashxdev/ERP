@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/offline/offline_widgets.dart';
 import '../../core/routing/router.dart';
 import '../../core/theme/app_theme.dart';
@@ -24,9 +25,11 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
 
   /// Family-wide cover invalidation — replaced covers carry a new
   /// storage key anyway, and this also drops bytes for removed covers.
-  void _refresh(WidgetRef ref) {
-    ref.invalidate(assignedSitesProvider);
+  /// Returns a future so RefreshIndicator shows an honest duration.
+  Future<void> _refresh(WidgetRef ref) async {
     ref.invalidate(siteCoverBytesProvider);
+    ref.invalidate(assignedSitesProvider);
+    await ref.read(assignedSitesProvider.future);
   }
 
   @override
@@ -59,7 +62,9 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () => _refresh(ref),
+                    onPressed: () {
+                      _refresh(ref);
+                    },
                     tooltip: 'Refresh',
                     icon: const Icon(Icons.refresh,
                         color: AppColors.muted),
@@ -119,8 +124,7 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
             const SizedBox(height: 12),
             Expanded(
               child: sites.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const ListSkeleton(count: 3, cardHeight: 110),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -152,7 +156,7 @@ class _SitesScreenState extends ConsumerState<SitesScreen> {
                     );
                   }
                   return RefreshIndicator(
-                    onRefresh: () async => _refresh(ref),
+                    onRefresh: () => _refresh(ref),
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       itemCount: filtered.length,
@@ -188,6 +192,7 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),

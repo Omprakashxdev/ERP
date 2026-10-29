@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/motion/app_motion.dart';
 import '../../core/theme/app_theme.dart';
 import 'site_providers.dart';
 
@@ -41,27 +42,20 @@ class SiteCover extends ConsumerWidget {
   Widget _covered(BuildContext context, WidgetRef ref) {
     final bytes = ref
         .watch(siteCoverBytesProvider((siteId: siteId, coverKey: coverKey!)));
-    return bytes.when(
-      data: (b) => b == null
-          ? const Icon(Icons.apartment, color: AppColors.faint, size: 26)
-          : Image.memory(
-              b,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              // Stored bytes could be unreadable — fall back to the icon
-              // rather than leaving an unexplained empty well.
-              errorBuilder: (_, __, ___) => const Icon(
-                  Icons.apartment, color: AppColors.faint, size: 26),
-            ),
-      loading: () => const Center(
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-      error: (_, __) =>
-          const Icon(Icons.apartment, color: AppColors.faint, size: 26),
+    // CoverImage retains the last decoded frame, so a refresh (or a
+    // cover replacement under a new key) crossfades instead of
+    // blanking back to the placeholder.
+    return CoverImage(
+      bytes: bytes.valueOrNull,
+      fit: BoxFit.cover,
+      placeholder: const _CoverPlaceholder(),
     );
   }
+}
+
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder();
+  @override
+  Widget build(BuildContext context) =>
+      const Icon(Icons.apartment, color: AppColors.faint, size: 26);
 }

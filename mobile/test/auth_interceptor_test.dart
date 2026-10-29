@@ -149,6 +149,53 @@ void main() {
       expect(refreshCalls, 1);
     });
 
+    test('retried POST preserves body, query, extra, timeouts and cancelToken',
+        () async {
+      RequestOptions? retried;
+      final api = Dio(BaseOptions(
+        baseUrl: 'http://test',
+        sendTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 7),
+      ));
+      final retryDio = Dio(BaseOptions(baseUrl: 'http://test'));
+      api.httpClientAdapter = _FakeAdapter((_) async => _unauthorized());
+      retryDio.httpClientAdapter = _FakeAdapter((opts) async {
+        retried = opts;
+        return _json({}, 200);
+      });
+      api.interceptors.add(AuthInterceptor(
+        accessToken: () async => 'new-token',
+        onRefresh: () async => RefreshOutcome.ok,
+        onSessionExpired: () async {},
+        retryDio: retryDio,
+      ));
+
+      final cancel = CancelToken();
+      final res = await api.post(
+        '/activities/a1',
+        data: {'status': 'IN_PROGRESS', 'eventId': 'evt-1'},
+        queryParameters: {'roomId': 'r9'},
+        cancelToken: cancel,
+        options: Options(extra: const {'eventId': 'evt-1'}),
+      );
+
+      expect(res.statusCode, 200);
+      expect(retried!.method, 'POST');
+      expect(retried!.headers['Authorization'], 'Bearer new-token');
+      expect(retried!.data, isA<Map>());
+      expect(retried!.data['eventId'], 'evt-1');
+      expect(retried!.queryParameters['roomId'], 'r9');
+      // Idempotency metadata rides in `extra` and must survive the rebuild.
+      expect(retried!.extra['eventId'], 'evt-1');
+      expect(retried!.extra['retriedAfterRefresh'], true);
+      // The bare retry Dio has no timeouts of its own — the rebuilt
+      // request must carry the caller's bounds so a stalled retry can
+      // never hang forever.
+      expect(retried!.sendTimeout, const Duration(seconds: 5));
+      expect(retried!.receiveTimeout, const Duration(seconds: 7));
+      expect(retried!.cancelToken, same(cancel));
+    });
+
     test('auth endpoints never trigger refresh', () async {
       var refreshCalls = 0;
       final api = Dio(BaseOptions(baseUrl: 'http://test'));

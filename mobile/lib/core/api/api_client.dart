@@ -105,7 +105,25 @@ class AuthInterceptor extends Interceptor {
           final token = await accessToken();
           req.headers['Authorization'] = 'Bearer $token';
           req.extra['retriedAfterRefresh'] = true;
-          final res = await _retryDio.fetch(req);
+          // Rebuild the request rather than re-fetching the consumed
+          // RequestOptions — fetch() on an already-sent options object can
+          // leave the response future pending forever, and the bare retry
+          // Dio has no timeouts to bound it.
+          final res = await _retryDio.request<dynamic>(
+            req.path,
+            data: req.data,
+            queryParameters: req.queryParameters,
+            cancelToken: req.cancelToken,
+            options: Options(
+              method: req.method,
+              headers: req.headers,
+              responseType: req.responseType,
+              contentType: req.contentType,
+              extra: req.extra,
+              sendTimeout: req.sendTimeout,
+              receiveTimeout: req.receiveTimeout,
+            ),
+          );
           return handler.resolve(res);
         } on DioException catch (e) {
           return handler.next(e);

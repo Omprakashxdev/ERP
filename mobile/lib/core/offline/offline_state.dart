@@ -103,6 +103,13 @@ Future<void> recordServerContact(Ref ref, String userId) async {
   ref.invalidate(lastSyncedAtProvider(userId));
 }
 
+/// Dedupes concurrent fetches for the same cache key — a pull-refresh
+/// landing on top of an app-resume or post-navigation invalidation
+/// shares one network request instead of firing duplicates. Entries
+/// are removed as soon as the request settles; sequential refreshes
+/// always hit the network again.
+final _inflightFetches = <String, Future<dynamic>>{};
+
 /// Fetch-through-cache helper used by every read provider.
 ///
 /// - Online: runs [fetch], stores the raw JSON response under
@@ -124,8 +131,10 @@ Future<T> cachedFetch<T>({
   final auth = ref.watch(authControllerProvider);
   final userId = auth is AuthSignedIn ? auth.user.id : null;
   final store = await ref.watch(cacheStoreProvider.future);
+  final flightKey = '$userId|$cacheKey';
+  final inflight = _inflightFetches.putIfAbsent(flightKey, () => fetch());
   try {
-    final data = await fetch();
+    final data = await inflight;
     if (userId != null) {
       await store.putEntry(
           userId, cacheKey, jsonEncode(data), DateTime.now());
@@ -149,5 +158,9 @@ Future<T> cachedFetch<T>({
       }
     }
     throw api;
+  } finally {
+    if (identical(_inflightFetches[flightKey], inflight)) {
+      _inflightFetches.remove(flightKey);
+    }
   }
 }

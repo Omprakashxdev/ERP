@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/models.dart';
+import '../motion/app_motion.dart';
 import '../theme/app_theme.dart';
 
 /// White rounded card used everywhere in the reference design.
@@ -51,6 +52,7 @@ class AppProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final target = percent == null ? 0.0 : percent!.clamp(0, 100) / 100;
     return ClipRRect(
       borderRadius: BorderRadius.circular(99),
       child: SizedBox(
@@ -60,10 +62,13 @@ class AppProgressBar extends StatelessWidget {
           children: [
             Container(color: AppColors.hairline),
             if (percent != null)
-              FractionallySizedBox(
-                widthFactor: (percent!.clamp(0, 100)) / 100,
-                alignment: Alignment.centerLeft,
-                child: Container(color: color),
+              AnimatedFraction(
+                value: target,
+                builder: (context, v) => FractionallySizedBox(
+                  widthFactor: v,
+                  alignment: Alignment.centerLeft,
+                  child: Container(color: color),
+                ),
               ),
           ],
         ),
@@ -112,15 +117,20 @@ class SegmentedStatusBar extends StatelessWidget {
               width: double.infinity,
               child: t == 0
                   ? Container(color: AppColors.hairline)
-                  : Row(
-                      children: [
-                        for (final s in slices)
-                          if (s.count > 0)
-                            Expanded(
-                              flex: s.count,
-                              child: Container(color: s.color),
-                            ),
-                      ],
+                  : LayoutBuilder(
+                      builder: (context, c) => Row(
+                        children: [
+                          for (final s in slices)
+                            if (s.count > 0)
+                              AnimatedFraction(
+                                value: s.fractionOf(t),
+                                builder: (context, v) => Container(
+                                  width: v * c.maxWidth,
+                                  color: s.color,
+                                ),
+                              ),
+                        ],
+                      ),
                     ),
             ),
           ),
@@ -191,25 +201,28 @@ class ProgressRing extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CircularProgressIndicator(
-            value: p == null ? 0 : p.clamp(0, 100) / 100,
-            strokeWidth: 5,
-            backgroundColor: AppColors.hairline,
-            valueColor: const AlwaysStoppedAnimation(AppColors.green),
-            strokeCap: StrokeCap.round,
-          ),
-          Text(
-            p == null ? '—' : '${p.round()}%',
-            style: TextStyle(
-              fontSize: size * 0.26,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+      child: AnimatedFraction(
+        value: p == null ? 0 : p.clamp(0, 100) / 100,
+        builder: (context, v) => Stack(
+          alignment: Alignment.center,
+          children: [
+            CircularProgressIndicator(
+              value: v,
+              strokeWidth: 5,
+              backgroundColor: AppColors.hairline,
+              valueColor: const AlwaysStoppedAnimation(AppColors.green),
+              strokeCap: StrokeCap.round,
             ),
-          ),
-        ],
+            Text(
+              p == null ? '—' : '${(v * 100).round()}%',
+              style: TextStyle(
+                fontSize: size * 0.26,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ink,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -294,21 +307,27 @@ class StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = statusThemeOfKind(kind);
     final (bg, fg, icon) = (t.bg, t.fg, t.icon);
-    return Container(
+    final d = AppMotion.reduced(context) ? Duration.zero : AppMotion.fast;
+    return AnimatedContainer(
+      duration: d,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration:
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fg),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600, color: fg),
-          ),
-        ],
+      child: AnimatedSwitcher(
+        duration: d,
+        child: Row(
+          key: ValueKey('$kind|$label'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -457,14 +476,21 @@ class PrimaryButton extends StatelessWidget {
               const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
         onPressed: loading ? null : onPressed,
-        icon: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
-              )
-            : Icon(icon ?? Icons.arrow_forward, size: 18),
+        icon: AnimatedSwitcher(
+          duration: AppMotion.reduced(context)
+              ? Duration.zero
+              : AppMotion.fast,
+          child: loading
+              ? const SizedBox(
+                  key: ValueKey('loading'),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(icon ?? Icons.arrow_forward,
+                  key: const ValueKey('icon'), size: 18),
+        ),
         label: Text(label),
       ),
     );

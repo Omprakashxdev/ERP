@@ -12,6 +12,7 @@ import '../../features/sites/site_detail_screen.dart';
 import '../../features/sites/sites_screen.dart';
 import '../auth/auth_controller.dart';
 import '../models/models.dart';
+import '../motion/app_motion.dart';
 
 abstract class Routes {
   static const login = '/login';
@@ -51,8 +52,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.login,
         builder: (_, __) => const LoginScreen(),
       ),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder: (_, __, shell) => AppShell(shell: shell),
+        // Same always-mounted branch Navigators as indexedStack, plus a
+        // fade-through between tabs instead of a hard cut.
+        navigatorContainerBuilder: (context, shell, children) =>
+            BranchFadeStack(
+          currentIndex: shell.currentIndex,
+          children: children,
+        ),
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(path: Routes.home, builder: (_, __) => const DashboardScreen()),
@@ -71,43 +79,61 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       // Hierarchy routes — live screens; breadcrumb context travels via
-      // `extra` (HierarchyContext) so taps carry ancestor names.
+      // `extra` (HierarchyContext) so taps carry ancestor names. All use
+      // the same slide+fade push (mirrored on back).
       GoRoute(
         path: '/sites/:siteId',
-        builder: (_, s) => SiteDetailScreen(siteId: s.pathParameters['siteId']!),
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: SiteDetailScreen(siteId: s.pathParameters['siteId']!),
+        ),
       ),
       GoRoute(
         path: '/wings/:wingId/floors',
-        builder: (_, s) => FloorsScreen(
-          wingId: s.pathParameters['wingId']!,
-          context_: s.extra as HierarchyContext?,
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: FloorsScreen(
+            wingId: s.pathParameters['wingId']!,
+            context_: s.extra as HierarchyContext?,
+          ),
         ),
       ),
       GoRoute(
         path: '/floors/:floorId/flats',
-        builder: (_, s) => FlatsScreen(
-          floorId: s.pathParameters['floorId']!,
-          context_: s.extra as HierarchyContext?,
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: FlatsScreen(
+            floorId: s.pathParameters['floorId']!,
+            context_: s.extra as HierarchyContext?,
+          ),
         ),
       ),
       GoRoute(
         path: '/flats/:flatId/rooms',
-        builder: (_, s) => RoomsScreen(
-          flatId: s.pathParameters['flatId']!,
-          context_: s.extra as HierarchyContext?,
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: RoomsScreen(
+            flatId: s.pathParameters['flatId']!,
+            context_: s.extra as HierarchyContext?,
+          ),
         ),
       ),
       GoRoute(
         path: '/rooms/:roomId/activities',
-        builder: (_, s) => RoomDetailScreen(
-          roomId: s.pathParameters['roomId']!,
-          context_: s.extra as HierarchyContext?,
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: RoomDetailScreen(
+            roomId: s.pathParameters['roomId']!,
+            context_: s.extra as HierarchyContext?,
+          ),
         ),
       ),
       GoRoute(
         path: '/activities/:activityId',
-        builder: (_, s) =>
-            ActivityDetailScreen(args: s.extra as ActivityDetailArgs),
+        pageBuilder: (_, s) => slideFadePage(
+          state: s,
+          child: ActivityDetailScreen(args: s.extra as ActivityDetailArgs),
+        ),
       ),
     ],
   );

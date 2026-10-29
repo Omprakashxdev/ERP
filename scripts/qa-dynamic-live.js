@@ -306,6 +306,30 @@ async function openRow(page, text) {
     await shot(page, "e3-erp-room-readback");
   }
 
+  if (phase === "assign-bliss") {
+    // Assign qa-field to site 01 (Bliss) — phone is logged in as qa-field.
+    await page.goto(
+      `${BASE}/dashboard/progress-app/sites/cmvs739fr000ls1c1mug35uzn`,
+      { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("h1", { timeout: 15000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.locator('button:has-text("Assign staff")').last().click();
+    await page.waitForSelector("#assign-user", { timeout: 8000 });
+    await page.locator("#assign-user").click();
+    await page.locator('[role="option"]')
+      .filter({ hasText: /qa.?field/i }).first().click();
+    const boxes2 = page.locator('[role="dialog"] input[type="checkbox"]');
+    await boxes2.nth(1).check();
+    await shot(page, "h1-assign-bliss");
+    await page.locator('[role="dialog"] button:has-text("Assign")')
+      .first().click();
+    await page.waitForTimeout(2000);
+    await page.waitForLoadState("networkidle").catch(() => {});
+    check("qa-field row on Bliss", await page
+      .locator('td:has-text("qa-field@saec-qa.local")').count() >= 1);
+    await shot(page, "h2-bliss-assigned");
+  }
+
   if (phase === "phase7") {
     await gotoSite(page);
     const revokeBtn = page.locator(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/offline/cache_db.dart';
 import '../../core/offline/offline_widgets.dart';
 import '../../core/offline/sync_providers.dart';
@@ -266,13 +267,13 @@ class FloorsScreen extends ConsumerWidget {
         OfflineBanner(cacheKey: wingFloorsKey(wingId)),
         Expanded(
           child: floors.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ListSkeleton(count: 3, cardHeight: 100),
         error: (e, _) => HierarchyError(
             error: e,
             onRetry: () => ref.invalidate(wingFloorsProvider(wingId))),
         data: (list) => RefreshIndicator(
-          onRefresh: () async =>
-              ref.invalidate(wingFloorsProvider(wingId)),
+          onRefresh: () =>
+              ref.refresh(wingFloorsProvider(wingId).future),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -347,13 +348,13 @@ class FlatsScreen extends ConsumerWidget {
         OfflineBanner(cacheKey: floorFlatsKey(floorId)),
         Expanded(
           child: flats.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ListSkeleton(count: 3, cardHeight: 100),
         error: (e, _) => HierarchyError(
             error: e,
             onRetry: () => ref.invalidate(floorFlatsProvider(floorId))),
         data: (list) => RefreshIndicator(
-          onRefresh: () async =>
-              ref.invalidate(floorFlatsProvider(floorId)),
+          onRefresh: () =>
+              ref.refresh(floorFlatsProvider(floorId).future),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -429,17 +430,18 @@ class RoomsScreen extends ConsumerWidget {
         OfflineBanner(cacheKey: flatRoomsKey(flatId)),
         Expanded(
           child: rooms.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ListSkeleton(count: 3, cardHeight: 100),
         error: (e, _) => HierarchyError(
             error: e,
             onRetry: () => ref.invalidate(flatRoomsProvider(flatId))),
         data: (bundle) => RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(flatRoomsProvider(flatId));
             ref.invalidate(photosProvider(
                 (target: PhotoTarget.flat, targetId: flatId)));
             ref.invalidate(photoOpsProvider(
                 (target: PhotoTarget.flat, targetId: flatId)));
+            ref.invalidate(flatRoomsProvider(flatId));
+            await ref.read(flatRoomsProvider(flatId).future);
           },
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -528,7 +530,7 @@ class RoomDetailScreen extends ConsumerWidget {
         OfflineBanner(cacheKey: roomDetailKey(roomId)),
         Expanded(
           child: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ListSkeleton(count: 3, cardHeight: 80),
         error: (e, _) => HierarchyError(
             error: e,
             onRetry: () => ref.invalidate(roomDetailProvider(roomId))),
@@ -536,11 +538,12 @@ class RoomDetailScreen extends ConsumerWidget {
           final p = d.progress;
           return RefreshIndicator(
             onRefresh: () async {
-              ref.invalidate(roomDetailProvider(roomId));
               ref.invalidate(photosProvider(
                   (target: PhotoTarget.room, targetId: roomId)));
               ref.invalidate(photoOpsProvider(
                   (target: PhotoTarget.room, targetId: roomId)));
+              ref.invalidate(roomDetailProvider(roomId));
+              await ref.read(roomDetailProvider(roomId).future);
             },
             child: ListView(
               padding: const EdgeInsets.all(16),

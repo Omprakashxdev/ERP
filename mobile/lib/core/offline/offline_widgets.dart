@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_controller.dart';
 import '../models/models.dart';
+import '../motion/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_widgets.dart';
 import 'cache_db.dart';
@@ -30,33 +31,38 @@ class OfflineBanner extends ConsumerWidget {
     final info = cacheKey == null ? null : serves[cacheKey];
     final servingCache = info?.fromCache == true ||
         serves.values.any((s) => s.fromCache);
-    if (net == NetStatus.online && !servingCache) {
-      return const SizedBox.shrink();
-    }
+    final visible = !(net == NetStatus.online && !servingCache);
     final when = info?.cachedAt;
     final label = net == NetStatus.offline
         ? (servingCache
             ? 'Offline — showing cached data${when != null ? ' from ${_ago(when)}' : ''}'
             : 'Offline — changes will be queued')
         : 'Showing cached data from ${_ago(when ?? DateTime.now())}';
-    return Container(
-      width: double.infinity,
-      color: AppColors.blueBg,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.cloud_off_outlined,
-              size: 16, color: AppColors.blue),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink)),
-          ),
-        ],
+    return AnimatedCrossFade(
+      duration: AppMotion.reduced(context) ? Duration.zero : AppMotion.med,
+      sizeCurve: Curves.easeOutCubic,
+      crossFadeState:
+          visible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+      firstChild: Container(
+        width: double.infinity,
+        color: AppColors.blueBg,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined,
+                size: 16, color: AppColors.blue),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink)),
+            ),
+          ],
+        ),
       ),
+      secondChild: const SizedBox(width: double.infinity),
     );
   }
 }
@@ -84,17 +90,23 @@ class PendingSyncChip extends StatelessWidget {
         color: AppColors.blueBg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: AppColors.blue),
-          const SizedBox(width: 4),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blue)),
-        ],
+      child: AnimatedSwitcher(
+        duration: AppMotion.reduced(context)
+            ? Duration.zero
+            : AppMotion.fast,
+        child: Row(
+          key: ValueKey(label),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: AppColors.blue),
+            const SizedBox(width: 4),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blue)),
+          ],
+        ),
       ),
     );
   }

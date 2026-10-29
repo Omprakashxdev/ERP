@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/offline/offline_widgets.dart';
 import '../../core/routing/router.dart';
 import '../../core/theme/app_theme.dart';
@@ -40,7 +41,7 @@ class DashboardScreen extends ConsumerWidget {
             orElse: () => list.first,
           );
           return RefreshIndicator(
-            onRefresh: () async => _refresh(ref, site.id),
+            onRefresh: () => _refresh(ref, site.id),
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
@@ -48,7 +49,9 @@ class DashboardScreen extends ConsumerWidget {
                   user: user,
                   site: site,
                   onMore: () => context.go(Routes.more),
-                  onRefresh: () => _refresh(ref, site.id),
+                  onRefresh: () {
+                    _refresh(ref, site.id);
+                  },
                 ),
                 Transform.translate(
                   offset: const Offset(0, -28),
@@ -89,12 +92,17 @@ class DashboardScreen extends ConsumerWidget {
 
   /// Refreshes every read surface the dashboard draws from — sites,
   /// detail, covers and the reports rollup — so ERP-side edits show up
-  /// on one explicit refresh without reinstall/restart.
-  static void _refresh(WidgetRef ref, String siteId) {
-    ref.invalidate(assignedSitesProvider);
-    ref.invalidate(siteDetailProvider(siteId));
+  /// on one explicit refresh without reinstall/restart. Returns a
+  /// future that completes when the site's own reads settle, so the
+  /// RefreshIndicator can show an honest duration instead of vanishing
+  /// while the network is still working.
+  static Future<void> _refresh(WidgetRef ref, String siteId) async {
     ref.invalidate(siteCoverBytesProvider);
-    ref.invalidate(summaryProvider);
+    await Future.wait([
+      ref.refresh(assignedSitesProvider.future),
+      ref.refresh(siteDetailProvider(siteId).future),
+      ref.refresh(summaryProvider.future),
+    ]);
   }
 }
 
@@ -131,11 +139,19 @@ class _Hero extends ConsumerWidget {
         children: [
           // Current-site cover as the hero background; the navy/teal
           // overlay keeps header text readable over any photo.
-          if (bytes != null) ...[
-            Image.memory(
-              bytes,
+          // CoverImage retains + crossfades the last decoded frame, so
+          // site switches and cover replacements never blank the hero.
+          if (site.coverImagePath != null) ...[
+            CoverImage(
+              bytes: bytes,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              resetKey: site.id,
+              placeholder: Align(
+                alignment: const Alignment(1.35, -0.85),
+                child: Icon(Icons.apartment,
+                    size: 200,
+                    color: Colors.white.withValues(alpha: 0.08)),
+              ),
             ),
             const DecoratedBox(
               decoration: BoxDecoration(
@@ -157,6 +173,7 @@ class _Hero extends ConsumerWidget {
               child: Icon(Icons.apartment,
                   size: 200, color: Colors.white.withValues(alpha: 0.08)),
             ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -231,25 +248,32 @@ class _CurrentSiteCard extends StatelessWidget {
               siteId: site.id, coverKey: site.coverImagePath, size: 44),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Current Site',
-                    style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                Text(
-                  site.siteName,
-                  style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.ink),
-                ),
-                if (site.locationLabel.isNotEmpty)
+            child: AnimatedSwitcher(
+              duration: AppMotion.reduced(context)
+                  ? Duration.zero
+                  : AppMotion.med,
+              child: Column(
+                key: ValueKey(site.id),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Current Site',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.muted)),
                   Text(
-                    site.locationLabel,
-                    style:
-                        const TextStyle(fontSize: 12, color: AppColors.muted),
+                    site.siteName,
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink),
                   ),
-              ],
+                  if (site.locationLabel.isNotEmpty)
+                    Text(
+                      site.locationLabel,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.muted),
+                    ),
+                ],
+              ),
             ),
           ),
           if (all.length > 1)
@@ -311,7 +335,11 @@ class _StatsRow extends ConsumerWidget {
         Expanded(child: _SkeletonTile()),
       ]),
       error: (_, __) => const SizedBox.shrink(),
-      data: (b) => Row(
+      data: (b) => AnimatedSwitcher(
+        duration:
+            AppMotion.reduced(context) ? Duration.zero : AppMotion.med,
+        child: Row(
+          key: ValueKey(siteId),
         children: [
           Expanded(
             child: StatTile(
@@ -345,6 +373,7 @@ class _StatsRow extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -354,7 +383,7 @@ class _SkeletonTile extends StatelessWidget {
   const _SkeletonTile();
   @override
   Widget build(BuildContext context) =>
-      const AppCard(child: SizedBox(height: 36));
+      const AppCardShell(child: SkeletonBox(height: 36, radius: 10));
 }
 
 class _ProgressOverview extends ConsumerWidget {
@@ -378,16 +407,21 @@ class _ProgressOverview extends ConsumerWidget {
                       color: AppColors.ink)),
             ),
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => context.push(Routes.site(site.id)).then((_) {
                 if (context.mounted) {
                   DashboardScreen._refresh(ref, site.id);
                 }
               }),
-              child: const Text('View Details →',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blue)),
+              child: const Padding(
+                padding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text('View Details →',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.blue)),
+              ),
             ),
           ],
         ),
@@ -533,23 +567,26 @@ class _BlocksOverview extends ConsumerWidget {
                       color: AppColors.ink)),
             ),
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => context.push(Routes.site(siteId)).then((_) {
                 if (context.mounted) {
                   DashboardScreen._refresh(ref, siteId);
                 }
               }),
-              child: const Text('View All →',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blue)),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text('View All →',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.blue)),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         detail.when(
-          loading: () =>
-              const AppCard(child: Center(child: CircularProgressIndicator())),
+          loading: () => const SkeletonCard(lines: 2),
           error: (_, __) => const AppCard(
               child: Text('Could not load blocks.',
                   style: TextStyle(color: AppColors.muted))),
@@ -557,13 +594,19 @@ class _BlocksOverview extends ConsumerWidget {
               ? const AppCard(
                   child: Text('No blocks configured in ERP yet.',
                       style: TextStyle(color: AppColors.muted)))
-              : Column(
-                  children: [
-                    for (final w in b.wings.take(4)) ...[
-                      _WingRow(wing: w, siteId: siteId),
-                      const SizedBox(height: 10),
+              : AnimatedSwitcher(
+                  duration: AppMotion.reduced(context)
+                      ? Duration.zero
+                      : AppMotion.med,
+                  child: Column(
+                    key: ValueKey(siteId),
+                    children: [
+                      for (final w in b.wings.take(4)) ...[
+                        _WingRow(wing: w, siteId: siteId),
+                        const SizedBox(height: 10),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
         ),
       ],

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/offline/offline_widgets.dart';
 import '../../core/offline/sync_providers.dart';
 import '../../core/routing/router.dart';
@@ -36,7 +37,7 @@ class SiteDetailScreen extends ConsumerWidget {
         OfflineBanner(cacheKey: siteDetailKey(siteId)),
         Expanded(
           child: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ListSkeleton(count: 3, cardHeight: 100),
         error: (e, _) => Center(
           child: Text(
             e is ApiException ? e.message : 'Failed to load site.',
@@ -45,12 +46,13 @@ class SiteDetailScreen extends ConsumerWidget {
         ),
         data: (b) => RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(siteDetailProvider(siteId));
             ref.invalidate(siteCoverBytesProvider);
             ref.invalidate(photosProvider(
                 (target: PhotoTarget.site, targetId: siteId)));
             ref.invalidate(photoOpsProvider(
                 (target: PhotoTarget.site, targetId: siteId)));
+            ref.invalidate(siteDetailProvider(siteId));
+            await ref.read(siteDetailProvider(siteId).future);
           },
           child: ListView(
           padding: const EdgeInsets.all(16),
@@ -151,21 +153,16 @@ class _CoverBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bytes = ref.watch(siteCoverBytesProvider(
         (siteId: siteId, coverKey: coverKey)));
-    return bytes.maybeWhen(
-      data: (b) => b == null
-          ? const SizedBox.shrink()
-          : ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Image.memory(
-                  b,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
-      orElse: () => const SizedBox.shrink(),
+    final b = bytes.valueOrNull;
+    if (b == null) return const SizedBox.shrink();
+    // Retains the old frame while a replacement cover is being fetched,
+    // then crossfades — no blank banner between cover versions.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: CoverImage(bytes: b, fit: BoxFit.cover),
+      ),
     );
   }
 }

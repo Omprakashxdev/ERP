@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/models/models.dart';
+import '../../core/motion/app_motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../core/offline/offline_state.dart';
@@ -67,8 +68,7 @@ class ReportsScreen extends ConsumerWidget {
             ),
             Expanded(
               child: summary.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const ListSkeleton(count: 3, cardHeight: 76),
                 error: (e, _) => Center(
                   child: Text(
                     e is ApiException ? e.message : 'Failed to load.',
@@ -76,8 +76,7 @@ class ReportsScreen extends ConsumerWidget {
                   ),
                 ),
                 data: (items) => RefreshIndicator(
-                  onRefresh: () async =>
-                      ref.invalidate(summaryProvider),
+                  onRefresh: () => ref.refresh(summaryProvider.future),
                   child: items.isEmpty
                       ? ListView(
                           children: const [
