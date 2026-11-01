@@ -42,6 +42,8 @@ EXPECTED_INDEXES=(
   "ProgressRoomChecklist_one_active_per_room"
   "ProgressActivityHistory_eventId_key"
   "ProgressPhoto_clientEventId_key"
+  # Brick 2 release — In-Out Register project association
+  "InOutRegister_projectId_idx"
 )
 UPLOAD_DIRS=("private_uploads" "public/uploads")
 
@@ -221,14 +223,14 @@ remote_sh "sudo -u postgres psql -d $DB_NAME -Atc '
 # migrate status exits non-zero when migrations are pending — that is the
 # expected pre-deploy state, so tolerate it and enforce the pending set below.
 remote "cd $DEPLOY_DIR && npx prisma migrate status || true"
-echo "  # pending set must be EXACTLY the 4 progress-app migrations"
-echo "  # (site_master, hierarchy, checklists, mobile_photos) — abort if anything else appears"
+echo "  # pending set must be EXACTLY the Brick 2 project-association migration"
+echo "  # (20261031204614_inout_project_association) — abort if anything else appears"
 if [[ $EXECUTE -eq 1 ]]; then
   UNEXPECTED=$($SSH "$REMOTE" "cd $DEPLOY_DIR && for d in prisma/migrations/*/; do \
     n=\$(basename \"\$d\"); \
     sudo -u postgres psql -d $DB_NAME -Atc \"SELECT 1 FROM _prisma_migrations WHERE migration_name='\$n'\" | grep -q 1 || echo \"\$n\"; \
-  done | grep -vE 'progress_(site_master|hierarchy|checklists|mobile_photos)' || true")
-  [[ -z "$UNEXPECTED" ]] || fail "pending migrations outside the progress-app set: $UNEXPECTED"
+  done | grep -vE '20261031204614_inout_project_association' || true")
+  [[ -z "$UNEXPECTED" ]] || fail "pending migrations outside the expected set: $UNEXPECTED"
   FAILED_MIG=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL'")
   [[ "$FAILED_MIG" == "0" ]] || fail "prisma migration history not clean ($FAILED_MIG failed/rolled-back rows) — resolve before deploying"
   DUPES=$($SSH "$REMOTE" "sudo -u postgres psql -d $DB_NAME -Atc 'SELECT count(*) FROM (SELECT lower(btrim(\"documentRefNo\")) n FROM \"InOutRegister\" WHERE \"documentRefNo\" IS NOT NULL GROUP BY 1 HAVING count(*) > 1) d'")

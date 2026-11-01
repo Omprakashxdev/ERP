@@ -674,19 +674,22 @@ async function runInOutGeneral(params?: ReportFilterParams) {
     include: {
       client: { select: { name: true } },
       actionSuggestedStaff: { select: { name: true } },
+      project: { select: { name: true } },
+      parentInward: { select: { project: { select: { name: true } } } },
     },
     orderBy: { receivedDate: "desc" },
     take: 500,
   });
 
   return {
-    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Department", "Details", "Reply Due Date", "Action Staff", "Age (days)"],
+    columns: ["Direction", "Doc Date", "Received/Sent Date", "Doc Ref No", "Client", "Project", "Department", "Details", "Reply Due Date", "Action Staff", "Age (days)"],
     rows: rows.map((r) => ({
       Direction: r.direction === "OUTWARD" ? "Outward" : r.direction === "INWARD" ? "Inward" : "Unclassified",
       "Doc Date": r.documentDate,
       "Received/Sent Date": r.receivedDate,
       "Doc Ref No": r.documentRefNo,
       Client: r.client.name,
+      Project: r.project?.name ?? r.parentInward?.project?.name ?? "—",
       Department: r.department ?? "—",
       Details: r.details ?? "",
       "Reply Due Date": r.replyDueDate ? formatDateIST(r.replyDueDate) : "—",
@@ -737,6 +740,7 @@ async function runInOutOutward(params?: ReportFilterParams) {
     include: {
       client: { select: { name: true } },
       actionSuggestedStaff: { select: { name: true } },
+      parentInward: { select: { project: { select: { name: true } } } },
     },
     orderBy: { receivedDate: "desc" },
     take: 500,
@@ -748,6 +752,7 @@ async function runInOutOutward(params?: ReportFilterParams) {
       "Dispatched Date",
       "Outward Ref No",
       "Client",
+      "Project",
       "Department",
       "Details",
       "Action Staff",
@@ -758,6 +763,7 @@ async function runInOutOutward(params?: ReportFilterParams) {
       "Dispatched Date": r.receivedDate,
       "Outward Ref No": r.documentRefNo,
       Client: r.client.name,
+      Project: r.parentInward?.project?.name ?? "—",
       Department: r.department ?? "—",
       Details: r.details ?? "",
       "Action Staff": r.actionSuggestedStaff?.name ?? "—",
@@ -808,6 +814,7 @@ async function runInOutPendingReply(params?: ReportFilterParams) {
     include: {
       client: { select: { name: true } },
       actionSuggestedStaff: { select: { name: true } },
+      project: { select: { name: true } },
     },
     orderBy: [{ replyDueDate: "asc" }, { receivedDate: "asc" }],
     take: 500,
@@ -818,7 +825,7 @@ async function runInOutPendingReply(params?: ReportFilterParams) {
   const nowUtc = Date.UTC(ny, nm - 1, nd);
 
   return {
-    columns: ["Received Date", "Doc Ref No", "Client", "Department", "Details", "Reply Due Date", "Due Status", "Action Staff", "Age (days)"],
+    columns: ["Received Date", "Doc Ref No", "Client", "Project", "Department", "Details", "Reply Due Date", "Due Status", "Action Staff", "Age (days)"],
     rows: rows.map((r) => {
       let dueStatus = "Pending";
       if (r.replyDueDate) {
@@ -838,6 +845,7 @@ async function runInOutPendingReply(params?: ReportFilterParams) {
         "Received Date": r.receivedDate,
         "Doc Ref No": r.documentRefNo,
         Client: r.client.name,
+        Project: r.project?.name ?? "—",
         Department: r.department ?? "—",
         Details: r.details ?? "",
         "Reply Due Date": r.replyDueDate ? formatDateIST(r.replyDueDate) : "—",

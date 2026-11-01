@@ -47,6 +47,7 @@ import {
 
 import { StaffTable } from "@/app/dashboard/employee/staff-table";
 import { ClientsTable } from "@/app/dashboard/clients/clients-table";
+import { ProjectsTable } from "@/components/masters/projects-table";
 import { Staff, Region, EmployeeDetail, Department, Designation, City } from "@prisma/client";
 
 type StaffWithDetails = Staff & {
@@ -55,7 +56,7 @@ type StaffWithDetails = Staff & {
   employeeDetail?: EmployeeDetail | null;
 };
 
-export type ExtendedMasterType = MasterType | "employee" | "clients";
+export type ExtendedMasterType = MasterType | "employee" | "clients" | "projects";
 
 interface MasterItem {
   id: string;
@@ -87,6 +88,7 @@ interface MasterConfig {
 
 const MASTER_CONFIGS: MasterConfig[] = [
   { type: "clients", label: "Clients", singularLabel: "Client", field: "name" },
+  { type: "projects", label: "Projects", singularLabel: "Project", field: "name" },
   { type: "employee", label: "Employees", singularLabel: "Employee", field: "name" },
   { type: "region", label: "Regions", singularLabel: "Region", field: "name" },
   { type: "department", label: "Departments", singularLabel: "Department", field: "name" },
@@ -111,7 +113,9 @@ const MASTER_CONFIGS: MasterConfig[] = [
 
 interface MastersManagerProps {
   initialTab?: string;
+  initialEditProjectId?: string;
   clientsData?: any[];
+  projectsData?: any[];
   staffData?: StaffWithDetails[];
   regionsData?: Region[];
   departmentsData?: Department[];
@@ -119,11 +123,14 @@ interface MastersManagerProps {
   citiesData?: City[];
   canManage?: boolean;
   canManageClients?: boolean;
+  canManageProjects?: boolean;
 }
 
 export function MastersManager({
   initialTab,
+  initialEditProjectId,
   clientsData = [],
+  projectsData = [],
   staffData = [],
   regionsData = [],
   departmentsData = [],
@@ -131,6 +138,7 @@ export function MastersManager({
   citiesData = [],
   canManage = true,
   canManageClients = true,
+  canManageProjects = true,
 }: MastersManagerProps) {
   const [activeType, setActiveType] = useState<ExtendedMasterType>(
     (initialTab as ExtendedMasterType) && MASTER_CONFIGS.some((c) => c.type === initialTab)
@@ -158,7 +166,7 @@ export function MastersManager({
   const activeConfig = MASTER_CONFIGS.find((c) => c.type === activeType)!;
 
   const loadItems = useCallback(async () => {
-    if (activeType === "employee" || activeType === "clients") return;
+    if (activeType === "employee" || activeType === "clients" || activeType === "projects") return;
     setLoading(true);
     const res = await getMasterList(activeType as MasterType, search || undefined);
     if (res.success && res.data) {
@@ -346,6 +354,26 @@ export function MastersManager({
             <ClientsTable
               clients={clientsData as never}
               canManage={canManageClients}
+            />
+          </CardContent>
+        </Card>
+      ) : activeType === "projects" ? (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle className="text-base font-medium">
+                Projects ({projectsData.length})
+              </CardTitle>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Centralized project master — manage project details, timelines, staff assignments, and fee stages
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ProjectsTable
+              projects={projectsData as never}
+              canManage={canManageProjects}
+              initialEditProjectId={initialEditProjectId}
             />
           </CardContent>
         </Card>

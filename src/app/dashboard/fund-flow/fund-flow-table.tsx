@@ -22,14 +22,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
-import { ProjectForm } from "./project-form";
 import { FundFlowEditor } from "./fund-flow-editor";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  Plus,
 } from "lucide-react";
 
 interface FundFlowTableProps {
@@ -42,6 +40,7 @@ interface FundFlowTableProps {
   regions: { id: string; name: string }[];
   clients: { id: string; name: string }[];
   staff: { id: string; name: string | null }[];
+  canManageProjects?: boolean;
 }
 
 const statusVariantMap: Record<ProjectStatus, string> = {
@@ -81,11 +80,11 @@ export function FundFlowTable({
   total,
   totalPages,
   filter,
+  canManageProjects = false,
 }: FundFlowTableProps) {
   const router = useRouter();
   const [selectedFundFlow, setSelectedFundFlow] =
     useState<FundFlowWithComputed | null>(null);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
@@ -105,13 +104,6 @@ export function FundFlowTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-zinc-600">Fund Flow records</h2>
-        <Button
-          size="sm"
-          onClick={() => setCreateProjectOpen(true)}
-        >
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          New project
-        </Button>
       </div>
 
       {typedRows.length === 0 ? (
@@ -119,16 +111,9 @@ export function FundFlowTable({
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileSpreadsheet className="h-12 w-12 text-zinc-300" />
             <h3 className="mt-4 text-lg font-medium">No Fund Flow records</h3>
-            <p className="mt-1 max-w-sm text-sm text-zinc-500 mb-4">
-              Add a project to start tracking fund flow.
+            <p className="mt-1 max-w-sm text-sm text-zinc-500">
+              Projects created under Masters → Projects appear here for financial tracking.
             </p>
-            <Button
-              size="sm"
-              onClick={() => setCreateProjectOpen(true)}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New project
-            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -322,16 +307,10 @@ export function FundFlowTable({
         </div>
       )}
 
-      {createProjectOpen && (
-        <ProjectForm
-          mode="create"
-          onClose={() => setCreateProjectOpen(false)}
-        />
-      )}
-
       {selectedFundFlow && (
         <FundFlowEditor
           project={selectedFundFlow}
+          canManageProjects={canManageProjects}
           onClose={() => setSelectedFundFlow(null)}
         />
       )}

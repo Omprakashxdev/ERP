@@ -4,6 +4,7 @@ export type InOutRegisterListRow = InOutRegister & {
   client: Client;
   actionSuggestedStaff: Staff | null;
   mode?: Pick<ModeMaster, "id" | "name" | "isActive"> | null;
+  project?: { id: string; name: string; abbreviation?: string | null } | null;
   documents: InOutRegisterDocument[];
   ccStaff: (InOutRegisterCcStaff & { staff: Staff })[];
   parentInward?: {
@@ -12,6 +13,7 @@ export type InOutRegisterListRow = InOutRegister & {
     documentRefNo?: string | null;
     details?: string | null;
     documentDate?: Date;
+    project?: { id: string; name: string } | null;
   } | null;
   replies?: {
     id: string;

@@ -214,6 +214,7 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
           actionSuggestedStaff: { select: { name: true, id: true } },
           receivedByStaff: { select: { name: true, id: true } },
           mode: { select: { name: true, id: true } },
+          project: { select: { name: true, id: true } },
           documents: { select: { path: true } },
           ccStaff: { include: { staff: { select: { name: true } } } },
           parentInward: { select: { documentRefNo: true } },
@@ -583,7 +584,8 @@ export async function importModule(
             const allowedFields = [
               "direction", "serialNo", "documentDate", "receivedDate", "documentRefNo", "clientId",
               "details", "actionSuggestedStaffId", "modeId", "letterPad",
-              "inwardType", "receivedByPersonName", "receivedByStaffId", "department", "replyDueDate", "parentInwardId"
+              "inwardType", "receivedByPersonName", "receivedByStaffId", "department", "replyDueDate", "parentInwardId",
+              "projectId"
             ];
             const cleanData: Record<string, unknown> = {};
             for (const key of allowedFields) {
@@ -643,6 +645,9 @@ export async function importModule(
             // Outward letters are going outside, so they NEVER have pending reply or deadline
             if (cleanData.direction === "OUTWARD") {
               cleanData.replyDueDate = null;
+              // Project linkage is inward-only — outward rows inherit the
+              // linked inward's project for display instead.
+              cleanData.projectId = null;
 
               // If parent inward ref no was provided in CSV, resolve it to parentInwardId
               const parentRef =
@@ -669,6 +674,23 @@ export async function importModule(
                     `Row ${i + 1}: Linked Outward dispatch to Inward letter "${parentDoc.serialNo || parentDoc.documentRefNo || parentRef}"`
                   );
                 }
+              }
+            }
+
+            // A linked project must belong to the entry's client — same
+            // rule as the Inward form's server-side validation.
+            if (cleanData.projectId && cleanData.clientId) {
+              const linkedProject = await prisma.project.findUnique({
+                where: { id: String(cleanData.projectId) },
+                select: { clientId: true },
+              });
+              if (!linkedProject) {
+                throw new Error("Selected project does not exist — check the project column");
+              }
+              if (linkedProject.clientId !== cleanData.clientId) {
+                throw new Error(
+                  "Selected project belongs to a different client — the project must match the entry's client"
+                );
               }
             }
 
@@ -894,10 +916,36 @@ export async function getModuleList(): Promise<
 }
 
 interface RelationResolver {
-  lookup: (value: string) => Promise<string | null>;
-  fuzzyLookup: (value: string) => Promise<string | null>;
+  lookup: (value: string, row?: Record<string, string>) => Promise<string | null>;
+  fuzzyLookup: (value: string, row?: Record<string, string>) => Promise<string | null>;
   masterLabel: string;
   autoCreate?: (value: string, row: Record<string, string>) => Promise<string | null>;
+}
+
+// Resolves the entry's client from the raw import row so relation lookups
+// (e.g. project) can be scoped to the same client — project names are only
+// unique within a client, never globally.
+async function resolveImportClientScope(row: Record<string, string>): Promise<string | null> {
+  const rawId = (row.clientId ?? "").trim();
+  if (rawId) {
+    const c = await prisma.client.findUnique({
+      where: { id: rawId },
+      select: { id: true },
+    });
+    if (c) return c.id;
+  }
+  const rawName = (row.client ?? "").trim();
+  if (!rawName) return null;
+  const c = await prisma.client.findFirst({
+    where: {
+      OR: [
+        { name: { equals: rawName, mode: "insensitive" } },
+        { abbreviation: { equals: rawName, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true },
+  });
+  return c?.id ?? null;
 }
 
 async function autoCreateProjectFromImport(name: string, row: Record<string, string>): Promise<string> {
@@ -1215,6 +1263,50 @@ async function resolveRelations(
         // map to a different mode; unknown names fail with a row error.
         fuzzyLookup: async () => null,
       },
+      project: {
+        masterLabel: "Project master",
+        // No autoCreate — projects are only ever created through
+        // Masters → Projects. An unmatched or cross-client name fails the row.
+        lookup: async (name: string, row?: Record<string, string>) => {
+          const clean = name.trim();
+          const clientScope = row ? await resolveImportClientScope(row) : null;
+          const matches = await prisma.project.findMany({
+            where: {
+              ...(clientScope ? { clientId: clientScope } : {}),
+              OR: [
+                { name: { equals: clean, mode: "insensitive" } },
+                { abbreviation: { equals: clean, mode: "insensitive" } },
+              ],
+            },
+            select: { id: true },
+            take: 2,
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `Project "${clean}" matches multiple projects for this client — provide the project abbreviation`
+            );
+          }
+          return matches[0]?.id ?? null;
+        },
+        fuzzyLookup: async (name: string, row?: Record<string, string>) => {
+          const clean = name.trim();
+          const clientScope = row ? await resolveImportClientScope(row) : null;
+          const matches = await prisma.project.findMany({
+            where: {
+              ...(clientScope ? { clientId: clientScope } : {}),
+              name: { contains: clean, mode: "insensitive" },
+            },
+            select: { id: true },
+            take: 2,
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `Project "${clean}" is ambiguous within this client — provide the exact project name or abbreviation`
+            );
+          }
+          return matches[0]?.id ?? null;
+        },
+      },
     },
     tadaBills: {
       staff: {
@@ -1394,10 +1486,10 @@ async function resolveRelations(
     if (!relName || relName.trim() === "") continue;
 
     const trimmedName = relName.trim();
-    let resolvedId = await resolver.lookup(trimmedName);
+    let resolvedId = await resolver.lookup(trimmedName, row);
 
     if (!resolvedId) {
-      resolvedId = await resolver.fuzzyLookup(trimmedName);
+      resolvedId = await resolver.fuzzyLookup(trimmedName, row);
       if (resolvedId) {
         corrections.push(
           `Row ${rowIndex + 1}: Auto-matched ${relField} "${trimmedName}" (case-insensitive lookup)`
@@ -1679,7 +1771,7 @@ function getTemplateFields(module: string): string[] {
     dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
     wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
     vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
-    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "mode", "letterPad", "inwardType", "receivedByPersonName", "receivedByStaff", "replyDueDate", "parentInwardRefNo"],
+    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "project", "department", "actionSuggestedStaff", "mode", "letterPad", "inwardType", "receivedByPersonName", "receivedByStaff", "replyDueDate", "parentInwardRefNo"],
     tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
     tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],
@@ -1713,7 +1805,7 @@ function getTemplateSampleRow(module: string): string[] {
     dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
     wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
     vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
-    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "By Post", "Head Office", "ACTION_REQUIRED", "", "John Staff", "2026-06-15", ""],
+    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "", "Regional Office Rajkot", "John Staff", "By Post", "Head Office", "ACTION_REQUIRED", "", "John Staff", "2026-06-15", ""],
     tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
     tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],

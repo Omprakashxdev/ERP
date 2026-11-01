@@ -692,6 +692,19 @@ export function FundFlowForm({ project, onClose, embedded }: FundFlowFormProps) 
 
     setMonthlySaving(true);
     try {
+      // If the project was created in Masters and has no FundFlow row yet,
+      // initialize its FundFlow row first so individual month entry works.
+      if (!project.fundFlow) {
+        const initRes = await upsertFundFlow({
+          projectId: project.id,
+          totalProjectCost: Number(form.totalProjectCost) || 0,
+        } as unknown as Parameters<typeof upsertFundFlow>[0]);
+        if (!initRes.success) {
+          toast.error(initRes.error ?? "Failed to initialize fund flow.");
+          await loadMonthlyAllocations();
+          return;
+        }
+      }
       const result = await upsertMonthlyAllocation({
         projectId: project.id,
         month,

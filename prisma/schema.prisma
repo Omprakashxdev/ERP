@@ -602,6 +602,7 @@ model InOutRegister {
   replyDate              DateTime?
   replyRefNo             String?                 @unique
   parentInwardId         String?
+  projectId              String?
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -612,10 +613,12 @@ model InOutRegister {
   mode                   ModeMaster?             @relation(fields: [modeId], references: [id], onDelete: Restrict)
   parentInward           InOutRegister?          @relation("InwardOutwardLink", fields: [parentInwardId], references: [id], onDelete: SetNull)
   replies                InOutRegister[]         @relation("InwardOutwardLink")
+  project                Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
   documents              InOutRegisterDocument[]
   ccStaff                InOutRegisterCcStaff[]
 
   @@index([clientId])
+  @@index([projectId])
   @@index([direction])
   @@index([receivedDate])
   @@index([documentDate])
@@ -716,6 +719,7 @@ model Project {
   wip         WorkInProgress?
   tasks       Task[]          @relation("TaskProject")
   progressSites ProgressSite[]
+  inOutRegisters InOutRegister[]
 
   @@unique([clientId, name])
   @@index([regionId])

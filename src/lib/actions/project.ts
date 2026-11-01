@@ -96,15 +96,6 @@ export async function createProject(
         },
       });
 
-      await tx.fundFlow.upsert({
-        where: { projectId: created.id },
-        create: {
-          projectId: created.id,
-          totalProjectCost: parsed.estimatedCost,
-        },
-        update: {},
-      });
-
       return created;
     });
 
@@ -112,6 +103,7 @@ export async function createProject(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    revalidatePath("/dashboard/masters");
     revalidatePath("/dashboard/fund-flow");
     return { id: project.id };
   }, mutationRoles);
@@ -267,6 +259,7 @@ export async function updateProject(
       input: await sanitizeForAudit(parsed as Record<string, unknown>),
     });
 
+    revalidatePath("/dashboard/masters");
     revalidatePath("/dashboard/fund-flow");
     return { id: project.id };
   }, mutationRoles);

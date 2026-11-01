@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { hasPermission } from "@/lib/authz";
 import { getFundFlows } from "@/lib/actions/fund-flow";
 import { getRegions } from "@/lib/actions/region";
 import { getClients } from "@/lib/actions/client";
@@ -33,6 +34,9 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
   if (!session?.user) {
     redirect("/login");
   }
+  const canManageProjects =
+    hasPermission(session.user.role, "projectManagement", "create") ||
+    hasPermission(session.user.role, "projectManagement", "update");
 
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? "1"));
@@ -100,6 +104,7 @@ export default async function FundFlowPage({ searchParams }: FundFlowPageProps) 
                 regions={serialize(regions) as { id: string; name: string }[]}
                 clients={serialize(clients) as { id: string; name: string }[]}
                 staff={serialize(staff) as { id: string; name: string | null }[]}
+                canManageProjects={canManageProjects}
               />
             ) : (
               <Card className="shadow-sm">

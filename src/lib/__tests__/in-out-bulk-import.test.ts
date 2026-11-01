@@ -355,3 +355,135 @@ describe("In-Out Register Bulk Import — Mode + Letter pad", () => {
     expect(modeSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("In-Out Register Bulk Import — Related Project resolution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (vi.spyOn(prisma, "$transaction") as any).mockImplementation(
+      async (fn: any) => fn(prisma)
+    );
+    (vi.spyOn(prisma, "$queryRaw") as any).mockResolvedValue([{ lastSeq: 6 }]);
+    (vi.spyOn(prisma, "$executeRaw") as any).mockResolvedValue(1);
+    (vi.spyOn(prisma.client, "findFirst") as any).mockImplementation(
+      async (args: any) => {
+        const name = args?.where?.OR?.[0]?.name?.equals;
+        if (name === "GSPHC") {
+          return { id: "client-gsphc-id", name: "GSPHC" };
+        }
+        if (name === "OtherCo") {
+          return { id: "client-other-id", name: "OtherCo" };
+        }
+        return null;
+      }
+    );
+    vi.spyOn(prisma.staff, "findFirst").mockResolvedValue({
+      id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001",
+    } as any);
+    (vi.spyOn(prisma.inOutRegister, "findFirst") as any).mockResolvedValue(null);
+    // Project resolver is client-scoped: only "Site Project" exists, under GSPHC.
+    (vi.spyOn(prisma.project, "findMany") as any).mockImplementation(
+      async (args: any) => {
+        const scope = args?.where?.clientId;
+        const nameMatch =
+          args?.where?.OR?.[0]?.name?.equals ?? args?.where?.name?.contains;
+        if (scope === "client-gsphc-id" && /site project/i.test(nameMatch ?? "")) {
+          return [{ id: "proj-site-1", clientId: "client-gsphc-id" }] as any;
+        }
+        return [] as any;
+      }
+    );
+    (vi.spyOn(prisma.project, "findUnique") as any).mockImplementation(
+      async (args: any) =>
+        args?.where?.id === "proj-site-1"
+          ? { id: "proj-site-1", clientId: "client-gsphc-id" }
+          : null
+    );
+  });
+
+  const header =
+    "direction,documentDate,receivedDate,documentRefNo,details,client,project,department,actionSuggestedStaff";
+
+  function collect() {
+    const createdRecords: any[] = [];
+    (vi.spyOn(prisma.inOutRegister, "create") as any).mockImplementation(
+      async (args: any) => {
+        const rec = { id: `id-${createdRecords.length + 1}`, ...args.data };
+        createdRecords.push(rec);
+        return rec;
+      }
+    );
+    return createdRecords;
+  }
+
+  it("resolves a project name within the row's client and persists projectId", async () => {
+    const createdRecords = collect();
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "INWARD,2026-10-01,2026-10-02,INW/PRJ/001,Site letter,GSPHC,Site Project,Eng,Amit Desai",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0].projectId).toBe("proj-site-1");
+  });
+
+  it("rejects a project name that only exists under a different client — never auto-creates", async () => {
+    const createdRecords = collect();
+    const projectCreate = vi.spyOn(prisma.project, "create");
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "INWARD,2026-10-01,2026-10-02,INW/PRJ/002,Letter,OtherCo,Site Project,Eng,Amit Desai",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data!.imported).toBe(0);
+    expect(res.data!.errors.join(" ")).toMatch(/not found/i);
+    expect(createdRecords).toHaveLength(0);
+    expect(projectCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an ambiguous project match within the client", async () => {
+    collect();
+    (vi.spyOn(prisma.project, "findMany") as any).mockResolvedValue([
+      { id: "p1" },
+      { id: "p2" },
+    ] as any);
+
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "INWARD,2026-10-01,2026-10-02,INW/PRJ/003,Letter,GSPHC,Site,Eng,Amit Desai",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data!.imported).toBe(0);
+    expect(res.data!.errors.join(" ")).toMatch(/multiple|ambiguous/i);
+  });
+
+  it("outward rows never receive a projectId even if the column is filled", async () => {
+    const createdRecords = collect();
+    const res = await importModule({
+      module: "inOutRegister",
+      format: "csv",
+      data: [
+        header,
+        "OUTWARD,2026-10-01,2026-10-02,OUT/PRJ/001,Dispatch,GSPHC,Site Project,Eng,Amit Desai",
+      ].join("\n"),
+    });
+
+    expect(res.success).toBe(true);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0].projectId).toBeNull();
+  });
+});

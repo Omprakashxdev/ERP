@@ -35,6 +35,7 @@ const inOutRegisterBaseFields = z.object({
   department: cleanedString(200).optional().nullable(),
   replyDueDate: z.coerce.date().optional().nullable(),
   parentInwardId: z.string().cuid().optional().nullable(),
+  projectId: z.string().cuid().optional().nullable(),
 });
 
 export const inOutRegisterCreateSchema = inOutRegisterBaseFields
@@ -67,12 +68,27 @@ export const inOutRegisterCreateSchema = inOutRegisterBaseFields
       message: "Reply due date cannot be before document date",
       path: ["replyDueDate"],
     }
+  )
+  .refine(
+    // Project linkage is an Inward-register concept only — an Outward
+    // reply inherits the linked Inward's project for display instead.
+    (data) => data.direction === "INWARD" || !data.projectId,
+    {
+      message: "Related project can only be set on inward entries",
+      path: ["projectId"],
+    }
   );
 
 export const inOutRegisterUpdateSchema = inOutRegisterBaseFields
   .partial()
   .extend({ id: z.string().cuid() })
-  .omit({ clientId: true })
+  .omit({ clientId: true, direction: true })
+  .extend({
+    // Direction must not silently default to INWARD on update — the base
+    // field's .default() survives .partial() and would flip every outward
+    // record edited without an explicit direction.
+    direction: z.enum(["INWARD", "OUTWARD"]).optional(),
+  })
   .refine(
     (data) => {
       if (!data.documentDate || !data.receivedDate) return true;
@@ -98,6 +114,7 @@ export const inOutRegisterFilterSchema = z.object({
   search: z.string().optional(),
   direction: z.enum(["INWARD", "OUTWARD", "null"]).optional(),
   clientId: z.string().cuid().optional(),
+  projectId: z.string().cuid().optional(),
   actionSuggestedStaffId: z.string().cuid().optional(),
   ccStaffId: z.string().cuid().optional(),
   hasDeadline: z.enum(["true", "false"]).optional(),

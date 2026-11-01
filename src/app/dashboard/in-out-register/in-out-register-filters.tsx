@@ -17,6 +17,7 @@ import { Search, X } from "lucide-react";
 interface InOutRegisterFiltersProps {
   initialFilter: InOutRegisterFilterInput;
   clients: { id: string; name: string; abbreviation: string | null }[];
+  projects?: { id: string; name: string; abbreviation: string | null; clientId: string }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
 }
@@ -24,6 +25,7 @@ interface InOutRegisterFiltersProps {
 export function InOutRegisterFilters({
   initialFilter,
   clients,
+  projects = [],
   departments,
   staff,
 }: InOutRegisterFiltersProps) {
@@ -31,6 +33,7 @@ export function InOutRegisterFilters({
   const [search, setSearch] = useState(initialFilter.search ?? "");
   const [direction, setDirection] = useState(initialFilter.direction ?? "");
   const [clientId, setClientId] = useState(initialFilter.clientId ?? "");
+  const [projectId, setProjectId] = useState(initialFilter.projectId ?? "");
   const [department, setDepartment] = useState(initialFilter.department ?? "");
   const [actionSuggestedStaffId, setActionSuggestedStaffId] = useState(
     initialFilter.actionSuggestedStaffId ?? ""
@@ -54,6 +57,7 @@ export function InOutRegisterFilters({
     if (search.trim()) params.set("search", search.trim());
     if (direction) params.set("direction", direction);
     if (clientId) params.set("clientId", clientId);
+    if (projectId) params.set("projectId", projectId);
     if (department.trim()) params.set("department", department.trim());
     if (actionSuggestedStaffId)
       params.set("actionSuggestedStaffId", actionSuggestedStaffId);
@@ -74,6 +78,7 @@ export function InOutRegisterFilters({
     setSearch("");
     setDirection("");
     setClientId("");
+    setProjectId("");
     setDepartment("");
     setActionSuggestedStaffId("");
     setCcStaffId("");
@@ -121,7 +126,13 @@ export function InOutRegisterFilters({
 
       <div className="flex min-w-48 flex-col gap-1.5">
         <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-from-to">From / To</label>
-        <Select value={clientId} onValueChange={(v) => setClientId(v ?? "")}>
+        <Select value={clientId} onValueChange={(v) => {
+          const next = v ?? "";
+          setClientId(next);
+          if (projectId && next && !projects.some((p) => p.id === projectId && p.clientId === next)) {
+            setProjectId("");
+          }
+        }}>
           <SelectTrigger id="in-out-register-from-to" className="w-full min-w-48" size="sm">
             <SelectValue placeholder="All clients">
               {(value: string) => value ? clients.find((c) => c.id === value)?.name ?? "All clients" : "All clients"}
@@ -132,6 +143,25 @@ export function InOutRegisterFilters({
             {clients.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex min-w-48 flex-col gap-1.5">
+        <label className="text-xs font-medium text-zinc-600" htmlFor="in-out-register-project">Related Project</label>
+        <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
+          <SelectTrigger id="in-out-register-project" className="w-full min-w-48" size="sm">
+            <SelectValue placeholder="All projects">
+              {(value: string) => value ? projects.find((p) => p.id === value)?.name ?? "All projects" : "All projects"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All projects</SelectItem>
+            {(clientId ? projects.filter((p) => p.clientId === clientId) : projects).map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
               </SelectItem>
             ))}
           </SelectContent>

@@ -19,6 +19,7 @@ interface InOutRegisterPageProps {
     search?: string;
     direction?: "INWARD" | "OUTWARD" | "null";
     clientId?: string;
+    projectId?: string;
     department?: string;
     actionSuggestedStaffId?: string;
     ccStaffId?: string;
@@ -52,6 +53,7 @@ export default async function InOutRegisterPage({
     search: params.search,
     direction: params.direction,
     clientId: params.clientId,
+    projectId: params.projectId,
     department: params.department,
     actionSuggestedStaffId: params.actionSuggestedStaffId,
     ccStaffId: params.ccStaffId,
@@ -64,6 +66,7 @@ export default async function InOutRegisterPage({
   const [
     entriesResult,
     clients,
+    projects,
     departments,
     staff,
     allStaff,
@@ -77,6 +80,10 @@ export default async function InOutRegisterPage({
     getInOutRegisters(filter, page, pageSize),
     prisma.client.findMany({
       select: { id: true, name: true, abbreviation: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.project.findMany({
+      select: { id: true, name: true, abbreviation: true, clientId: true },
       orderBy: { name: "asc" },
     }),
     prisma.department.findMany({
@@ -147,6 +154,7 @@ export default async function InOutRegisterPage({
             key={`${filter.direction ?? "all"}-${filter.hasDeadline ?? "none"}`}
             initialFilter={filter}
             clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
+            projects={serialize(projects) as { id: string; name: string; abbreviation: string | null; clientId: string }[]}
             departments={serialize(departments) as { id: string; name: string }[]}
             staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
           />
@@ -162,6 +170,7 @@ export default async function InOutRegisterPage({
           totalPages={totalPages}
           filter={filter}
           clients={serialize(clients) as { id: string; name: string; abbreviation: string | null }[]}
+          projects={serialize(projects) as { id: string; name: string; abbreviation: string | null; clientId: string }[]}
           departments={serialize(departments) as { id: string; name: string }[]}
           staff={serialize(staff) as { id: string; name: string; employeeCode: string | null }[]}
           allStaff={serialize(allStaff) as { id: string; name: string; employeeCode: string | null; isActive: boolean }[]}

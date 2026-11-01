@@ -139,6 +139,12 @@ const permissionMatrix: Record<
     [Role.MANAGER]: ["create", "read", "update"],
     [Role.AUDITOR]: ["read"],
   },
+  projectManagement: {
+    [Role.ADMIN]: ["create", "read", "update", "delete", "admin"],
+    [Role.MANAGER]: ["create", "read", "update"],
+    [Role.STAFF]: ["read"],
+    [Role.AUDITOR]: ["read"],
+  },
   progressApp: {
     [Role.ADMIN]: ["create", "read", "update", "delete", "admin"],
     [Role.MANAGER]: ["read"],

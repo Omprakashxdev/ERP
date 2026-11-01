@@ -13,7 +13,7 @@ export const metadata = {
 export default async function MastersPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string; edit?: string }>;
 }) {
   const params = searchParams ? await searchParams : undefined;
   const session = await auth();
@@ -23,19 +23,41 @@ export default async function MastersPage({
   const canManageClients = session?.user
     ? hasPermission(session.user.role, "clientManagement", "create")
     : false;
+  const canManageProjects = session?.user
+    ? hasPermission(session.user.role, "projectManagement", "create") ||
+      hasPermission(session.user.role, "projectManagement", "update")
+    : false;
 
-  const [staffResult, regions, departments, designations, cities, clients] =
-    await Promise.all([
-      getStaff(undefined, false),
-      prisma.region.findMany({ orderBy: { name: "asc" } }),
-      prisma.department.findMany({ orderBy: { name: "asc" } }),
-      prisma.designation.findMany({ orderBy: { name: "asc" } }),
-      prisma.city.findMany({ orderBy: { name: "asc" } }),
-      prisma.client.findMany({
-        include: { contacts: true, _count: { select: { projects: true } } },
-        orderBy: { name: "asc" },
-      }),
-    ]);
+  const [
+    staffResult,
+    regions,
+    departments,
+    designations,
+    cities,
+    clients,
+    projects,
+  ] = await Promise.all([
+    getStaff(undefined, false),
+    prisma.region.findMany({ orderBy: { name: "asc" } }),
+    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.designation.findMany({ orderBy: { name: "asc" } }),
+    prisma.city.findMany({ orderBy: { name: "asc" } }),
+    prisma.client.findMany({
+      include: { contacts: true, _count: { select: { projects: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.project.findMany({
+      include: {
+        region: true,
+        client: true,
+        contractor: true,
+        assignments: { include: { staff: true } },
+        feeStages: true,
+        fundFlow: true,
+      },
+      orderBy: { workOrderDate: "desc" },
+    }),
+  ]);
 
   const staff = staffResult.success ? (staffResult.data ?? []) : [];
 
@@ -50,14 +72,16 @@ export default async function MastersPage({
             Masters & Lookup Data
           </h1>
           <p className="text-sm text-zinc-500">
-            Manage system lookups, categories, regions, clients, and employee master
+            Manage system lookups, categories, regions, clients, projects, and employee master
           </p>
         </div>
       </div>
 
       <MastersManager
         initialTab={params?.tab}
+        initialEditProjectId={params?.edit}
         clientsData={serialize(clients) as never}
+        projectsData={serialize(projects) as never}
         staffData={serialize(staff) as never}
         regionsData={serialize(regions) as never}
         departmentsData={serialize(departments) as never}
@@ -65,6 +89,7 @@ export default async function MastersPage({
         citiesData={serialize(cities) as never}
         canManage={canManageStaff}
         canManageClients={canManageClients}
+        canManageProjects={canManageProjects}
       />
     </div>
   );

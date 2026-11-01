@@ -68,7 +68,9 @@ interface InOutRegisterFormProps {
       serialNo?: string | null;
       documentRefNo?: string | null;
       details?: string | null;
+      project?: { id: string; name: string } | null;
     } | null;
+    project?: { id: string; name: string; abbreviation?: string | null } | null;
   };
   defaultDirection?: InOutDirection;
   parentInward?: {
@@ -78,8 +80,10 @@ interface InOutRegisterFormProps {
     clientId: string;
     department?: string | null;
     details?: string | null;
+    project?: { id: string; name: string } | null;
   };
   clients: { id: string; name: string }[];
+  projects?: { id: string; name: string; abbreviation?: string | null; clientId: string }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode?: string | null }[];
   allStaff?: { id: string; name: string; employeeCode?: string | null; isActive: boolean }[];
@@ -125,6 +129,7 @@ function getInitialForm(
       receivedByPersonName: "",
       receivedByStaffId: "",
       parentInwardId: parentInward?.id ?? null,
+      projectId: "",
     };
   }
   return {
@@ -146,6 +151,7 @@ function getInitialForm(
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
     receivedByStaffId: (entry as Record<string, unknown>)?.receivedByStaffId as string ?? "",
     parentInwardId: (entry as Record<string, unknown>)?.parentInwardId as string ?? null,
+    projectId: (entry as Record<string, unknown>)?.projectId as string ?? "",
   };
 }
 
@@ -154,6 +160,7 @@ export function InOutRegisterForm({
   defaultDirection,
   parentInward,
   clients,
+  projects = [],
   departments,
   staff,
   allStaff,
@@ -172,6 +179,7 @@ export function InOutRegisterForm({
   const [newCcStaffId, setNewCcStaffId] = useState("");
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [receiverPickerOpen, setReceiverPickerOpen] = useState(false);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     documentRefNo?: string;
     actionSuggestedStaffId?: string;
@@ -287,6 +295,7 @@ export function InOutRegisterForm({
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
       receivedByStaffId: form.direction === "INWARD" ? form.receivedByStaffId || null : null,
       parentInwardId: form.parentInwardId || null,
+      projectId: form.direction === "INWARD" ? form.projectId || null : null,
     };
 
     if (isEdit) {
@@ -381,6 +390,20 @@ export function InOutRegisterForm({
   const selectedReceiver = receiverOptions.find((s) => s.id === form.receivedByStaffId);
   const preservedReceiver =
     form.receivedByStaffId && !selectedReceiver ? entry?.receivedByStaff : null;
+  // Related Project (inward only) — filtered to the selected client. A
+  // saved link to a project outside the loaded list stays visible as a
+  // preserved option rather than being silently dropped.
+  const clientProjects = projects.filter((p) => p.clientId === form.clientId);
+  const selectedProject =
+    clientProjects.find((p) => p.id === form.projectId) ??
+    projects.find((p) => p.id === form.projectId);
+  const preservedProject =
+    form.projectId && !selectedProject ? entry?.project : null;
+  const projectTriggerLabel = selectedProject
+    ? selectedProject.name
+    : preservedProject
+      ? `${preservedProject.name} (preserved)`
+      : null;
   const receiverTriggerLabel = selectedReceiver
     ? `${selectedReceiver.name}${selectedReceiver.employeeCode ? ` (${selectedReceiver.employeeCode})` : ""}${selectedReceiver.isActive ? "" : " (inactive — preserved)"}`
     : preservedReceiver
@@ -389,6 +412,9 @@ export function InOutRegisterForm({
         ? `${form.receivedByPersonName} (manual entry)`
         : null;
   const linkedInward = parentInward || entry?.parentInward;
+  // An outward reply inherits the linked inward's project for display —
+  // it is never an editable field on outward entries.
+  const linkedProject = isOutward ? (linkedInward?.project ?? null) : null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -399,15 +425,21 @@ export function InOutRegisterForm({
         </DialogHeader>
 
         {linkedInward && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between text-xs text-emerald-950">
-            <div className="flex items-center gap-2">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between gap-3 text-xs text-emerald-950">
+            <div className="flex items-center gap-2 min-w-0">
               <Link2 className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>
+              <span className="min-w-0">
                 Linked to Inward Letter: <strong className="font-semibold">{linkedInward.documentRefNo}</strong>
                 {linkedInward.details && <span className="text-emerald-700 ml-1">({linkedInward.details})</span>}
+                {linkedProject && (
+                  <span className="block text-emerald-800 mt-0.5">
+                    Related project: <strong className="font-semibold">{linkedProject.name}</strong>
+                    <span className="text-emerald-600 ml-1">(from the linked inward — read-only)</span>
+                  </span>
+                )}
               </span>
             </div>
-            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium shrink-0">
               Outward Reply
             </span>
           </div>
@@ -532,7 +564,20 @@ export function InOutRegisterForm({
                 <Label htmlFor="clientId">{isOutward ? "To (client)" : "From (client)"}</Label>
                 <Select
                   value={form.clientId}
-                  onValueChange={(v) => updateField("clientId", v ?? "")}
+                  onValueChange={(v) => {
+                    const next = v ?? "";
+                    setForm((prev) => ({
+                      ...prev,
+                      clientId: next,
+                      // A client change clears a project pick that no
+                      // longer belongs to the selected client.
+                      projectId:
+                        prev.projectId &&
+                        !projects.some((p) => p.id === prev.projectId && p.clientId === next)
+                          ? ""
+                          : prev.projectId,
+                    }));
+                  }}
                 >
                   <SelectTrigger id="clientId">
                     <SelectValue placeholder="Select client">
@@ -636,6 +681,81 @@ export function InOutRegisterForm({
 
               {!isOutward && (
                 <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="projectId">Related Project</Label>
+                    <Popover open={projectPickerOpen} onOpenChange={setProjectPickerOpen}>
+                      <PopoverTrigger
+                        id="projectId"
+                        className="inline-flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-700 hover:bg-zinc-50"
+                      >
+                        <span className={`truncate ${projectTriggerLabel ? "" : "text-zinc-500"}`}>
+                          {projectTriggerLabel ?? "General Correspondence / No Project"}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[90vw] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search project name…" />
+                          <CommandList>
+                            <CommandEmpty>No project found for this client.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__none__"
+                                onSelect={() => {
+                                  updateField("projectId", "");
+                                  setProjectPickerOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${!form.projectId ? "opacity-100" : "opacity-0"}`}
+                                />
+                                General Correspondence / No Project
+                              </CommandItem>
+                              {preservedProject && (
+                                <CommandItem value={preservedProject.name} disabled>
+                                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {preservedProject.name}{" "}
+                                    <span className="text-xs text-zinc-500">(preserved)</span>
+                                  </span>
+                                </CommandItem>
+                              )}
+                              {clientProjects.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={`${p.name} ${p.abbreviation ?? ""}`}
+                                  onSelect={() => {
+                                    updateField("projectId", p.id);
+                                    setProjectPickerOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${
+                                      form.projectId === p.id ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {p.name}
+                                    {p.abbreviation && (
+                                      <span className="ml-1.5 text-xs text-zinc-500">
+                                        ({p.abbreviation})
+                                      </span>
+                                    )}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    <p className="text-xs text-zinc-500">
+                      {clientProjects.length === 0
+                        ? "No projects for the selected client — this document will be treated as general correspondence."
+                        : "Pick the project this document concerns, or leave as general correspondence."}
+                    </p>
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label htmlFor="inwardType">Inward type</Label>
                     <Select
