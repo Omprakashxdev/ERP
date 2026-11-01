@@ -751,7 +751,7 @@ export function InOutRegisterForm({
                     </Popover>
                     <p className="text-xs text-zinc-500">
                       {clientProjects.length === 0
-                        ? "No projects for the selected client — this document will be treated as general correspondence."
+                        ? `No projects exist for ${clients.find((c) => c.id === form.clientId)?.name ?? "the selected client"} — this document will be treated as general correspondence.`
                         : "Pick the project this document concerns, or leave as general correspondence."}
                     </p>
                   </div>

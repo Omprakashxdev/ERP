@@ -24,10 +24,26 @@ import { FundFlowFilterInput } from "@/lib/schemas/fund-flow";
 import type { FundFlowWithComputed } from "@/types/fund-flow";
 import { FundFlowEditor } from "./fund-flow-editor";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
+  Plus,
 } from "lucide-react";
 
 interface FundFlowTableProps {
@@ -87,6 +103,8 @@ export function FundFlowTable({
     useState<FundFlowWithComputed | null>(null);
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [entryPickerOpen, setEntryPickerOpen] = useState(false);
+  const [entryProjectId, setEntryProjectId] = useState("");
 
   const typedRows = rows as FundFlowWithComputed[];
 
@@ -104,6 +122,19 @@ export function FundFlowTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-zinc-600">Fund Flow records</h2>
+        {typedRows.length > 0 && (
+          <Button
+            size="sm"
+            className="bg-zinc-900 text-white hover:bg-zinc-800"
+            onClick={() => {
+              setEntryProjectId("");
+              setEntryPickerOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            New Financial Entry
+          </Button>
+        )}
       </div>
 
       {typedRows.length === 0 ? (
@@ -314,6 +345,64 @@ export function FundFlowTable({
           onClose={() => setSelectedFundFlow(null)}
         />
       )}
+
+      <Dialog open={entryPickerOpen} onOpenChange={setEntryPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New financial entry</DialogTitle>
+            <DialogDescription>
+              Pick the project this Fund Flow entry belongs to. Projects are
+              created under Masters → Projects; this form only links the
+              financial record to one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="ff-entry-project">Project</Label>
+            <Select
+              value={entryProjectId}
+              onValueChange={(v) => setEntryProjectId(v ?? "")}
+            >
+              <SelectTrigger id="ff-entry-project">
+                <SelectValue placeholder="Select project">
+                  {(value: string) =>
+                    typedRows.find((r) => r.id === value)?.name ??
+                    "Select project"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {typedRows.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name} — {r.client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEntryPickerOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!entryProjectId}
+              onClick={() => {
+                const row = typedRows.find((r) => r.id === entryProjectId);
+                if (row) {
+                  setEntryPickerOpen(false);
+                  setSelectedFundFlow(row);
+                }
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
