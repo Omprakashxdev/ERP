@@ -125,18 +125,13 @@ function documentRefNoTakenMessage(err: unknown): never {
 // Related-project guard: the linked project must exist and belong to the
 // same client as the register entry — an inward letter can never point at
 // another client's project.
-async function assertProjectSelectable(projectId: string, clientId: string) {
+async function assertProjectSelectable(projectId: string, _clientId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { id: true, clientId: true },
+    select: { id: true },
   });
   if (!project) {
     throw new Error("Selected project does not exist");
-  }
-  if (project.clientId !== clientId) {
-    throw new Error(
-      "Selected project belongs to a different client — pick a project for the selected client"
-    );
   }
 }
 

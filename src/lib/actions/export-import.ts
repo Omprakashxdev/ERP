@@ -677,20 +677,15 @@ export async function importModule(
               }
             }
 
-            // A linked project must belong to the entry's client — same
-            // rule as the Inward form's server-side validation.
-            if (cleanData.projectId && cleanData.clientId) {
+            // Any existing project may be linked — client scoping was
+            // removed per customer direction; only existence is enforced.
+            if (cleanData.projectId) {
               const linkedProject = await prisma.project.findUnique({
                 where: { id: String(cleanData.projectId) },
-                select: { clientId: true },
+                select: { id: true },
               });
               if (!linkedProject) {
                 throw new Error("Selected project does not exist — check the project column");
-              }
-              if (linkedProject.clientId !== cleanData.clientId) {
-                throw new Error(
-                  "Selected project belongs to a different client — the project must match the entry's client"
-                );
               }
             }
 
@@ -920,32 +915,6 @@ interface RelationResolver {
   fuzzyLookup: (value: string, row?: Record<string, string>) => Promise<string | null>;
   masterLabel: string;
   autoCreate?: (value: string, row: Record<string, string>) => Promise<string | null>;
-}
-
-// Resolves the entry's client from the raw import row so relation lookups
-// (e.g. project) can be scoped to the same client — project names are only
-// unique within a client, never globally.
-async function resolveImportClientScope(row: Record<string, string>): Promise<string | null> {
-  const rawId = (row.clientId ?? "").trim();
-  if (rawId) {
-    const c = await prisma.client.findUnique({
-      where: { id: rawId },
-      select: { id: true },
-    });
-    if (c) return c.id;
-  }
-  const rawName = (row.client ?? "").trim();
-  if (!rawName) return null;
-  const c = await prisma.client.findFirst({
-    where: {
-      OR: [
-        { name: { equals: rawName, mode: "insensitive" } },
-        { abbreviation: { equals: rawName, mode: "insensitive" } },
-      ],
-    },
-    select: { id: true },
-  });
-  return c?.id ?? null;
 }
 
 async function autoCreateProjectFromImport(name: string, row: Record<string, string>): Promise<string> {
@@ -1267,12 +1236,10 @@ async function resolveRelations(
         masterLabel: "Project master",
         // No autoCreate — projects are only ever created through
         // Masters → Projects. An unmatched or cross-client name fails the row.
-        lookup: async (name: string, row?: Record<string, string>) => {
+        lookup: async (name: string) => {
           const clean = name.trim();
-          const clientScope = row ? await resolveImportClientScope(row) : null;
           const matches = await prisma.project.findMany({
             where: {
-              ...(clientScope ? { clientId: clientScope } : {}),
               OR: [
                 { name: { equals: clean, mode: "insensitive" } },
                 { abbreviation: { equals: clean, mode: "insensitive" } },
@@ -1283,25 +1250,21 @@ async function resolveRelations(
           });
           if (matches.length > 1) {
             throw new Error(
-              `Project "${clean}" matches multiple projects for this client — provide the project abbreviation`
+              `Project "${clean}" matches multiple projects — provide the project abbreviation`
             );
           }
           return matches[0]?.id ?? null;
         },
-        fuzzyLookup: async (name: string, row?: Record<string, string>) => {
+        fuzzyLookup: async (name: string) => {
           const clean = name.trim();
-          const clientScope = row ? await resolveImportClientScope(row) : null;
           const matches = await prisma.project.findMany({
-            where: {
-              ...(clientScope ? { clientId: clientScope } : {}),
-              name: { contains: clean, mode: "insensitive" },
-            },
+            where: { name: { contains: clean, mode: "insensitive" } },
             select: { id: true },
             take: 2,
           });
           if (matches.length > 1) {
             throw new Error(
-              `Project "${clean}" is ambiguous within this client — provide the exact project name or abbreviation`
+              `Project "${clean}" is ambiguous — provide the exact project name or abbreviation`
             );
           }
           return matches[0]?.id ?? null;

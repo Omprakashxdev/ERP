@@ -168,16 +168,19 @@ const SKIP = !process.env.RUN_INTEGRATION_TESTS;
       expect(row!.projectId).toBe(ids.projectAId);
       expect(row!.serialNo).toMatch(/^INW\/\d{4}-\d{2}\/\d{3}$/);
 
-      // Cross-client project must be rejected
-      const bad = await createInOutRegister({
+      // Cross-client project is allowed — any Masters project may be linked
+      const cross = await createInOutRegister({
         ...baseEntry,
         documentRefNo: `B2/INW/${Date.now()}/002`,
         clientId: ids.clientAId,
         actionSuggestedStaffId: ids.staffId,
         projectId: ids.projectBId,
       } as never);
-      expect(bad.success).toBe(false);
-      expect(bad.error).toMatch(/different client/i);
+      expect(cross.success).toBe(true);
+      const crossId = (cross.data as { id: string }).id;
+      const crossRow = await prisma.inOutRegister.findUnique({ where: { id: crossId } });
+      expect(crossRow!.projectId).toBe(ids.projectBId);
+      await prisma.inOutRegister.delete({ where: { id: crossId } });
 
       // Nonexistent project must be rejected
       const ghost = await createInOutRegister({
@@ -297,13 +300,17 @@ const SKIP = !process.env.RUN_INTEGRATION_TESTS;
       } as never);
       expect(relink.success).toBe(true);
 
-      // Wrong-client update is rejected
-      const wrong = await updateInOutRegister({
+      // Cross-client update is allowed — any Masters project may be linked
+      const crossUp = await updateInOutRegister({
         id: ids.secondInwardSameProjectId,
         projectId: ids.projectBId,
       } as never);
-      expect(wrong.success).toBe(false);
-      expect(wrong.error).toMatch(/different client/i);
+      expect(crossUp.success).toBe(true);
+      // Restore the original link
+      await updateInOutRegister({
+        id: ids.secondInwardSameProjectId,
+        projectId: ids.projectAId,
+      } as never);
 
       // Historical NULL row can be re-saved with other fields intact
       const resave = await updateInOutRegister({

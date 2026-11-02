@@ -380,14 +380,13 @@ describe("In-Out Register Bulk Import — Related Project resolution", () => {
       id: "staff-amit-id", name: "Amit Desai", employeeCode: "EMP001",
     } as any);
     (vi.spyOn(prisma.inOutRegister, "findFirst") as any).mockResolvedValue(null);
-    // Project resolver is client-scoped: only "Site Project" exists, under GSPHC.
+    // Project resolver is global (no client rule): "Site Project" exists under GSPHC.
     (vi.spyOn(prisma.project, "findMany") as any).mockImplementation(
       async (args: any) => {
-        const scope = args?.where?.clientId;
         const nameMatch =
           args?.where?.OR?.[0]?.name?.equals ?? args?.where?.name?.contains;
-        if (scope === "client-gsphc-id" && /site project/i.test(nameMatch ?? "")) {
-          return [{ id: "proj-site-1", clientId: "client-gsphc-id" }] as any;
+        if (/site project/i.test(nameMatch ?? "")) {
+          return [{ id: "proj-site-1" }] as any;
         }
         return [] as any;
       }
@@ -431,7 +430,7 @@ describe("In-Out Register Bulk Import — Related Project resolution", () => {
     expect(createdRecords[0].projectId).toBe("proj-site-1");
   });
 
-  it("rejects a project name that only exists under a different client — never auto-creates", async () => {
+  it("resolves a project regardless of the row's client — never auto-creates", async () => {
     const createdRecords = collect();
     const projectCreate = vi.spyOn(prisma.project, "create");
     const res = await importModule({
@@ -444,9 +443,9 @@ describe("In-Out Register Bulk Import — Related Project resolution", () => {
     });
 
     expect(res.success).toBe(true);
-    expect(res.data!.imported).toBe(0);
-    expect(res.data!.errors.join(" ")).toMatch(/not found/i);
-    expect(createdRecords).toHaveLength(0);
+    expect(res.data!.imported).toBe(1);
+    expect(createdRecords).toHaveLength(1);
+    expect(createdRecords[0].projectId).toBe("proj-site-1");
     expect(projectCreate).not.toHaveBeenCalled();
   });
 

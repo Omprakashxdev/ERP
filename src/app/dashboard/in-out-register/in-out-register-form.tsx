@@ -390,13 +390,8 @@ export function InOutRegisterForm({
   const selectedReceiver = receiverOptions.find((s) => s.id === form.receivedByStaffId);
   const preservedReceiver =
     form.receivedByStaffId && !selectedReceiver ? entry?.receivedByStaff : null;
-  // Related Project (inward only) — filtered to the selected client. A
-  // saved link to a project outside the loaded list stays visible as a
-  // preserved option rather than being silently dropped.
-  const clientProjects = projects.filter((p) => p.clientId === form.clientId);
-  const selectedProject =
-    clientProjects.find((p) => p.id === form.projectId) ??
-    projects.find((p) => p.id === form.projectId);
+  // Related Project (inward only) — any Masters project may be selected.
+  const selectedProject = projects.find((p) => p.id === form.projectId);
   const preservedProject =
     form.projectId && !selectedProject ? entry?.project : null;
   const projectTriggerLabel = selectedProject
@@ -564,20 +559,7 @@ export function InOutRegisterForm({
                 <Label htmlFor="clientId">{isOutward ? "To (client)" : "From (client)"}</Label>
                 <Select
                   value={form.clientId}
-                  onValueChange={(v) => {
-                    const next = v ?? "";
-                    setForm((prev) => ({
-                      ...prev,
-                      clientId: next,
-                      // A client change clears a project pick that no
-                      // longer belongs to the selected client.
-                      projectId:
-                        prev.projectId &&
-                        !projects.some((p) => p.id === prev.projectId && p.clientId === next)
-                          ? ""
-                          : prev.projectId,
-                    }));
-                  }}
+                  onValueChange={(v) => updateField("clientId", v ?? "")}
                 >
                   <SelectTrigger id="clientId">
                     <SelectValue placeholder="Select client">
@@ -720,50 +702,37 @@ export function InOutRegisterForm({
                                   </span>
                                 </CommandItem>
                               )}
-                              {projects.map((p) => {
-                                const matchesClient = p.clientId === form.clientId;
-                                const pClient = clients.find((c) => c.id === p.clientId)?.name;
-                                return (
-                                  <CommandItem
-                                    key={p.id}
-                                    value={`${p.name} ${p.abbreviation ?? ""} ${pClient ?? ""}`}
-                                    disabled={!matchesClient}
-                                    onSelect={() => {
-                                      if (!matchesClient) return;
-                                      updateField("projectId", p.id);
-                                      setProjectPickerOpen(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 ${
-                                        form.projectId === p.id ? "opacity-100" : "opacity-0"
-                                      }`}
-                                    />
-                                    <span className={`min-w-0 flex-1 truncate ${matchesClient ? "" : "text-zinc-400"}`}>
-                                      {p.name}
-                                      {p.abbreviation && (
-                                        <span className="ml-1.5 text-xs text-zinc-500">
-                                          ({p.abbreviation})
-                                        </span>
-                                      )}
-                                      {!matchesClient && (
-                                        <span className="ml-1.5 rounded bg-zinc-100 px-1 py-0.5 text-[10px] text-zinc-500">
-                                          {pClient ?? "other client"}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </CommandItem>
-                                );
-                              })}
+                              {projects.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={`${p.name} ${p.abbreviation ?? ""}`}
+                                  onSelect={() => {
+                                    updateField("projectId", p.id);
+                                    setProjectPickerOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${
+                                      form.projectId === p.id ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {p.name}
+                                    {p.abbreviation && (
+                                      <span className="ml-1.5 text-xs text-zinc-500">
+                                        ({p.abbreviation})
+                                      </span>
+                                    )}
+                                  </span>
+                                </CommandItem>
+                              ))}
                             </CommandGroup>
                           </CommandList>
                         </Command>
                       </PopoverContent>
                     </Popover>
                     <p className="text-xs text-zinc-500">
-                      {clientProjects.length === 0
-                        ? `No projects exist for ${clients.find((c) => c.id === form.clientId)?.name ?? "the selected client"} yet — create one in Masters → Projects, or leave as general correspondence.`
-                        : "Pick the project this document concerns, or leave as general correspondence."}
+                      Pick the project this document concerns, or leave as general correspondence.
                     </p>
                   </div>
 

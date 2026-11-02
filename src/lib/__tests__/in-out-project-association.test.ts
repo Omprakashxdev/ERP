@@ -211,15 +211,17 @@ describe("Brick 2 — Inward Project Association", () => {
       expect(createArg.data.projectId ?? null).toBeNull();
     });
 
-    it("rejects a project belonging to a different client", async () => {
+    it("accepts a project belonging to a different client (any Masters project allowed)", async () => {
       const res = await createInOutRegister({
         ...baseCreate,
         projectId: OTHER_CLIENT_PROJECT_ID,
       } as never);
 
-      expect(res.success).toBe(false);
-      expect(res.error).toMatch(/different client/i);
-      expect(mockTx.inOutRegister.create).not.toHaveBeenCalled();
+      expect(res.success).toBe(true);
+      const createArg = mockTx.inOutRegister.create.mock.calls[0][0] as {
+        data: { projectId?: string };
+      };
+      expect(createArg.data.projectId).toBe(OTHER_CLIENT_PROJECT_ID);
     });
 
     it("rejects a nonexistent project", async () => {
@@ -272,15 +274,17 @@ describe("Brick 2 — Inward Project Association", () => {
       expect(updateArg.data.projectId).toBe(VALID_PROJECT_ID);
     });
 
-    it("rejects linking a project from a different client", async () => {
+    it("accepts linking a project from a different client (any Masters project allowed)", async () => {
       const res = await updateInOutRegister({
         id: ENTRY_ID,
         projectId: OTHER_CLIENT_PROJECT_ID,
       } as never);
 
-      expect(res.success).toBe(false);
-      expect(res.error).toMatch(/different client/i);
-      expect(prisma.inOutRegister.update).not.toHaveBeenCalled();
+      expect(res.success).toBe(true);
+      const updateArg = vi.mocked(prisma.inOutRegister.update).mock.calls[0][0] as {
+        data: { projectId?: string };
+      };
+      expect(updateArg.data.projectId).toBe(OTHER_CLIENT_PROJECT_ID);
     });
 
     it("rejects setting a project on an OUTWARD entry", async () => {
