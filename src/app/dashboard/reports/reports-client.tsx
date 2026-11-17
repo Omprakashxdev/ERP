@@ -153,8 +153,9 @@ export function ReportsClient({
         })
         .join(",")
     );
-    const csv = [headers, ...csvRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    // UTF-8 BOM so Microsoft Excel renders Gujarati/Unicode correctly.
+    const csv = "\uFEFF" + [headers, ...csvRows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

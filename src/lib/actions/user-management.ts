@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@/types/auth";
 import { withAuth, audit, ActionResult } from "./wrapper";
 import { checkRateLimit } from "./wrapper";
+import { issueEmployeeCode } from "@/lib/employee-code";
 
 const mutationRoles = [Role.ADMIN];
 
@@ -15,7 +16,6 @@ export async function submitRegistration(input: {
   name: string;
   email: string;
   password: string;
-  employeeCode?: string;
   designation?: string;
   regionId?: string;
   reportingManagerId?: string;
@@ -55,7 +55,6 @@ export async function submitRegistration(input: {
         name,
         email,
         hashedPassword,
-        employeeCode: input.employeeCode?.trim() || null,
         designation: input.designation?.trim() || null,
         regionId: input.regionId || null,
         reportingManagerId: input.reportingManagerId || null,
@@ -127,7 +126,7 @@ export async function approveRegistration(
         data: {
           name: reg.name,
           email: reg.email,
-          employeeCode: reg.employeeCode,
+          employeeCode: await issueEmployeeCode(tx),
           designation: reg.designation,
           regionId: reg.regionId,
           reportingManagerId: reg.reportingManagerId,
@@ -211,7 +210,6 @@ export async function createUser(input: {
   email: string;
   password: string;
   role: "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR";
-  employeeCode?: string;
   designation?: string;
   regionId?: string;
   reportingManagerId?: string;
@@ -251,7 +249,7 @@ export async function createUser(input: {
         data: {
           name,
           email,
-          employeeCode: input.employeeCode?.trim() || null,
+          employeeCode: await issueEmployeeCode(tx),
           designation: input.designation?.trim() || null,
           regionId: input.regionId || null,
           reportingManagerId: input.reportingManagerId || null,

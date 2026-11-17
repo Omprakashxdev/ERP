@@ -29,14 +29,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   createInOutRegister,
   updateInOutRegister,
   getNextRegisterRefNo,
   getInOutRegisterLinkedTasks,
 } from "@/lib/actions/in-out-register";
-import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock } from "lucide-react";
+import { Loader2, X, Plus, ExternalLink, Sparkles, Link2, FileText, Lock, Eye, Download, Check, ChevronsUpDown } from "lucide-react";
 import { withBasePath } from "@/lib/base-path";
 import { FileUploadField, documentDisplayName } from "@/components/ui/file-upload-field";
+import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 import { toInputDateIST, getTodayISTDateString } from "@/lib/date-utils";
@@ -45,6 +59,8 @@ interface InOutRegisterFormProps {
   entry?: InOutRegister & {
     client?: Client;
     actionSuggestedStaff?: Staff | null;
+    receivedByStaff?: { id: string; name: string; isActive: boolean } | null;
+    mode?: { id: string; name: string; isActive: boolean } | null;
     documents?: InOutRegisterDocument[];
     ccStaff?: (InOutRegisterCcStaff & { staff?: Staff })[];
     parentInward?: {
@@ -65,7 +81,9 @@ interface InOutRegisterFormProps {
   };
   clients: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
-  staff: { id: string; name: string }[];
+  staff: { id: string; name: string; employeeCode?: string | null }[];
+  allStaff?: { id: string; name: string; employeeCode?: string | null; isActive: boolean }[];
+  modes?: { id: string; name: string }[];
   mode: "create" | "edit";
   onClose: () => void;
 }
@@ -98,11 +116,14 @@ function getInitialForm(
         : "",
       clientId: parentInward?.clientId ?? clients[0]?.id ?? "",
       actionSuggestedStaffId: "",
+      modeId: "",
+      letterPad: "",
       ccStaffIds: [] as string[],
       documents: [] as string[],
       replyDueDate: "",
       inwardType: "",
       receivedByPersonName: "",
+      receivedByStaffId: "",
       parentInwardId: parentInward?.id ?? null,
     };
   }
@@ -116,11 +137,14 @@ function getInitialForm(
     details: entry.details ?? "",
     clientId: entry.clientId,
     actionSuggestedStaffId: entry.actionSuggestedStaffId ?? "",
+    modeId: entry.modeId ?? "",
+    letterPad: (entry as Record<string, unknown>)?.letterPad as string ?? "",
     ccStaffIds: entry.ccStaff?.map((cs) => cs.staffId) ?? [],
     documents: entry.documents?.map((d) => d.path) ?? [],
     replyDueDate: toInputDate((entry as Record<string, unknown>)?.replyDueDate as Date | null | undefined),
     inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
+    receivedByStaffId: (entry as Record<string, unknown>)?.receivedByStaffId as string ?? "",
     parentInwardId: (entry as Record<string, unknown>)?.parentInwardId as string ?? null,
   };
 }
@@ -132,6 +156,8 @@ export function InOutRegisterForm({
   clients,
   departments,
   staff,
+  allStaff,
+  modes = [],
   mode,
   onClose,
 }: InOutRegisterFormProps) {
@@ -144,6 +170,12 @@ export function InOutRegisterForm({
   const [loadingRefNo, setLoadingRefNo] = useState(false);
   const [newDocument, setNewDocument] = useState("");
   const [newCcStaffId, setNewCcStaffId] = useState("");
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [receiverPickerOpen, setReceiverPickerOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    documentRefNo?: string;
+    actionSuggestedStaffId?: string;
+  }>({});
   const documentListRef = useRef<HTMLDivElement>(null);
   const isEdit = mode === "edit" && Boolean(entry);
 
@@ -216,26 +248,44 @@ export function InOutRegisterForm({
     }));
   }
 
+  const initialInwardType =
+    (entry as Record<string, unknown> | undefined)?.inwardType as
+      | string
+      | null
+      | undefined;
+
   function buildPayload() {
+    // Reply Due Date applies only to Action Required inwards. A deadline
+    // is cleared only when the user actually changes the type to
+    // Informative — an untouched legacy deadline is preserved as saved.
+    const inwardTypeNow = form.direction === "INWARD" && form.inwardType ? form.inwardType : null;
+    const clearedByTypeChange =
+      inwardTypeNow === "INFORMATIVE" && inwardTypeNow !== (initialInwardType ?? null);
+    const replyDueDate =
+      form.direction !== "INWARD" || clearedByTypeChange
+        ? null
+        : form.replyDueDate
+          ? new Date(form.replyDueDate)
+          : null;
+
     const base = {
       direction: form.direction,
       serialNo: emptyToNull(form.serialNo),
       documentDate: form.documentDate || undefined,
       receivedDate: form.receivedDate || undefined,
-      documentRefNo: emptyToNull(form.documentRefNo),
+      documentRefNo: form.documentRefNo.trim(),
       department: emptyToNull(form.department),
-      replyDueDate:
-        form.direction === "INWARD" && form.replyDueDate
-          ? new Date(form.replyDueDate)
-          : null,
+      replyDueDate,
       details: emptyToNull(form.details),
       clientId: form.clientId,
-      actionSuggestedStaffId:
-        form.direction === "OUTWARD" ? null : form.actionSuggestedStaffId || null,
+      actionSuggestedStaffId: form.actionSuggestedStaffId || null,
+      modeId: form.modeId || null,
+      letterPad: emptyToNull(form.letterPad),
       ccStaffIds: form.ccStaffIds.length > 0 ? form.ccStaffIds : undefined,
       documents: form.documents.length > 0 ? form.documents : undefined,
-      inwardType: form.direction === "INWARD" && form.inwardType ? form.inwardType : null,
+      inwardType: inwardTypeNow,
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
+      receivedByStaffId: form.direction === "INWARD" ? form.receivedByStaffId || null : null,
       parentInwardId: form.parentInwardId || null,
     };
 
@@ -249,6 +299,20 @@ export function InOutRegisterForm({
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!form.documentRefNo.trim()) {
+      nextFieldErrors.documentRefNo = "Document number is required.";
+    }
+    if (!form.actionSuggestedStaffId) {
+      nextFieldErrors.actionSuggestedStaffId =
+        "Select the staff member the action is suggested to.";
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setSubmitting(false);
+      return;
+    }
 
     if (
       form.replyDueDate &&
@@ -312,6 +376,18 @@ export function InOutRegisterForm({
     : "Log an inward document with source, CC marking, and action assignment.";
 
   const selectedCcStaff = staff.filter((s) => form.ccStaffIds.includes(s.id));
+  // Received-by lists every employee (active selectable, inactive disabled)
+  const receiverOptions = allStaff ?? staff.map((s) => ({ ...s, isActive: true }));
+  const selectedReceiver = receiverOptions.find((s) => s.id === form.receivedByStaffId);
+  const preservedReceiver =
+    form.receivedByStaffId && !selectedReceiver ? entry?.receivedByStaff : null;
+  const receiverTriggerLabel = selectedReceiver
+    ? `${selectedReceiver.name}${selectedReceiver.employeeCode ? ` (${selectedReceiver.employeeCode})` : ""}${selectedReceiver.isActive ? "" : " (inactive — preserved)"}`
+    : preservedReceiver
+      ? `${preservedReceiver.name} (inactive — preserved)`
+      : !form.receivedByStaffId && form.receivedByPersonName
+        ? `${form.receivedByPersonName} (manual entry)`
+        : null;
   const linkedInward = parentInward || entry?.parentInward;
 
   return (
@@ -396,20 +472,30 @@ export function InOutRegisterForm({
               <div className="space-y-1.5">
                 <Label htmlFor="documentRefNo">
                   {isOutward ? "Outgoing Document Ref. No" : "Incoming Document Ref. No"}
+                  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </Label>
                 <Input
                   id="documentRefNo"
                   value={form.documentRefNo}
-                  onChange={(e) =>
-                    updateField("documentRefNo", e.target.value)
-                  }
+                  aria-required="true"
+                  onChange={(e) => {
+                    updateField("documentRefNo", e.target.value);
+                    if (fieldErrors.documentRefNo) {
+                      setFieldErrors((p) => ({ ...p, documentRefNo: undefined }));
+                    }
+                  }}
+                  onBlur={() => updateField("documentRefNo", form.documentRefNo.trim())}
                   placeholder={isOutward ? "e.g. SAEC/OUT/2026/101 (filled by employee)" : "e.g. SMC/HEALTH/2026/142 (filled by employee)"}
                 />
-                <p className="text-xs text-zinc-500">
-                  {isOutward
-                    ? "Outgoing letter or client reference number to be filled by employee (optional)."
-                    : "The reference number printed on received letter to be filled by employee (leave blank if none)."}
-                </p>
+                {fieldErrors.documentRefNo ? (
+                  <p className="text-xs text-red-600">{fieldErrors.documentRefNo}</p>
+                ) : (
+                  <p className="text-xs text-zinc-500">
+                    {isOutward
+                      ? "Outgoing letter or client reference number (required — must be unique)."
+                      : "The reference number printed on the received letter (required — must be unique)."}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -485,6 +571,58 @@ export function InOutRegisterForm({
                 )}
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="modeId">Mode</Label>
+                {modes.length === 0 && !form.modeId ? (
+                  <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
+                    No active modes available. Add or activate modes in
+                    Masters &rarr; Mode Master — this field is optional.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.modeId}
+                    onValueChange={(v) => updateField("modeId", v === "__none__" ? "" : (v ?? ""))}
+                  >
+                    <SelectTrigger id="modeId" className="min-h-11 w-full">
+                      <SelectValue placeholder="Select mode">
+                        {(value: string) =>
+                          modes.find((m) => m.id === value)?.name ??
+                          entry?.mode?.name ??
+                          "Select mode"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {form.modeId && (
+                        <SelectItem value="__none__">— (clear)</SelectItem>
+                      )}
+                      {form.modeId && !modes.some((m) => m.id === form.modeId) && (
+                        <SelectItem value={form.modeId} disabled>
+                          {entry?.mode?.name ?? "Previously selected mode"}
+                          {" "}(inactive — preserved)
+                        </SelectItem>
+                      )}
+                      {modes.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="letterPad">Letter pad</Label>
+                <Input
+                  id="letterPad"
+                  value={form.letterPad}
+                  maxLength={200}
+                  onChange={(e) => updateField("letterPad", e.target.value)}
+                  placeholder="e.g. Head Office / Rajkot branch letterhead"
+                />
+              </div>
+
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="details">Details</Label>
                 <Textarea
@@ -502,84 +640,202 @@ export function InOutRegisterForm({
                     <Label htmlFor="inwardType">Inward type</Label>
                     <Select
                       value={form.inwardType}
-                      onValueChange={(v) => updateField("inwardType", v ?? "")}
+                      onValueChange={(v) => updateField("inwardType", v === "__none__" ? "" : (v ?? ""))}
                     >
                       <SelectTrigger id="inwardType">
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">—</SelectItem>
+                        {form.inwardType !== "" && (
+                          <SelectItem value="__none__">— (clear)</SelectItem>
+                        )}
                         <SelectItem value="INFORMATIVE">Informative</SelectItem>
                         <SelectItem value="ACTION_REQUIRED">Action Required</SelectItem>
-                        <SelectItem value="COMPLAINT">Complaint</SelectItem>
-                        <SelectItem value="QUERY">Query</SelectItem>
-                        <SelectItem value="NOTICE">Notice</SelectItem>
+                        {isEdit &&
+                          form.inwardType &&
+                          !["INFORMATIVE", "ACTION_REQUIRED"].includes(form.inwardType) && (
+                            <SelectItem value={form.inwardType} disabled>
+                              {form.inwardType.charAt(0) +
+                                form.inwardType.slice(1).toLowerCase().replace(/_/g, " ")}{" "}
+                              (legacy — cannot be reassigned)
+                            </SelectItem>
+                          )}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="receivedByPersonName">Received by (person)</Label>
-                    <Input
-                      id="receivedByPersonName"
-                      value={form.receivedByPersonName}
-                      onChange={(e) => updateField("receivedByPersonName", e.target.value)}
-                      placeholder="Name of person who received"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="actionSuggestedStaffId">Action suggested to</Label>
-                    <Select
-                      value={form.actionSuggestedStaffId}
-                      onValueChange={(v) =>
-                        updateField("actionSuggestedStaffId", v ?? "")
-                      }
-                    >
-                      <SelectTrigger id="actionSuggestedStaffId">
-                        <SelectValue placeholder="Select staff">
-                          {(value: string) =>
-                            value
-                              ? staff.find((s) => s.id === value)?.name ?? "Select staff"
-                              : "Unassigned"
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Unassigned</SelectItem>
-                        {staff.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
-                        Reply Due Date (Deadline)
-                      </Label>
-                      <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
-                    </div>
-                    <Input
-                      id="replyDueDate"
-                      type="date"
-                      value={form.replyDueDate}
-                      onChange={(e) => updateField("replyDueDate", e.target.value)}
-                      min={form.documentDate || undefined}
-                      className="border-amber-300 focus-visible:ring-amber-500"
-                    />
-                    <p className="text-xs text-zinc-500">
-                      When must the reply be submitted by? (Stays Pending until answered)
-                    </p>
-                    {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
-                      <p className="text-xs text-red-600">Due date cannot be before document date</p>
+                    <Label htmlFor="receivedByStaffId">Received by (employee)</Label>
+                    {receiverOptions.length === 0 ? (
+                      <p className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2.5">
+                        No employees available — add staff in Masters to link
+                        this field. Manual entries on old records stay visible.
+                      </p>
+                    ) : (
+                      <>
+                        <Popover open={receiverPickerOpen} onOpenChange={setReceiverPickerOpen}>
+                          <PopoverTrigger
+                            id="receivedByStaffId"
+                            className="inline-flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-700 hover:bg-zinc-50"
+                          >
+                            <span className={`truncate ${receiverTriggerLabel ? "" : "text-zinc-500"}`}>
+                              {receiverTriggerLabel ?? "Select employee…"}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[--radix-popover-trigger-width] max-w-[90vw] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search employee name or code…" />
+                              <CommandList>
+                                <CommandEmpty>No employee found.</CommandEmpty>
+                                <CommandGroup>
+                                  {form.receivedByStaffId && (
+                                    <CommandItem
+                                      value="__none__"
+                                      onSelect={() => {
+                                        updateField("receivedByStaffId", "");
+                                        setReceiverPickerOpen(false);
+                                      }}
+                                    >
+                                      — (clear)
+                                    </CommandItem>
+                                  )}
+                                  {preservedReceiver && (
+                                    <CommandItem value={preservedReceiver.name} disabled>
+                                      <Check className="mr-2 h-4 w-4 opacity-100" />
+                                      <span className="min-w-0 flex-1 truncate">
+                                        {preservedReceiver.name}{" "}
+                                        <span className="text-xs text-zinc-500">(inactive — preserved)</span>
+                                      </span>
+                                    </CommandItem>
+                                  )}
+                                  {receiverOptions.map((s) => (
+                                    <CommandItem
+                                      key={s.id}
+                                      value={`${s.name} ${s.employeeCode ?? ""}`}
+                                      disabled={!s.isActive}
+                                      onSelect={() => {
+                                        if (!s.isActive) return;
+                                        updateField("receivedByStaffId", s.id);
+                                        setReceiverPickerOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          form.receivedByStaffId === s.id ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span className={`block truncate text-sm ${s.isActive ? "text-zinc-800" : "text-zinc-400"}`}>
+                                          {s.name}
+                                          {!s.isActive && (
+                                            <span className="ml-1.5 rounded bg-zinc-100 px-1 py-0.5 text-[10px] font-medium uppercase text-zinc-500">
+                                              Inactive
+                                            </span>
+                                          )}
+                                        </span>
+                                        {s.employeeCode && (
+                                          <span className="block truncate text-xs text-zinc-500">
+                                            {s.employeeCode}
+                                          </span>
+                                        )}
+                                      </span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {!form.receivedByStaffId && form.receivedByPersonName && (
+                          <p className="text-xs text-zinc-500">
+                            Manual entry from before this field was added — preserved.
+                            Pick an employee to link, or leave as is.
+                          </p>
+                        )}
+                        {form.receivedByStaffId && form.receivedByPersonName && (
+                          <p className="text-xs text-zinc-500">
+                            Also recorded manually: {form.receivedByPersonName}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
+
+                  {form.inwardType === "ACTION_REQUIRED" && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="replyDueDate" className="text-amber-900 font-semibold flex items-center gap-1.5">
+                          Reply Due Date (Deadline)
+                        </Label>
+                        <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">Target Deadline</span>
+                      </div>
+                      <Input
+                        id="replyDueDate"
+                        type="date"
+                        value={form.replyDueDate}
+                        onChange={(e) => updateField("replyDueDate", e.target.value)}
+                        min={form.documentDate || undefined}
+                        className="border-amber-300 focus-visible:ring-amber-500"
+                      />
+                      <p className="text-xs text-zinc-500">
+                        When must the reply be submitted by? (Stays Pending until answered)
+                      </p>
+                      {form.replyDueDate && form.documentDate && form.replyDueDate < form.documentDate && (
+                        <p className="text-xs text-red-600">Due date cannot be before document date</p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="actionSuggestedStaffId">
+                  Action suggested to
+                  <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+                </Label>
+                {staff.length === 0 ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    No staff members are available to assign. Add staff in
+                    Masters before saving this entry.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.actionSuggestedStaffId}
+                    onValueChange={(v) => {
+                      updateField("actionSuggestedStaffId", v ?? "");
+                      if (fieldErrors.actionSuggestedStaffId) {
+                        setFieldErrors((p) => ({ ...p, actionSuggestedStaffId: undefined }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="actionSuggestedStaffId">
+                      <SelectValue placeholder="Select staff (required)">
+                        {(value: string) =>
+                          staff.find((s) => s.id === value)?.name ?? "Select staff (required)"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {form.actionSuggestedStaffId &&
+                        !staff.some((s) => s.id === form.actionSuggestedStaffId) && (
+                          <SelectItem value={form.actionSuggestedStaffId} disabled>
+                            {entry?.actionSuggestedStaff?.name ?? "Previously assigned staff"}
+                            {" "}(inactive — preserved)
+                          </SelectItem>
+                        )}
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {fieldErrors.actionSuggestedStaffId && (
+                  <p className="text-xs text-red-600">{fieldErrors.actionSuggestedStaffId}</p>
+                )}
+              </div>
 
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="in-out-register-cc-marking">CC marking</Label>
@@ -637,6 +893,7 @@ export function InOutRegisterForm({
                   id="in-out-register-doc"
                   label="Attach document"
                   value={newDocument}
+                  uploadEndpoint="/api/in-out-documents"
                   onChange={(path) => {
                     if (path) {
                       setForm((prev) => ({
@@ -649,40 +906,84 @@ export function InOutRegisterForm({
                   placeholder="Click browse to attach a document"
                 />
                 {form.documents.length > 0 && (
-                  <div ref={documentListRef} className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-                    {form.documents.map((document, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 text-xs"
-                      >
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-mono text-zinc-500 font-medium shrink-0">
-                            {index + 1}.
-                          </span>
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
-                          <span className="truncate" title={documentDisplayName(document)}>
-                            {documentDisplayName(document)}
-                          </span>
-                          <a
-                            href={withBasePath(document)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-0.5 text-teal-600 hover:text-teal-700 hover:underline shrink-0"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => removeDocument(index)}
+                  <div ref={documentListRef} className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+                    {form.documents.map((document, index) => {
+                      const isPdf = document.toLowerCase().endsWith(".pdf");
+                      const viewUrl = withBasePath(
+                        `/api/in-out-documents?path=${encodeURIComponent(document)}`
+                      );
+                      const downloadUrl = `${viewUrl}&download=1`;
+                      return (
+                        <div
+                          key={index}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 text-xs"
                         >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="font-mono text-zinc-500 font-medium shrink-0">
+                              {index + 1}.
+                            </span>
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            <span
+                              className="truncate text-sm"
+                              title={documentDisplayName(document)}
+                            >
+                              {documentDisplayName(document)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isPdf ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-9 gap-1 px-2.5 text-xs"
+                                onClick={() => setPreviewPath(document)}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View PDF
+                              </Button>
+                            ) : (
+                              <a href={viewUrl} target="_blank" rel="noopener noreferrer">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="min-h-9 gap-1 px-2.5 text-xs"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  View
+                                </Button>
+                              </a>
+                            )}
+                            <a
+                              href={downloadUrl}
+                              download={documentDisplayName(document)}
+                              title="Download document"
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-9 gap-1 px-2.5 text-xs"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download
+                              </Button>
+                            </a>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-9 w-9 p-0"
+                              onClick={() => removeDocument(index)}
+                              title="Remove document"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -704,7 +1005,7 @@ export function InOutRegisterForm({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || staff.length === 0}>
               {submitting && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               )}
@@ -712,6 +1013,13 @@ export function InOutRegisterForm({
             </Button>
           </div>
         </form>
+        <PdfPreviewDialog
+          documentPath={previewPath}
+          open={previewPath !== null}
+          onOpenChange={(open) => {
+            if (!open) setPreviewPath(null);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

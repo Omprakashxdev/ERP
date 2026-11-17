@@ -42,7 +42,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [employeeCode, setEmployeeCode] = useState("");
   const [designation, setDesignation] = useState("");
   const [regionId, setRegionId] = useState("");
   const [reportingManagerId, setReportingManagerId] = useState("");
@@ -93,7 +92,6 @@ export default function RegisterPage() {
         name,
         email,
         password,
-        employeeCode: employeeCode || undefined,
         designation: designation || undefined,
         regionId: regionId || undefined,
         reportingManagerId: reportingManagerId || undefined,
@@ -159,15 +157,6 @@ export default function RegisterPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="employeeCode" className="text-sm font-medium">Employee Code</Label>
-                <Input
-                  id="employeeCode"
-                  value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
-                  className="h-11"
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="designation" className="text-sm font-medium">Designation</Label>
                 <Input

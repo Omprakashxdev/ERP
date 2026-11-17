@@ -427,6 +427,8 @@ export async function createTenderLinkedTasks(data: TenderLinkData): Promise<voi
 interface InOutRegisterLinkData {
   inOutRegisterId: string;
   documentRefNo: string;
+  direction?: string | null;
+  inwardType?: string | null;
   details?: string | null;
   receivedDate?: Date | null;
   replyDueDate?: Date | null;
@@ -439,8 +441,17 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
   // Excel gives no task deadline — prefer the real reply-due date,
   // then the received date, never an invented offset.
   const dueDate = data.replyDueDate ?? data.receivedDate ?? new Date();
+  const dir = data.direction === "OUTWARD" ? "outward" : "inward";
 
-  if (data.actionSuggestedStaffId) {
+  // "Action suggested to" is a register field, not an automatic task.
+  // A HIGH-priority action task is only raised for inward documents
+  // that actually require action — never for outward dispatches or
+  // Informative inwards merely because a staff member is recorded.
+  const actionTaskApplies =
+    data.actionSuggestedStaffId &&
+    data.direction !== "OUTWARD" &&
+    data.inwardType !== "INFORMATIVE";
+  if (actionTaskApplies) {
     tasks.push({
       sourceEventKey: `action:${data.actionSuggestedStaffId}`,
       title: `Action required: Doc #${data.documentRefNo}`,
@@ -457,13 +468,13 @@ export async function createInOutRegisterLinkedTasks(data: InOutRegisterLinkData
 
   if (data.ccStaffIds && data.ccStaffIds.length > 0) {
     for (const staffId of data.ccStaffIds) {
-      if (staffId !== data.actionSuggestedStaffId) {
+      if (staffId !== data.actionSuggestedStaffId || !actionTaskApplies) {
         tasks.push({
           sourceEventKey: `cc:${staffId}`,
           title: `CC Notification: Doc #${data.documentRefNo}`,
           description: data.details
-            ? `CC marking on inward doc #${data.documentRefNo}: ${data.details}`
-            : `You have been marked CC on inward document #${data.documentRefNo}.`,
+            ? `CC marking on ${dir} doc #${data.documentRefNo}: ${data.details}`
+            : `You have been marked CC on ${dir} document #${data.documentRefNo}.`,
           dueDate,
           sourceModule: "IN_OUT_REGISTER",
           sourceEntityId: data.inOutRegisterId,

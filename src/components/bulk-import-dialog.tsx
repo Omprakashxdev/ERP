@@ -37,14 +37,19 @@ export function BulkImportDialog({ module, moduleLabel }: BulkImportDialogProps)
 
       if (res.success && res.data) {
         if (format === "xlsx") {
-          const lines = res.data.content.trim().split("\n");
+          const lines = res.data.content.replace(/^\uFEFF/, "").trim().split("\n");
           const rows = lines.map((line) => line.split(","));
           const ws = XLSX.utils.aoa_to_sheet(rows);
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, "Template");
           XLSX.writeFile(wb, res.data.filename.replace(".csv", ".xlsx"));
         } else {
-          const blob = new Blob([res.data.content], { type: "text/csv;charset=utf-8;" });
+          // Server-action transport may strip a leading U+FEFF — ensure
+          // exactly one BOM lands in the downloaded file.
+          const content = res.data.content.startsWith("\uFEFF")
+            ? res.data.content
+            : "\uFEFF" + res.data.content;
+          const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;

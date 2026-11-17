@@ -34,6 +34,7 @@ export const exportRequestSchema = z.object({
     "masters_workOrderMaster",
     "masters_drawingMaster",
     "masters_contactMaster",
+    "masters_modeMaster",
   ]),
   format: z.enum(["csv", "json", "xlsx"]),
 });
@@ -71,6 +72,7 @@ export const importRequestSchema = z.object({
     "masters_workOrderMaster",
     "masters_drawingMaster",
     "masters_contactMaster",
+    "masters_modeMaster",
   ]),
   format: z.enum(["csv", "json"]),
   data: z.string().min(1),

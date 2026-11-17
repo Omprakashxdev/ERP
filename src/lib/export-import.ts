@@ -3,6 +3,10 @@ import * as XLSX from "xlsx";
 
 export type ExportFormat = "csv" | "json" | "xlsx";
 
+// UTF-8 BOM — without it, Microsoft Excel opens downloaded CSVs as the
+// system ANSI codepage and Gujarati/Unicode text renders as garbage.
+export const CSV_BOM = "\uFEFF";
+
 export interface ModuleExportConfig {
   label: string;
   model: string;
@@ -181,7 +185,7 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
       direction: ["INWARD", "OUTWARD"],
     },
     booleanFields: [],
-    relationFields: ["client", "actionSuggestedStaff", "documents", "ccStaff", "parentInward", "replies"],
+    relationFields: ["client", "actionSuggestedStaff", "receivedByStaff", "mode", "documents", "ccStaff", "parentInward", "replies"],
   },
   auditLogs: {
     label: "Audit Logs",
@@ -436,6 +440,17 @@ export const MODULE_EXPORT_CONFIGS: Record<string, ModuleExportConfig> = {
     enumFields: {},
     relationFields: [],
   },
+  masters_modeMaster: {
+    label: "Master - Mode Master",
+    model: "modeMaster",
+    excludedFields: [],
+    dateFields: [],
+    decimalFields: [],
+    intFields: [],
+    enumFields: {},
+    relationFields: [],
+    booleanFields: ["isActive"],
+  },
 };
 
 export const EXPORTABLE_MODULES = Object.keys(MODULE_EXPORT_CONFIGS);
@@ -490,9 +505,37 @@ function flattenRow(
   return flat;
 }
 
+// Cells Excel could interpret as formulas (after trimming whitespace, which
+// Excel does on CSV import) get a leading apostrophe so they stay literal
+// text. A stored value already starting with an apostrophe gets it doubled,
+// so parseCsv can unambiguously tell an export-added guard from a
+// user-authored apostrophe. Plain numbers ("-500", "+2.5") stay untouched.
+const FORMULA_START = /^\s*[=+\-@]/;
+const PLAIN_NUMBER = /^[-+]?\d*\.?\d+([eE][-+]?\d+)?$/;
+
 function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+  if (value.startsWith("'") || (FORMULA_START.test(value) && !PLAIN_NUMBER.test(value.trim()))) {
+    value = `'${value}`;
+  }
+  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
     return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+// Reverses escapeCsvField: drop one leading apostrophe only when the
+// remainder marks it as export-added (starts with another apostrophe or a
+// formula char). A user-supplied apostrophe before ordinary text survives.
+// Known limitation: an externally authored cell like "'=SUM(A1:A2)" is
+// indistinguishable from our guarded export and will un-escape to
+// "=SUM(A1:A2)". Resolving that ambiguity would require corrupting real
+// exports, so the rule stays — XLSX is the preferred Excel interchange.
+function unescapeCsvField(value: string): string {
+  if (value.startsWith("'")) {
+    const rest = value.slice(1);
+    if (rest.startsWith("'") || (FORMULA_START.test(rest) && !PLAIN_NUMBER.test(rest.trim()))) {
+      return rest;
+    }
   }
   return value;
 }
@@ -512,7 +555,7 @@ export function rowsToCsv(rows: Record<string, unknown>[], config: ModuleExportC
     lines.push(values.join(","));
   }
 
-  return lines.join("\n");
+  return CSV_BOM + lines.join("\n");
 }
 
 export function rowsToJson(rows: Record<string, unknown>[], config: ModuleExportConfig): string {
@@ -546,18 +589,21 @@ export function exportData(
 }
 
 export function parseCsv(csvContent: string): Record<string, string>[] {
+  // Strip a UTF-8 BOM so it never becomes part of the first header.
+  if (csvContent.startsWith(CSV_BOM)) {
+    csvContent = csvContent.slice(CSV_BOM.length);
+  }
+  const grid = parseCsvGrid(csvContent);
+  if (grid.length === 0) return [];
+
+  const headers = grid[0];
   const rows: Record<string, string>[] = [];
-  const lines = csvContent.split(/\r?\n/).filter((l) => l.trim());
 
-  if (lines.length === 0) return rows;
-
-  const headers = parseCsvLine(lines[0]);
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCsvLine(lines[i]);
+  for (let i = 1; i < grid.length; i++) {
+    const values = grid[i];
     const row: Record<string, string> = {};
     headers.forEach((header, idx) => {
-      row[header] = values[idx] ?? "";
+      row[header] = unescapeCsvField(values[idx] ?? "");
     });
     const isEmpty = Object.values(row).every((v) => v.trim() === "");
     if (!isEmpty) {
@@ -568,39 +614,48 @@ export function parseCsv(csvContent: string): Record<string, string>[] {
   return rows;
 }
 
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
+// Character-level CSV scanner: honors quoted commas, doubled quotes and
+// newlines embedded inside quoted fields, plus CRLF line endings.
+function parseCsvGrid(content: string): string[][] {
+  const grid: string[][] = [];
+  let row: string[] = [];
+  let field = "";
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  const flushRow = () => {
+    row.push(field);
+    field = "";
+    if (row.some((f) => f.trim() !== "")) grid.push(row);
+    row = [];
+  };
 
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
     if (inQuotes) {
-      if (char === '"') {
-        if (line[i + 1] === '"') {
-          current += '"';
+      if (ch === '"') {
+        if (content[i + 1] === '"') {
+          field += '"';
           i++;
         } else {
           inQuotes = false;
         }
       } else {
-        current += char;
+        field += ch;
       }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && content[i + 1] === "\n") i++;
+      flushRow();
     } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ",") {
-        fields.push(current);
-        current = "";
-      } else {
-        current += char;
-      }
+      field += ch;
     }
   }
-
-  fields.push(current);
-  return fields;
+  if (field !== "" || row.length > 0) flushRow();
+  return grid;
 }
 
 export function parseJson(jsonContent: string): Record<string, unknown>[] {

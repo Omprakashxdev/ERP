@@ -60,6 +60,7 @@ model User {
   notifications Notification[]
   tasksAssignedBy Task[]       @relation("TaskAssignedBy")
   taskAttachments TaskAttachment[]
+  pendingInOutUploads PendingInOutUpload[]
   forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
   reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
 }
@@ -211,6 +212,7 @@ model Staff {
   email        String?   @unique
   phone        String?
   employeeCode String?   @unique
+  previousEmployeeCode String?
   designation  String?
   regionId     String?
   isActive     Boolean   @default(true)
@@ -227,6 +229,7 @@ model Staff {
   wipAssignments  WipAssignment[]
   ccMarkings             InOutRegisterCcStaff[]
   actionSuggestedEntries InOutRegister[]        @relation("ActionSuggestedStaff")
+  receivedByEntries      InOutRegister[]        @relation("ReceivedByStaff")
   tadaClaims             TadaClaim[]            @relation("TadaClaimStaff")
   tasksAssigned          Task[]                 @relation("TaskAssignedTo")
   taskCoAssignments      TaskCoAssignee[]
@@ -578,8 +581,11 @@ model InOutRegister {
   details                String?
   clientId               String
   actionSuggestedStaffId String?
+  modeId                 String?
+  letterPad              String?
   inwardType             String?
   receivedByPersonName   String?
+  receivedByStaffId      String?
   department             String?
   replyDueDate           DateTime?
   replyDate              DateTime?
@@ -591,6 +597,8 @@ model InOutRegister {
 
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
+  receivedByStaff        Staff?                  @relation("ReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
+  mode                   ModeMaster?             @relation(fields: [modeId], references: [id], onDelete: Restrict)
   parentInward           InOutRegister?          @relation("InwardOutwardLink", fields: [parentInwardId], references: [id], onDelete: SetNull)
   replies                InOutRegister[]         @relation("InwardOutwardLink")
   documents              InOutRegisterDocument[]
@@ -601,6 +609,8 @@ model InOutRegister {
   @@index([receivedDate])
   @@index([documentDate])
   @@index([actionSuggestedStaffId])
+  @@index([receivedByStaffId])
+  @@index([modeId])
   @@index([department])
   @@index([replyDueDate])
   @@index([replyDate])
@@ -618,6 +628,13 @@ model RegisterSerialCounter {
   @@map("RegisterSerialCounter")
 }
 
+model EmployeeCodeCounter {
+  scope    String @id
+  lastSeq  Int    @default(0)
+
+  @@map("EmployeeCodeCounter")
+}
+
 model InOutRegisterDocument {
   id              String        @id @default(cuid())
   inOutRegisterId String
@@ -627,6 +644,19 @@ model InOutRegisterDocument {
   inOutRegister   InOutRegister @relation(fields: [inOutRegisterId], references: [id], onDelete: Cascade)
 
   @@index([inOutRegisterId])
+}
+
+// Unsaved In-Out Register uploads — binds a private file to its uploader
+// until the file becomes linked to an InOutRegisterDocument on save.
+model PendingInOutUpload {
+  id           String   @id @default(cuid())
+  storedName   String   @unique
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([uploadedById])
 }
 
 model InOutRegisterCcStaff {
@@ -1302,6 +1332,18 @@ model WorkOrderMaster {
   contractors     Contractor[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model ModeMaster {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inOutRegisters InOutRegister[]
+
+  @@index([name])
 }
 
 model ContactMaster {

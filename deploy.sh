@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e
 
+# DEMO-ONLY deploy script — targets the OLD/demo host, NOT live production
+# (live = erp.adelphostech.com / 45.113.226.115). For production use
+# scripts/deploy-production.sh which is fail-closed and uses
+# `prisma migrate deploy`. Running this script requires CONFIRM_DEMO=yes.
+if [[ "${CONFIRM_DEMO:-}" != "yes" ]]; then
+  echo "This is the DEMO deploy script (root@156.67.105.64)."
+  echo "It is NOT for production. To deploy the demo deliberately:"
+  echo "  CONFIRM_DEMO=yes ./deploy.sh"
+  echo "For production, use: scripts/deploy-production.sh"
+  exit 1
+fi
+
 REMOTE="root@156.67.105.64"
 REMOTE_PATH="/var/www/saec-erp"
 
@@ -14,13 +26,15 @@ rsync -avz --delete \
   --exclude 'ERP-Credentials*' \
   --exclude 'ERP-Fixes*' \
   --exclude 'deploy.sh' \
+  --exclude 'private_uploads/' \
+  --exclude 'public/uploads/' \
   -e "ssh -o StrictHostKeyChecking=no" \
   ./ "$REMOTE:$REMOTE_PATH/"
 
 echo "==> Running remote build..."
 ssh -o StrictHostKeyChecking=no "$REMOTE" "cd $REMOTE_PATH && \
   npx prisma generate && \
-  npx prisma db push --accept-data-loss && \
+  npx prisma db push && \
   npm run build"
 
 echo "==> Copying static files to standalone..."

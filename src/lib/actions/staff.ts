@@ -13,35 +13,16 @@ import {
 } from "@/lib/schemas/staff";
 import { withAuth, withPermission, checkRateLimit, audit, sanitizeForAudit, ActionResult } from "./wrapper";
 
+import { issueEmployeeCode } from "@/lib/employee-code";
+
 const mutationRoles = [Role.ADMIN, Role.MANAGER];
-
-async function generateEmployeeCode(): Promise<string> {
-  const latestStaff = await prisma.staff.findFirst({
-    where: { employeeCode: { startsWith: "EMP" } },
-    orderBy: { employeeCode: "desc" },
-  });
-
-  if (!latestStaff || !latestStaff.employeeCode) {
-    return "EMP001";
-  }
-
-  const match = latestStaff.employeeCode.match(/EMP(\d+)/);
-  if (match && match[1]) {
-    const num = parseInt(match[1], 10);
-    return `EMP${String(num + 1).padStart(3, "0")}`;
-  }
-
-  return `EMP${Date.now().toString().slice(-6)}`;
-}
 
 export async function createStaff(
   input: StaffCreateInput
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; employeeCode: string | null }>> {
   return withAuth(async (user) => {
     const parsed = staffCreateSchema.parse(input);
     await checkRateLimit(user.id);
-    
-    const code = parsed.employeeCode || (await generateEmployeeCode());
 
     const {
       name,
@@ -55,6 +36,7 @@ export async function createStaff(
     } = parsed;
 
     const staff = await prisma.$transaction(async (tx) => {
+      const code = await issueEmployeeCode(tx);
       const created = await tx.staff.create({
         data: {
           name,
@@ -95,7 +77,7 @@ export async function createStaff(
             },
           },
         },
-        select: { id: true },
+        select: { id: true, employeeCode: true },
       });
       return created;
     });
@@ -121,7 +103,6 @@ export async function updateStaff(
       name,
       email,
       phone,
-      employeeCode,
       designation,
       regionId,
       reportingManagerId,
@@ -134,7 +115,6 @@ export async function updateStaff(
     if (name !== undefined) staffData.name = name;
     if (email !== undefined) staffData.email = email;
     if (phone !== undefined) staffData.phone = phone;
-    if (employeeCode !== undefined) staffData.employeeCode = employeeCode;
     if (designation !== undefined) staffData.designation = designation;
     if (regionId !== undefined) staffData.regionId = regionId;
     if (reportingManagerId !== undefined) staffData.reportingManagerId = reportingManagerId;

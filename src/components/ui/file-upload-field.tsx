@@ -13,6 +13,8 @@ interface FileUploadFieldProps {
   onChange: (path: string) => void;
   accept?: string;
   placeholder?: string;
+  /** Upload API route — defaults to the shared /api/upload endpoint. */
+  uploadEndpoint?: string;
 }
 
 /**
@@ -32,6 +34,7 @@ export function FileUploadField({
   onChange,
   accept = ".pdf,.jpg,.jpeg,.png,.doc,.docx",
   placeholder,
+  uploadEndpoint = "/api/upload",
 }: FileUploadFieldProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export function FileUploadField({
       formData.append("file", file);
       formData.append("module", id);
 
-      const res = await fetch(withBasePath("/api/upload"), {
+      const res = await fetch(withBasePath(uploadEndpoint), {
         method: "POST",
         body: formData,
       });

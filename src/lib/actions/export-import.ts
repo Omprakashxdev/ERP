@@ -6,6 +6,7 @@ import {
   issueRegisterSerialNo,
   bumpRegisterSerialCounter,
 } from "@/lib/register-serial";
+import { issueEmployeeCode } from "@/lib/employee-code";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
   withPermission,
@@ -25,6 +26,7 @@ import {
   parseJson,
   getExportFilename,
   MODULE_EXPORT_CONFIGS,
+  CSV_BOM,
 } from "@/lib/export-import";
 
 function parseImportDate(value: string): Date | null {
@@ -110,22 +112,7 @@ function parseImportDate(value: string): Date | null {
 }
 
 async function generateImportEmployeeCode(): Promise<string> {
-  const latestStaff = await prisma.staff.findFirst({
-    where: { employeeCode: { startsWith: "EMP" } },
-    orderBy: { employeeCode: "desc" },
-  });
-
-  if (!latestStaff || !latestStaff.employeeCode) {
-    return "EMP001";
-  }
-
-  const match = latestStaff.employeeCode.match(/EMP(\d+)/);
-  if (match && match[1]) {
-    const num = parseInt(match[1], 10);
-    return `EMP${String(num + 1).padStart(3, "0")}`;
-  }
-
-  return `EMP${Date.now().toString().slice(-6)}`;
+  return issueEmployeeCode();
 }
 
 function autoCorrectNumber(value: string): string {
@@ -225,6 +212,9 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
         include: {
           client: { select: { name: true, id: true } },
           actionSuggestedStaff: { select: { name: true, id: true } },
+          receivedByStaff: { select: { name: true, id: true } },
+          mode: { select: { name: true, id: true } },
+          project: { select: { name: true, id: true } },
           documents: { select: { path: true } },
           ccStaff: { include: { staff: { select: { name: true } } } },
           parentInward: { select: { documentRefNo: true } },
@@ -262,8 +252,22 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
         include: { region: true, reportingManager: true },
       }) as Promise<Record<string, unknown>[]>;
 
-    default:
+    default: {
+      // Generic masters_* modules fetch straight from their model.
+      const config = MODULE_EXPORT_CONFIGS[module];
+      if (config && module.startsWith("masters_")) {
+        const model = (prisma as any)[config.model];
+        if (!model) throw new Error(`Unknown module: ${module}`);
+        const orderBy =
+          module === "masters_dprMaster" || module === "masters_tsAaMaster"
+            ? { referenceNumber: "asc" as const }
+            : { name: "asc" as const };
+        return model.findMany({ orderBy }) as Promise<
+          Record<string, unknown>[]
+        >;
+      }
       throw new Error(`Unknown module: ${module}`);
+    }
   }
 }
 
@@ -302,12 +306,12 @@ export async function importModule(
     const parsed = importRequestSchema.parse(input);
     await checkRateLimit(user.id);
 
-    const rows =
+    const rawRows =
       parsed.format === "csv"
         ? parseCsv(parsed.data)
         : parseJson(parsed.data);
 
-    if (rows.length === 0) {
+    if (rawRows.length === 0) {
       throw new Error("No data rows found in import file");
     }
 
@@ -320,7 +324,19 @@ export async function importModule(
       throw new Error(`Unknown module: ${parsed.module}`);
     }
 
+    // 1) Intra-sheet dedup: collapse duplicate rows inside the file before processing.
+    const { rows, rowNumbers } = dedupeImportRows(parsed.module, rawRows, corrections);
+
+    // 2) Inter-system idempotency: prefetch existing natural keys once (single query).
+    let dedupIndex: ImportDedupIndex | null = null;
+    try {
+      dedupIndex = await buildImportDedupIndex(parsed.module);
+    } catch {
+      dedupIndex = null;
+    }
+
     for (let i = 0; i < rows.length; i++) {
+      const rowNum = rowNumbers[i];
       try {
         const row = rows[i];
         const data: Record<string, unknown> = {};
@@ -344,7 +360,7 @@ export async function importModule(
             ) {
               data.parentInwardRefNo = rawValue;
               corrections.push(
-                `Row ${i + 1}: Auto-detected reference number "${rawValue}" in replyDueDate column and mapped it to parentInwardRefNo`
+                `Row ${rowNum}: Auto-detected reference number "${rawValue}" in replyDueDate column and mapped it to parentInwardRefNo`
               );
               continue;
             }
@@ -363,7 +379,7 @@ export async function importModule(
               throw new Error(`Invalid number "${rawValue}" for ${key}`);
             }
             if (corrected !== rawValue) {
-              corrections.push(`Row ${i + 1}: Auto-corrected ${key} "${rawValue}" → "${parsedDecimal}"`);
+              corrections.push(`Row ${rowNum}: Auto-corrected ${key} "${rawValue}" → "${parsedDecimal}"`);
             }
             data[key] = parsedDecimal;
           } else if (config.intFields.includes(key)) {
@@ -373,7 +389,7 @@ export async function importModule(
               throw new Error(`Invalid whole number "${rawValue}" for ${key}`);
             }
             if (corrected !== rawValue) {
-              corrections.push(`Row ${i + 1}: Auto-corrected ${key} "${rawValue}" → "${parsedInt}"`);
+              corrections.push(`Row ${rowNum}: Auto-corrected ${key} "${rawValue}" → "${parsedInt}"`);
             }
             data[key] = parsedInt;
           } else if (config.enumFields[key]) {
@@ -385,7 +401,7 @@ export async function importModule(
               );
             }
             if (corrected !== rawValue) {
-              corrections.push(`Row ${i + 1}: Auto-corrected ${key} "${rawValue}" → "${corrected}"`);
+              corrections.push(`Row ${rowNum}: Auto-corrected ${key} "${rawValue}" → "${corrected}"`);
             }
             data[key] = corrected;
           } else if (config.booleanFields?.includes(key)) {
@@ -403,13 +419,13 @@ export async function importModule(
         }
 
         // Resolve relation fields by name lookup
-        await resolveRelations(parsed.module, data, row as Record<string, string>, corrections, i);
+        await resolveRelations(parsed.module, data, row as Record<string, string>, corrections, rowNum - 1);
 
-        // Check for duplicate unique fields and skip if already exists
-        const dupCheck = await checkDuplicates(parsed.module, data);
-        if (dupCheck.isDuplicate) {
+        // Skip rows whose natural key already exists in the database
+        const dupDesc = dedupIndex?.match(data);
+        if (dupDesc) {
           corrections.push(
-            `Row ${i + 1}: Skipped existing record (${dupCheck.identifier}) — already exists in database`
+            `Row ${rowNum}: Skipped existing record (${dupDesc}) — already exists in database`
           );
           continue;
         }
@@ -579,18 +595,71 @@ export async function importModule(
             }
             const allowedFields = [
               "direction", "serialNo", "documentDate", "receivedDate", "documentRefNo", "clientId",
-              "details", "actionSuggestedStaffId",
-              "inwardType", "receivedByPersonName", "department", "replyDueDate", "parentInwardId"
+              "details", "actionSuggestedStaffId", "modeId", "letterPad",
+              "inwardType", "receivedByPersonName", "receivedByStaffId", "department", "replyDueDate", "parentInwardId",
+              "projectId"
             ];
             const cleanData: Record<string, unknown> = {};
             for (const key of allowedFields) {
               if (data[key] !== undefined && data[key] !== null) cleanData[key] = data[key];
             }
 
+            // Customer requirement: document number + action-suggested staff
+            // are mandatory for every imported entry, both directions.
+            if (
+              !cleanData.documentRefNo ||
+              String(cleanData.documentRefNo).trim() === ""
+            ) {
+              throw new Error(
+                "Document number is required — provide the Incoming/Outgoing Document Ref. No."
+              );
+            }
+            cleanData.documentRefNo = String(cleanData.documentRefNo).trim();
+            if (!cleanData.actionSuggestedStaffId) {
+              throw new Error(
+                "Action suggested to is required — provide a staff name in the actionSuggestedStaff column."
+              );
+            }
+
+            // Same inward-type rule as the form: new entries may only be
+            // Informative or Action Required.
+            if (
+              cleanData.direction === "INWARD" &&
+              cleanData.inwardType != null &&
+              !["INFORMATIVE", "ACTION_REQUIRED"].includes(
+                String(cleanData.inwardType)
+              )
+            ) {
+              throw new Error(
+                `Invalid inward type "${cleanData.inwardType}" — allowed: INFORMATIVE, ACTION_REQUIRED`
+              );
+            }
+
+            // A modeId arriving as a raw column (rather than resolved from
+            // the "mode" name column) must still exist and be active.
+            if (cleanData.modeId) {
+              const modeRow = await prisma.modeMaster.findUnique({
+                where: { id: String(cleanData.modeId) },
+                select: { isActive: true },
+              });
+              if (!modeRow) {
+                throw new Error("Selected mode does not exist — check the mode column");
+              }
+              if (!modeRow.isActive) {
+                throw new Error("Selected mode is inactive and cannot be used for new entries");
+              }
+            }
+            if (cleanData.letterPad !== undefined && cleanData.letterPad !== null) {
+              const lp = String(cleanData.letterPad).trim();
+              cleanData.letterPad = lp === "" ? null : lp;
+            }
+
             // Outward letters are going outside, so they NEVER have pending reply or deadline
             if (cleanData.direction === "OUTWARD") {
               cleanData.replyDueDate = null;
-              cleanData.actionSuggestedStaffId = null;
+              // Project linkage is inward-only — outward rows inherit the
+              // linked inward's project for display instead.
+              cleanData.projectId = null;
 
               // If parent inward ref no was provided in CSV, resolve it to parentInwardId
               const parentRef =
@@ -614,9 +683,21 @@ export async function importModule(
                 if (parentDoc) {
                   cleanData.parentInwardId = parentDoc.id;
                   corrections.push(
-                    `Row ${i + 1}: Linked Outward dispatch to Inward letter "${parentDoc.serialNo || parentDoc.documentRefNo || parentRef}"`
+                    `Row ${rowNum}: Linked Outward dispatch to Inward letter "${parentDoc.serialNo || parentDoc.documentRefNo || parentRef}"`
                   );
                 }
+              }
+            }
+
+            // Any existing project may be linked — client scoping was
+            // removed per customer direction; only existence is enforced.
+            if (cleanData.projectId) {
+              const linkedProject = await prisma.project.findUnique({
+                where: { id: String(cleanData.projectId) },
+                select: { id: true },
+              });
+              if (!linkedProject) {
+                throw new Error("Selected project does not exist — check the project column");
               }
             }
 
@@ -642,10 +723,19 @@ export async function importModule(
                   (cleanData.direction as "INWARD" | "OUTWARD") || "INWARD";
                 cleanData.serialNo = await issueRegisterSerialNo(tx, dir);
                 corrections.push(
-                  `Row ${i + 1}: Auto-generated ${dir} serial number "${cleanData.serialNo}"`
+                  `Row ${rowNum}: Auto-generated ${dir} serial number "${cleanData.serialNo}"`
                 );
               }
-              await tx.inOutRegister.create({ data: cleanData as never });
+              await tx.inOutRegister.create({ data: cleanData as never }).catch(
+                (err) => {
+                  if ((err as { code?: string })?.code === "P2002") {
+                    throw new Error(
+                      "This document number is already registered. Please enter a different number."
+                    );
+                  }
+                  throw err;
+                }
+              );
             });
             break;
           }
@@ -700,12 +790,13 @@ export async function importModule(
             break;
           }
           case "staff": {
-            if (!data.employeeCode || String(data.employeeCode).trim() === "") {
-              data.employeeCode = await generateImportEmployeeCode();
-              corrections.push(
-                `Row ${i + 1}: Auto-generated Employee Code "${data.employeeCode}"`
-              );
-            }
+            const suppliedCode = data.employeeCode ? String(data.employeeCode).trim() : "";
+            data.employeeCode = await generateImportEmployeeCode();
+            corrections.push(
+              suppliedCode
+                ? `Row ${rowNum}: Supplied Employee Code "${suppliedCode}" ignored — system assigned "${data.employeeCode}"`
+                : `Row ${rowNum}: Auto-generated Employee Code "${data.employeeCode}"`
+            );
             if (data.isActive === undefined) {
               data.isActive = true;
             }
@@ -774,14 +865,43 @@ export async function importModule(
           case "masters_contactMaster":
             await (prisma as any).contactMaster.create({ data: data as never });
             break;
+          case "masters_modeMaster": {
+            // Mode names dedupe on trimmed + case-insensitive comparison,
+            // matching the ModeMaster lower(btrim(name)) unique index.
+            const modeName = data.name ? String(data.name).trim() : "";
+            if (!modeName) throw new Error("Mode name is required");
+            const existing = await prisma.modeMaster.findFirst({
+              where: { name: { equals: modeName, mode: "insensitive" } },
+            });
+            if (existing) {
+              throw new Error(`Mode "${modeName}" already exists. Mode names must be unique.`);
+            }
+            await prisma.modeMaster.create({
+              data: {
+                name: modeName,
+                isActive:
+                  data.isActive === undefined || data.isActive === null
+                    ? true
+                    : Boolean(data.isActive),
+              },
+            });
+            break;
+          }
           default:
-            errors.push(`Row ${i + 1}: Import not supported for module ${parsed.module}`);
+            errors.push(`Row ${rowNum}: Import not supported for module ${parsed.module}`);
             continue;
         }
+        dedupIndex?.add(data);
         imported++;
       } catch (err) {
+        if ((err as { code?: string } | null)?.code === "P2002") {
+          corrections.push(
+            `Row ${rowNum}: Skipped existing record — already exists in database (unique constraint)`
+          );
+          continue;
+        }
         errors.push(
-          `Row ${i + 1}: ${err instanceof Error ? err.message : "Unknown error"}`
+          `Row ${rowNum}: ${err instanceof Error ? err.message : "Unknown error"}`
         );
       }
     }
@@ -810,8 +930,8 @@ export async function getModuleList(): Promise<
 }
 
 interface RelationResolver {
-  lookup: (value: string) => Promise<string | null>;
-  fuzzyLookup: (value: string) => Promise<string | null>;
+  lookup: (value: string, row?: Record<string, string>) => Promise<string | null>;
+  fuzzyLookup: (value: string, row?: Record<string, string>) => Promise<string | null>;
   masterLabel: string;
   autoCreate?: (value: string, row: Record<string, string>) => Promise<string | null>;
 }
@@ -1045,6 +1165,7 @@ async function resolveRelations(
               OR: [
                 { name: { equals: clean, mode: "insensitive" } },
                 { employeeCode: { equals: clean, mode: "insensitive" } },
+                { previousEmployeeCode: { equals: clean, mode: "insensitive" } },
               ],
               isActive: true,
             },
@@ -1060,6 +1181,112 @@ async function resolveRelations(
             },
           });
           return s?.id ?? null;
+        },
+      },
+      receivedByStaff: {
+        masterLabel: "Staff master",
+        lookup: async (name: string) => {
+          const clean = name.trim();
+          // An exact employee-code hit is unambiguous — resolve it before
+          // name matching so duplicate names can't hide a coded pick.
+          const byCode = await prisma.staff.findFirst({
+            where: {
+              OR: [
+                { employeeCode: { equals: clean, mode: "insensitive" } },
+                { previousEmployeeCode: { equals: clean, mode: "insensitive" } },
+              ],
+              isActive: true,
+            },
+            select: { id: true },
+          });
+          if (byCode) return byCode.id;
+          const matches = await prisma.staff.findMany({
+            where: {
+              name: { equals: clean, mode: "insensitive" },
+              isActive: true,
+            },
+            select: { id: true },
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `receivedByStaff "${clean}" matches ${matches.length} active employees — provide the employee code instead`
+            );
+          }
+          return matches[0]?.id ?? null;
+        },
+        fuzzyLookup: async (name: string) => {
+          const clean = name.trim();
+          const matches = await prisma.staff.findMany({
+            where: {
+              name: { contains: clean, mode: "insensitive" },
+              isActive: true,
+            },
+            select: { id: true },
+            take: 2,
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `receivedByStaff "${clean}" matches multiple employees — provide the exact name or employee code`
+            );
+          }
+          return matches[0]?.id ?? null;
+        },
+      },
+      mode: {
+        masterLabel: "Mode Master",
+        lookup: async (name: string) => {
+          const clean = name.trim();
+          const m = await prisma.modeMaster.findFirst({
+            where: { name: { equals: clean, mode: "insensitive" } },
+            select: { id: true, isActive: true },
+          });
+          if (m && !m.isActive) {
+            throw new Error(
+              `Mode "${clean}" exists but is inactive — activate it in Mode Master or choose a different mode`
+            );
+          }
+          return m?.id ?? null;
+        },
+        // No fuzzy matching for modes — a near-miss name must not silently
+        // map to a different mode; unknown names fail with a row error.
+        fuzzyLookup: async () => null,
+      },
+      project: {
+        masterLabel: "Project master",
+        // No autoCreate — projects are only ever created through
+        // Masters → Projects. An unmatched or cross-client name fails the row.
+        lookup: async (name: string) => {
+          const clean = name.trim();
+          const matches = await prisma.project.findMany({
+            where: {
+              OR: [
+                { name: { equals: clean, mode: "insensitive" } },
+                { abbreviation: { equals: clean, mode: "insensitive" } },
+              ],
+            },
+            select: { id: true },
+            take: 2,
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `Project "${clean}" matches multiple projects — provide the project abbreviation`
+            );
+          }
+          return matches[0]?.id ?? null;
+        },
+        fuzzyLookup: async (name: string) => {
+          const clean = name.trim();
+          const matches = await prisma.project.findMany({
+            where: { name: { contains: clean, mode: "insensitive" } },
+            select: { id: true },
+            take: 2,
+          });
+          if (matches.length > 1) {
+            throw new Error(
+              `Project "${clean}" is ambiguous — provide the exact project name or abbreviation`
+            );
+          }
+          return matches[0]?.id ?? null;
         },
       },
     },
@@ -1241,10 +1468,10 @@ async function resolveRelations(
     if (!relName || relName.trim() === "") continue;
 
     const trimmedName = relName.trim();
-    let resolvedId = await resolver.lookup(trimmedName);
+    let resolvedId = await resolver.lookup(trimmedName, row);
 
     if (!resolvedId) {
-      resolvedId = await resolver.fuzzyLookup(trimmedName);
+      resolvedId = await resolver.fuzzyLookup(trimmedName, row);
       if (resolvedId) {
         corrections.push(
           `Row ${rowIndex + 1}: Auto-matched ${relField} "${trimmedName}" (case-insensitive lookup)`
@@ -1271,203 +1498,308 @@ async function resolveRelations(
   }
 }
 
-async function checkDuplicates(
-  module: string,
-  data: Record<string, unknown>
-): Promise<{ isDuplicate: boolean; identifier?: string }> {
-  switch (module) {
-    case "tenders": {
-      if (data.tenderId && String(data.tenderId).trim()) {
-        const existing = await prisma.tender.findFirst({
-          where: { tenderId: String(data.tenderId).trim() },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Tender ID: ${data.tenderId}` };
-      }
-      if (data.name && String(data.name).trim()) {
-        const existing = await prisma.tender.findFirst({
-          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Tender: ${data.name}` };
-      }
-      return { isDuplicate: false };
-    }
+// ---------- Import deduplication ----------
 
-    case "contractors": {
-      if (data.email && String(data.email).trim()) {
-        const existing = await prisma.contractor.findFirst({
-          where: { email: { equals: String(data.email).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Contractor Email: ${data.email}` };
-      }
-      if (data.name && String(data.name).trim()) {
-        const existing = await prisma.contractor.findFirst({
-          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Contractor: ${data.name}` };
-      }
-      return { isDuplicate: false };
-    }
+interface ImportDedupIndex {
+  /** Returns the matched natural key if the row already exists, else null */
+  match(data: Record<string, unknown>): string | null;
+  /** Register a freshly inserted row's keys so later rows in the same file match it */
+  add(data: Record<string, unknown>): void;
+}
 
-    case "clients": {
-      if (data.name && String(data.name).trim()) {
-        const existing = await prisma.client.findFirst({
-          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Client: ${data.name}` };
-      }
-      return { isDuplicate: false };
-    }
+interface DedupSpec {
+  model: string;
+  select: Record<string, true>;
+  /** Keys to index for each existing DB row (may emit several candidate keys) */
+  dbKeysOf: (r: Record<string, unknown>) => (string | null)[];
+  /** Candidate keys for an incoming row — a hit on ANY means duplicate */
+  rowKeysOf: (d: Record<string, unknown>) => (string | null)[];
+}
 
-    case "staff": {
-      if (data.employeeCode && String(data.employeeCode).trim()) {
-        const existing = await prisma.staff.findFirst({
-          where: { employeeCode: { equals: String(data.employeeCode).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Employee Code: ${data.employeeCode}` };
-      }
-      if (data.email && String(data.email).trim()) {
-        const existing = await prisma.staff.findFirst({
-          where: { email: { equals: String(data.email).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Staff Email: ${data.email}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "dueBills": {
-      if (data.projectId && data.scheme) {
-        const existing = await prisma.dueBill.findFirst({
-          where: {
-            projectId: data.projectId as string,
-            scheme: { equals: String(data.scheme).trim(), mode: "insensitive" },
-          },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Bill: ${data.scheme}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "paymentSchedules": {
-      if (data.category && data.paymentType) {
-        const existing = await prisma.paymentSchedule.findFirst({
-          where: {
-            category: data.category as any,
-            paymentType: { equals: String(data.paymentType).trim(), mode: "insensitive" },
-            ...(data.amount ? { amount: data.amount as any } : {}),
-            ...(data.dueDate ? { dueDate: data.dueDate as Date } : {}),
-          },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Payment: ${data.paymentType}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "inOutRegister": {
-      if (data.serialNo && String(data.serialNo).trim()) {
-        const existing = await prisma.inOutRegister.findFirst({
-          where: { serialNo: { equals: String(data.serialNo).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Serial No: ${data.serialNo}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "vehicleLogBook": {
-      if (data.registrationNumber && String(data.registrationNumber).trim()) {
-        const existing = await prisma.vehicle.findFirst({
-          where: { registrationNumber: { equals: String(data.registrationNumber).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Vehicle: ${data.registrationNumber}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "assets": {
-      if (data.itemCode && String(data.itemCode).trim()) {
-        const existing = await prisma.asset.findFirst({
-          where: { itemCode: { equals: String(data.itemCode).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Asset Item Code: ${data.itemCode}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "tasks": {
-      if (data.title && String(data.title).trim()) {
-        const existing = await prisma.task.findFirst({
-          where: {
-            title: { equals: String(data.title).trim(), mode: "insensitive" },
-            ...(data.projectId ? { projectId: data.projectId as string } : {}),
-          },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Task: ${data.title}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "tadaBills": {
-      if (data.staffId && data.fromDate && data.toDate) {
-        const existing = await prisma.tadaClaim.findFirst({
-          where: {
-            staffId: data.staffId as string,
-            fromDate: data.fromDate as Date,
-            toDate: data.toDate as Date,
-          },
-        });
-        if (existing) return { isDuplicate: true, identifier: `TADA Claim: ${data.tourPurpose || "Claim"}` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "fundFlow": {
-      if (data.projectId) {
-        const existing = await prisma.fundFlow.findUnique({
-          where: { projectId: data.projectId as string },
-        });
-        if (existing) return { isDuplicate: true, identifier: `Fund Flow for Project` };
-      }
-      return { isDuplicate: false };
-    }
-
-    case "wip": {
-      if (data.projectId) {
-        const existing = await prisma.workInProgress.findUnique({
-          where: { projectId: data.projectId as string },
-        });
-        if (existing) return { isDuplicate: true, identifier: `WIP for Project` };
-      }
-      return { isDuplicate: false };
-    }
-
-    default: {
-      const masterModelMap: Record<string, string> = {
-        masters_region: "region",
-        masters_department: "department",
-        masters_designation: "designation",
-        masters_state: "state",
-        masters_city: "city",
-        masters_platform: "platform",
-        masters_paymentType: "paymentType",
-        masters_assetCategory: "assetCategory",
-        masters_assetMake: "assetMake",
-        masters_assetModel: "assetModel",
-        masters_orderMaster: "orderMaster",
-        masters_workMaster: "workMaster",
-        masters_typeMaster: "typeMaster",
-        masters_workOrderMaster: "workOrderMaster",
-        masters_drawingMaster: "drawingMaster",
-        masters_contactMaster: "contactMaster",
-      };
-      const modelName = masterModelMap[module];
-      if (modelName && data.name) {
-        const existing = await (prisma[modelName as keyof typeof prisma] as any).findFirst({
-          where: { name: { equals: String(data.name).trim(), mode: "insensitive" } },
-        });
-        if (existing) return { isDuplicate: true, identifier: `${module}: ${data.name}` };
-      }
-      return { isDuplicate: false };
-    }
+function normalizeDedupValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? "" : value.toISOString();
   }
+  const s = String(value).trim().toLowerCase().replace(/\s+/g, " ");
+  if (s === "") return "";
+  const num = Number(s.replace(/,/g, ""));
+  if (!isNaN(num) && /^-?[\d.,]+%?$/.test(s)) return String(num);
+  return s;
+}
+
+/** Composite key join — returns null if any part is empty */
+function joinKey(...parts: unknown[]): string | null {
+  const normalized = parts.map(normalizeDedupValue);
+  if (normalized.some((p) => p === "")) return null;
+  return normalized.join("||");
+}
+
+const NAME_MASTER_MODELS: Record<string, string> = {
+  masters_region: "region",
+  masters_department: "department",
+  masters_designation: "designation",
+  masters_state: "state",
+  masters_city: "city",
+  masters_platform: "platform",
+  masters_paymentType: "paymentType",
+  masters_assetCategory: "assetCategory",
+  masters_assetMake: "assetMake",
+  masters_orderMaster: "orderMaster",
+  masters_workMaster: "workMaster",
+  masters_typeMaster: "typeMaster",
+  masters_workOrderMaster: "workOrderMaster",
+  masters_drawingMaster: "drawingMaster",
+  masters_contactMaster: "contactMaster",
+  masters_modeMaster: "modeMaster",
+};
+
+const REF_MASTER_MODELS: Record<string, string> = {
+  masters_dprMaster: "dprMaster",
+  masters_tsAaMaster: "tsAaMaster",
+};
+
+const INTER_SYSTEM_DEDUP: Record<string, DedupSpec> = {
+  fundFlow: {
+    model: "fundFlow",
+    select: { projectId: true },
+    dbKeysOf: (r) => [joinKey(r.projectId)],
+    rowKeysOf: (d) => [joinKey(d.projectId)],
+  },
+  wip: {
+    model: "workInProgress",
+    select: { projectId: true },
+    dbKeysOf: (r) => [joinKey(r.projectId)],
+    rowKeysOf: (d) => [joinKey(d.projectId)],
+  },
+  dueBills: {
+    model: "dueBill",
+    select: { projectId: true, scheme: true },
+    dbKeysOf: (r) => [joinKey(r.projectId, r.scheme)],
+    rowKeysOf: (d) => [joinKey(d.projectId, d.scheme)],
+  },
+  contractors: {
+    model: "contractor",
+    select: { email: true, name: true },
+    dbKeysOf: (r) => [joinKey(r.email), joinKey(r.name)],
+    rowKeysOf: (d) => [joinKey(d.email), joinKey(d.name)],
+  },
+  tenders: {
+    model: "tender",
+    select: { tenderId: true, name: true },
+    dbKeysOf: (r) => [joinKey(r.tenderId), joinKey(r.name)],
+    rowKeysOf: (d) => [joinKey(d.tenderId), joinKey(d.name)],
+  },
+  paymentSchedules: {
+    model: "paymentSchedule",
+    select: { category: true, paymentType: true, amount: true, dueDate: true },
+    dbKeysOf: (r) => {
+      const base = joinKey(r.category, r.paymentType);
+      if (!base) return [];
+      const amt = normalizeDedupValue(r.amount);
+      const due = normalizeDedupValue(r.dueDate);
+      const keys = [base];
+      if (amt) keys.push(`${base}||${amt}`);
+      if (due) keys.push(`${base}||${due}`);
+      if (amt && due) keys.push(`${base}||${amt}||${due}`);
+      return keys;
+    },
+    rowKeysOf: (d) => {
+      const base = joinKey(d.category, d.paymentType);
+      if (!base) return [];
+      const amt = normalizeDedupValue(d.amount);
+      const due = normalizeDedupValue(d.dueDate);
+      return [`${base}${amt ? "||" + amt : ""}${due ? "||" + due : ""}`];
+    },
+  },
+  vehicleLogBook: {
+    model: "vehicle",
+    select: { registrationNumber: true },
+    dbKeysOf: (r) => [joinKey(r.registrationNumber)],
+    rowKeysOf: (d) => [joinKey(d.registrationNumber)],
+  },
+  assets: {
+    model: "asset",
+    select: { itemCode: true, securityCode: true, name: true, make: true, model: true, yearOfPurchase: true },
+    dbKeysOf: (r) => [
+      joinKey(r.itemCode),
+      joinKey(r.securityCode),
+      joinKey(r.name, r.make, r.model, r.yearOfPurchase),
+    ],
+    rowKeysOf: (d) => [
+      joinKey(d.itemCode),
+      joinKey(d.securityCode),
+      joinKey(d.name, d.make, d.model, d.yearOfPurchase),
+    ],
+  },
+  inOutRegister: {
+    model: "inOutRegister",
+    select: { serialNo: true, documentRefNo: true },
+    // serialNo and documentRefNo share one keyspace — either identifies the letter
+    dbKeysOf: (r) => [joinKey(r.serialNo), joinKey(r.documentRefNo)],
+    rowKeysOf: (d) => [joinKey(d.serialNo), joinKey(d.documentRefNo)],
+  },
+  tadaBills: {
+    model: "tadaClaim",
+    select: { staffId: true, fromDate: true, toDate: true },
+    dbKeysOf: (r) => [joinKey(r.staffId, r.fromDate, r.toDate)],
+    rowKeysOf: (d) => [joinKey(d.staffId, d.fromDate, d.toDate)],
+  },
+  tasks: {
+    model: "task",
+    select: { title: true, projectId: true },
+    dbKeysOf: (r) => [joinKey(r.title), joinKey(r.title, r.projectId)],
+    rowKeysOf: (d) => [
+      d.projectId ? joinKey(d.title, d.projectId) : joinKey(d.title),
+    ],
+  },
+  clients: {
+    model: "client",
+    select: { name: true },
+    dbKeysOf: (r) => [joinKey(r.name)],
+    rowKeysOf: (d) => [joinKey(d.name)],
+  },
+  staff: {
+    model: "staff",
+    select: { employeeCode: true, previousEmployeeCode: true, email: true, name: true, phone: true },
+    // A supplied code is also checked against previousEmployeeCode so
+    // re-imported legacy-code rows still match the renamed staff record.
+    dbKeysOf: (r) => [
+      joinKey("c", r.employeeCode),
+      joinKey("pc", r.previousEmployeeCode),
+      joinKey("e", r.email),
+      joinKey("np", r.name, r.phone),
+      joinKey("n", r.name),
+    ],
+    rowKeysOf: (d) => [
+      joinKey("c", d.employeeCode),
+      joinKey("pc", d.employeeCode),
+      joinKey("e", d.email),
+      joinKey("np", d.name, d.phone),
+      joinKey("n", d.name),
+    ],
+  },
+  masters_assetModel: {
+    model: "assetModel",
+    select: { name: true, makeId: true },
+    // @@unique([name, makeId]): name-only match only applies when no make is set
+    dbKeysOf: (r) =>
+      r.makeId ? [joinKey(r.name, r.makeId)] : [joinKey(r.name)],
+    rowKeysOf: (d) =>
+      d.makeId ? [joinKey(d.name, d.makeId)] : [joinKey(d.name)],
+  },
+};
+
+for (const [mod, model] of Object.entries(NAME_MASTER_MODELS)) {
+  INTER_SYSTEM_DEDUP[mod] = {
+    model,
+    select: { name: true },
+    dbKeysOf: (r) => [joinKey(r.name)],
+    rowKeysOf: (d) => [joinKey(d.name)],
+  };
+}
+
+for (const [mod, model] of Object.entries(REF_MASTER_MODELS)) {
+  INTER_SYSTEM_DEDUP[mod] = {
+    model,
+    select: { referenceNumber: true },
+    dbKeysOf: (r) => [joinKey(r.referenceNumber)],
+    rowKeysOf: (d) => [joinKey(d.referenceNumber)],
+  };
+}
+
+/** Prefetch existing natural keys for a module into an in-memory Set (one query). */
+async function buildImportDedupIndex(module: string): Promise<ImportDedupIndex | null> {
+  const spec = INTER_SYSTEM_DEDUP[module];
+  if (!spec) return null;
+  const delegate = (
+    prisma as unknown as Record<
+      string,
+      { findMany?: (args: unknown) => Promise<Record<string, unknown>[]> }
+    >
+  )[spec.model];
+  if (!delegate || typeof delegate.findMany !== "function") return null;
+
+  const existing = await delegate.findMany({ select: spec.select });
+  const keys = new Set<string>();
+  for (const row of existing) {
+    for (const k of spec.dbKeysOf(row)) if (k) keys.add(k);
+  }
+
+  return {
+    match(data) {
+      for (const k of spec.rowKeysOf(data)) {
+        if (k && keys.has(k)) return k;
+      }
+      return null;
+    },
+    add(data) {
+      for (const k of spec.rowKeysOf(data)) if (k) keys.add(k);
+    },
+  };
+}
+
+// ---------- Intra-sheet (in-file) deduplication ----------
+
+/** Ordered candidate key fields per module; first fully-populated candidate wins. */
+const INTRA_FILE_KEY_FIELDS: Record<string, string[][]> = {
+  fundFlow: [["project"]],
+  dueBills: [["project", "scheme"], ["project"]],
+  wip: [["project"]],
+  contractors: [["email"], ["name"]],
+  tenders: [["tenderId"], ["name"]],
+  paymentSchedules: [["category", "paymentType", "amount", "dueDate"]],
+  vehicleLogBook: [["registrationNumber"]],
+  assets: [["itemCode"], ["securityCode"], ["name", "make", "model", "yearOfPurchase"]],
+  inOutRegister: [["documentRefNo"], ["serialNo"], ["direction", "documentDate", "client"]],
+  tadaBills: [["staff", "fromDate", "toDate"]],
+  tasks: [["title", "project"], ["title"]],
+  clients: [["name"]],
+  staff: [["email"], ["employeeCode"], ["name", "phone"], ["name"]],
+  masters_assetModel: [["name", "make"], ["name"]],
+  masters_dprMaster: [["referenceNumber"]],
+  masters_tsAaMaster: [["referenceNumber"]],
+};
+
+function rawDedupKey(module: string, row: Record<string, unknown>): string {
+  const candidates =
+    INTRA_FILE_KEY_FIELDS[module] ??
+    (module.startsWith("masters_") ? [["name"]] : []);
+  for (const fields of candidates) {
+    const key = joinKey(...fields.map((f) => row[f]));
+    if (key) return `key||${key}`;
+  }
+  // Fallback: full-row fingerprint — byte-identical rows always collapse
+  return `full||${Object.values(row).map(normalizeDedupValue).join("||")}`;
+}
+
+/**
+ * Deduplicate the parsed file array in-memory. Keeps the first occurrence of
+ * each natural key and reports skipped rows into `corrections`.
+ */
+function dedupeImportRows(
+  module: string,
+  rawRows: Record<string, unknown>[],
+  corrections: string[]
+): { rows: Record<string, string>[]; rowNumbers: number[] } {
+  const seen = new Map<string, number>();
+  const rows: Record<string, string>[] = [];
+  const rowNumbers: number[] = [];
+
+  rawRows.forEach((row, idx) => {
+    const rowNum = idx + 1;
+    const key = rawDedupKey(module, row);
+    const first = seen.get(key);
+    if (first !== undefined) {
+      corrections.push(`Row ${rowNum}: in-file duplicate — skipped (matches row ${first})`);
+      return;
+    }
+    seen.set(key, rowNum);
+    rows.push(row as Record<string, string>);
+    rowNumbers.push(rowNum);
+  });
+
+  return { rows, rowNumbers };
 }
 
 export async function getModuleTemplate(
@@ -1491,8 +1823,8 @@ export async function getModuleTemplate(
       ? sampleValues.map((v) => v.includes(",") ? `"${v}"` : v).join(",")
       : "";
     const content = sampleLine
-      ? `${headerLine}\n${sampleLine}\n`
-      : `${headerLine}\n`;
+      ? `${CSV_BOM}${headerLine}\n${sampleLine}\n`
+      : `${CSV_BOM}${headerLine}\n`;
 
     await audit(user.id, "export", "ExportImport", module, {
       module,
@@ -1514,7 +1846,7 @@ function getTemplateFields(module: string): string[] {
     dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
     wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
     vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
-    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "department", "actionSuggestedStaff", "inwardType", "receivedByPersonName", "replyDueDate", "parentInwardRefNo"],
+    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "project", "department", "actionSuggestedStaff", "mode", "letterPad", "inwardType", "receivedByPersonName", "receivedByStaff", "replyDueDate", "parentInwardRefNo"],
     tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
     tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],
@@ -1533,6 +1865,7 @@ function getTemplateFields(module: string): string[] {
     masters_workMaster: ["name"],
     masters_dprMaster: ["referenceNumber"],
     masters_tsAaMaster: ["referenceNumber"],
+    masters_modeMaster: ["name", "isActive"],
   };
   return fieldMap[module] ?? [];
 }
@@ -1547,7 +1880,7 @@ function getTemplateSampleRow(module: string): string[] {
     dueBills: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "GST", "100000", "9000", "9000", "118000", "100000", "5000", "2000", "95000", "2025-01-15", "2025-01-20", "PENDING", ""],
     wip: ["Project Alpha", "Mumbai Region", "ABC Corp", "2025-01-01", "12", "BUILDING", "CONSULTANCY", "NOT_STARTED", "2025-01-10", "2025-01-15", "2025-02-01", "12", "2026-02-01", "2026-08-01", "John Manager", "Jane Coordinator", "50000", "Returned", "2026-03-01", "0", "0", "10000", "2025-03-01", "500", "100", "10000", "2025-04-01", "500", "100", "0", "", "0", "0", "0", "", "0", "0", "", ""],
     vehicleLogBook: ["MH01AB1234", "Toyota", "Innova", "2023", "ACTIVE", "RC123456", "2027-01-01", "INS789", "2026-01-01", "PUC123", "2026-06-01", "2027-01-01", "2025-12-31"],
-    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "Regional Office Rajkot", "John Staff", "ACTION_REQUIRED", "John Staff", "2026-06-15", ""],
+    inOutRegister: ["INWARD", "2026-05-15", "2026-05-16", "SMC/HEALTH/2026/142", "Project document", "Client Name", "", "Regional Office Rajkot", "John Staff", "By Post", "Head Office", "ACTION_REQUIRED", "", "John Staff", "2026-06-15", ""],
     tadaBills: ["John Doe", "Site Visit", "2025-01-10", "2025-01-12", "Mumbai", "2000", "5000", "1500", "500", "0", "9000", "2000", "7000", "7000", "DRAFT", ""],
     tasks: ["Complete Report", "Finish monthly report", "PENDING", "MEDIUM", "John Doe", "Jane Manager", "Project Alpha", "2025-01-31", "0"],
     clients: ["ABC Corp", "ABC", "123 Business St", "27ABCDE1234F1Z5", "ABCDE1234F", "9876543210", "www.abccorp.com"],
@@ -1566,6 +1899,7 @@ function getTemplateSampleRow(module: string): string[] {
     masters_workMaster: ["Building Work"],
     masters_dprMaster: ["DPR-2025-001"],
     masters_tsAaMaster: ["TSAA-2025-001"],
+    masters_modeMaster: ["By Post", "Active"],
   };
   return sampleMap[module] ?? [];
 }

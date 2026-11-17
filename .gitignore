@@ -44,3 +44,7 @@ yarn-error.log*
 next-env.d.ts
 scratch/
 private_uploads/
+
+# production deploy config + pulled backups — never commit live values
+deploy/production.env
+deploy/backups/

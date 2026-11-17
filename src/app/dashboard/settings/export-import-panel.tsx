@@ -24,7 +24,7 @@ import {
 
 export function ExportImportPanel() {
   const [module, setModule] = useState("");
-  const [format, setFormat] = useState("csv");
+  const [format, setFormat] = useState("xlsx");
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importData, setImportData] = useState("");
@@ -50,8 +50,14 @@ export function ExportImportPanel() {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
       } else {
-        blob = new Blob([res.data.content], {
-          type: format === "csv" ? "text/csv" : "application/json",
+        // Server-action transport may strip a leading U+FEFF from the
+        // string — guarantee exactly one BOM at the download boundary.
+        const content =
+          format === "csv" && !res.data.content.startsWith("\uFEFF")
+            ? "\uFEFF" + res.data.content
+            : res.data.content;
+        blob = new Blob([content], {
+          type: format === "csv" ? "text/csv;charset=utf-8" : "application/json",
         });
       }
       const url = URL.createObjectURL(blob);
@@ -130,16 +136,19 @@ export function ExportImportPanel() {
 
         <div className="flex min-w-32 flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-600">Format</label>
-          <Select value={format} onValueChange={(v) => setFormat(v ?? "csv")}>
-            <SelectTrigger className="w-full min-w-32" size="sm">
+          <Select value={format} onValueChange={(v) => setFormat(v ?? "xlsx")}>
+            <SelectTrigger className="w-full min-w-56" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="csv">CSV</SelectItem>
-              <SelectItem value="json">JSON</SelectItem>
-              <SelectItem value="xlsx">XLSX (Excel)</SelectItem>
+              <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+              <SelectItem value="csv">CSV (.csv)</SelectItem>
+              <SelectItem value="json">JSON (.json)</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-xs text-zinc-500">
+            For Gujarati text, Excel (.xlsx) is recommended.
+          </p>
         </div>
 
         <Button
@@ -176,28 +185,33 @@ export function ExportImportPanel() {
             Import Data
           </div>
           <p className="text-xs text-zinc-500">
-            Upload a {format.toUpperCase()} file or paste content below. Supports
-            contractors, tenders, payment schedules, and assets.
+            {format === "xlsx"
+              ? "Import supports CSV or JSON — choose CSV (.csv) or JSON (.json) in the format above."
+              : `Upload a ${format.toUpperCase()} file or paste content below.`}
           </p>
 
-          <input
-            type="file"
-            accept={format === "csv" ? ".csv" : ".json"}
-            onChange={handleFileUpload}
-            className="text-xs text-zinc-500 file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
-          />
+          {format !== "xlsx" && (
+            <>
+              <input
+                type="file"
+                accept={format === "csv" ? ".csv" : ".json"}
+                onChange={handleFileUpload}
+                className="text-xs text-zinc-500 file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200"
+              />
 
-          <textarea
-            value={importData}
-            onChange={(e) => setImportData(e.target.value)}
-            placeholder={`Paste ${format.toUpperCase()} data here…`}
-            className="min-h-32 w-full rounded-md border border-zinc-200 p-3 font-mono text-xs"
-          />
+              <textarea
+                value={importData}
+                onChange={(e) => setImportData(e.target.value)}
+                placeholder={`Paste ${format.toUpperCase()} data here…`}
+                className="min-h-32 w-full rounded-md border border-zinc-200 p-3 font-mono text-xs"
+              />
+            </>
+          )}
 
           <Button
             size="sm"
             onClick={handleImport}
-            disabled={!module || !importData.trim() || importLoading}
+            disabled={!module || format === "xlsx" || !importData.trim() || importLoading}
           >
             {importLoading ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

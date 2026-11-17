@@ -85,10 +85,11 @@ async function makeFixture(
     expect(r.data!.refNo).toBe("OUT/2099-00/001");
   });
 
-  it("DB accepts duplicate serialNo — proves missing unique constraint", async () => {
-    const a = await makeFixture("OUT/2099-00/777", "OUTWARD");
-    const b = await makeFixture("OUT/2099-00/777", "OUTWARD");
-    expect(a.id).not.toBe(b.id); // both inserted — no constraint
+  it("DB rejects duplicate serialNo — unique constraint is in place", async () => {
+    await makeFixture("OUT/2099-00/777", "OUTWARD");
+    await expect(
+      makeFixture("OUT/2099-00/777", "OUTWARD")
+    ).rejects.toThrow();
   });
 
   it("manual documentRefNo matching the pattern inflates the sequence", async () => {

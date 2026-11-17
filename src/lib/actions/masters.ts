@@ -27,11 +27,13 @@ export type MasterType =
   | "tsAaMaster"
   | "drawingMaster"
   | "workOrderMaster"
-  | "contactMaster";
+  | "contactMaster"
+  | "modeMaster";
 
 interface MasterInput {
   id?: string;
   name?: string;
+  isActive?: boolean;
   referenceNumber?: string;
   phone?: string;
   email?: string;
@@ -86,6 +88,17 @@ export async function createMaster(
     const data: Record<string, unknown> = {};
     if (type === "dprMaster" || type === "tsAaMaster") {
       data.referenceNumber = input.referenceNumber;
+    } else if (type === "modeMaster") {
+      const name = input.name?.trim() ?? "";
+      if (!name) throw new Error("Mode name is required.");
+      data.name = name;
+      // Names must be unique ignoring case and surrounding whitespace.
+      const existing = await prisma.modeMaster.findFirst({
+        where: { name: { equals: name, mode: "insensitive" } },
+      });
+      if (existing) {
+        throw new Error(`Mode "${name}" already exists. Mode names must be unique.`);
+      }
     } else {
       data.name = input.name;
     }
@@ -145,6 +158,24 @@ export async function updateMaster(
     if (type === "city" && rest.stateId !== undefined) data.stateId = rest.stateId;
     if (type === "assetModel" && rest.makeId !== undefined) data.makeId = rest.makeId;
 
+    if (type === "modeMaster") {
+      if (rest.name !== undefined) {
+        const name = rest.name.trim();
+        if (!name) throw new Error("Mode name is required.");
+        data.name = name;
+        const existing = await prisma.modeMaster.findFirst({
+          where: {
+            name: { equals: name, mode: "insensitive" },
+            NOT: { id },
+          },
+        });
+        if (existing) {
+          throw new Error(`Mode "${name}" already exists. Mode names must be unique.`);
+        }
+      }
+      if (rest.isActive !== undefined) data.isActive = rest.isActive;
+    }
+
     // Check for duplicate names on city update (excluding current record)
     if (type === "city" && rest.name !== undefined) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,6 +204,18 @@ export async function deleteMaster(
   id: string
 ): Promise<ActionResult<{ id: string }>> {
   return withAuth(async (user) => {
+    if (type === "modeMaster") {
+      // Modes referenced by register entries must be deactivated, never
+      // deleted — physical removal would destroy register history.
+      const referenced = await prisma.inOutRegister.count({
+        where: { modeId: id },
+      });
+      if (referenced > 0) {
+        throw new Error(
+          `This mode is used by ${referenced} register entr${referenced === 1 ? "y" : "ies"} and cannot be deleted. Deactivate it instead — existing entries keep their saved mode.`
+        );
+      }
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const item = await (prisma as any)[type].delete({ where: { id }, select: { id: true } });
     await audit(user.id, "delete", type, id, {});
@@ -258,5 +301,15 @@ export async function getDprMasters() {
 export async function getTsAaMasters() {
   return withAuth(async () => {
     return prisma.tsAaMaster.findMany({ orderBy: { referenceNumber: "asc" } });
+  });
+}
+
+export async function getActiveModes() {
+  return withAuth(async () => {
+    return prisma.modeMaster.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
   });
 }
