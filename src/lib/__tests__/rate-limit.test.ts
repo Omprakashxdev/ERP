@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { memoryLimit, assertRateLimitConfig } from "@/lib/rate-limit";
+import {
+  memoryLimit,
+  assertRateLimitConfig,
+  rateLimitActions,
+  rateLimitByIp,
+} from "@/lib/rate-limit";
 
 describe("memoryLimit fallback limiter", () => {
   it("allows requests up to the limit then returns 429-shaped failure", () => {
@@ -31,6 +36,23 @@ describe("memoryLimit fallback limiter", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("rateLimitActions — authenticated write bucket", () => {
+  it("allows far more than the strict 10/min login bucket", async () => {
+    const id = `act-${Date.now()}`;
+    for (let i = 0; i < 30; i++) {
+      expect((await rateLimitActions(id)).success).toBe(true);
+    }
+  });
+
+  it("shares no quota with the IP/login bucket", async () => {
+    const id = `mix-${Date.now()}`;
+    for (let i = 0; i < 10; i++) await rateLimitByIp(id);
+    expect((await rateLimitByIp(id)).success).toBe(false);
+    // Same identifier still has a full authenticated-action budget.
+    expect((await rateLimitActions(id)).success).toBe(true);
   });
 });
 

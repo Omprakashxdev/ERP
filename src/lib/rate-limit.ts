@@ -3,12 +3,18 @@ import { Redis } from "@upstash/redis";
 
 let ratelimit: Ratelimit | null = null;
 let mobileRatelimit: Ratelimit | null = null;
+let actionRatelimit: Ratelimit | null = null;
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 const IP_LIMIT = 10;
 const MOBILE_LIMIT = 120;
+// Authenticated write actions — keyed per user.id across ~30 action files.
+// Deliberately much wider than the login/IP bucket: an admin managing
+// users legitimately issues dozens of writes per minute, and 10/min was
+// silently blocking them (see checkRateLimit in actions/wrapper.ts).
+const ACTION_LIMIT = 60;
 const WINDOW_MS = 60_000;
 
 if (redisUrl && redisToken) {
@@ -21,6 +27,11 @@ if (redisUrl && redisToken) {
   mobileRatelimit = new Ratelimit({
     redis: new Redis({ url: redisUrl, token: redisToken }),
     limiter: Ratelimit.slidingWindow(MOBILE_LIMIT, "1m"),
+    analytics: true,
+  });
+  actionRatelimit = new Ratelimit({
+    redis: new Redis({ url: redisUrl, token: redisToken }),
+    limiter: Ratelimit.slidingWindow(ACTION_LIMIT, "1m"),
     analytics: true,
   });
 }
@@ -85,9 +96,18 @@ export function assertRateLimitConfig(): void {
 
 export async function rateLimitByIp(identifier: string) {
   if (!ratelimit) {
-    return memoryLimit(IP_LIMIT, identifier);
+    return memoryLimit(IP_LIMIT, `ip:${identifier}`);
   }
   return ratelimit.limit(identifier);
+}
+
+// Authenticated server-action calls — separate bucket from the strict
+// IP/login limiter so routine admin work can't exhaust it.
+export async function rateLimitActions(identifier: string) {
+  if (!actionRatelimit) {
+    return memoryLimit(ACTION_LIMIT, `act:${identifier}`);
+  }
+  return actionRatelimit.limit(identifier);
 }
 
 export async function rateLimitMobile(identifier: string) {

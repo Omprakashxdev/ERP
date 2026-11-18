@@ -138,10 +138,14 @@ export function UserManagementPanel() {
     if (!editTarget || newRole === editTarget.role) return;
     setEditRoleSaving(true);
     try {
-      await updateUserRole(
+      const res = await updateUserRole(
         editTarget.id,
         newRole as "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR"
       );
+      if (!res.success) {
+        toast.error(res.error ?? "Failed to update role");
+        return;
+      }
       setEditTarget({ ...editTarget, role: newRole });
       const refreshed = await getUserModulePermissions(editTarget.id);
       if (refreshed.success && refreshed.data) {
@@ -206,7 +210,11 @@ export function UserManagementPanel() {
   async function handleRoleChange(userId: string, newRole: string) {
     setActionLoading(`role-${userId}`);
     try {
-      await updateUserRole(userId, newRole as "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR");
+      const res = await updateUserRole(userId, newRole as "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR");
+      if (!res.success) {
+        toast.error(res.error ?? "Failed to update role");
+        return;
+      }
       fetchAll();
     } catch {
       toast.error("Failed to update role");
@@ -218,7 +226,11 @@ export function UserManagementPanel() {
   async function handleToggleActive(userId: string) {
     setActionLoading(`toggle-${userId}`);
     try {
-      await toggleUserActive(userId);
+      const res = await toggleUserActive(userId);
+      if (!res.success) {
+        toast.error(res.error ?? "Failed to toggle user status");
+        return;
+      }
       fetchAll();
     } catch {
       toast.error("Failed to toggle user status");

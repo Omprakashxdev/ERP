@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { requireAuth, requireRole, hasPermissionWithOverrides } from "@/lib/authz";
 import { logAuditEvent } from "@/lib/audit";
-import { rateLimitByIp } from "@/lib/rate-limit";
+import { rateLimitActions } from "@/lib/rate-limit";
 import { Role } from "@/types/auth";
 import { ZodError } from "zod";
 
@@ -81,7 +81,7 @@ export async function withPermission<T>(
 }
 
 export async function checkRateLimit(identifier: string) {
-  const result = await rateLimitByIp(identifier);
+  const result = await rateLimitActions(identifier);
   if (!result.success) {
     throw new Error("Rate limit exceeded. Please try again later.");
   }
