@@ -21,10 +21,23 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { allNavItems } from "@/lib/nav";
+import { getUserModuleAccess } from "@/lib/authz";
 
 export default async function DashboardPage() {
   const session = await auth();
   const userName = session?.user?.name ?? session?.user?.email ?? "User";
+
+  // Effective per-module actions for this user (user override > role
+  // override > matrix). Gates every data fetch below so a denied user
+  // sees zeroed cards and empty charts — never another module's data.
+  const moduleAccess = session?.user
+    ? await getUserModuleAccess(session.user.id, session.user.role)
+    : {};
+  const canRead = (resource: string) =>
+    moduleAccess[resource]?.includes("read") ?? false;
+
+  const emptyBillSum = { _sum: { billAmount: null, receivedAmount: null } };
+  const emptySum = { _sum: { billAmount: null } };
 
   const [
     projectCount,
@@ -42,30 +55,48 @@ export default async function DashboardPage() {
     dueBillsByProject,
     taskStatusCounts,
   ] = await Promise.all([
-    prisma.project.count(),
-    prisma.project.count({ where: { status: "ACTIVE" } }),
-    prisma.dueBill.aggregate({
-      _sum: { billAmount: true, receivedAmount: true },
-      where: { status: { in: ["PENDING", "PARTIAL"] } },
-    }),
-    prisma.dueBill.aggregate({ _sum: { billAmount: true } }),
-    prisma.dueBill.aggregate({ _sum: { receivedAmount: true } }),
-    prisma.task.count({ where: { status: { in: ["OPEN", "IN_PROGRESS", "PENDING_REVIEW", "ON_HOLD"] } } }),
-    prisma.tadaClaim.count({ where: { status: { in: ["DRAFT", "SUBMITTED", "MANAGER_APPROVED", "ACCOUNTS_VERIFIED", "FINANCE_APPROVED"] } } }),
-    prisma.tender.count({ where: { status: { in: ["UNDER_PREPARATION", "SUBMITTED", "UNDER_EVALUATION"] } } }),
-    prisma.vehicle.count({ where: { status: "ACTIVE" } }),
-    prisma.asset.count(),
-    prisma.fundFlow.count(),
-    prisma.workInProgress.count(),
-    prisma.dueBill.findMany({
-      include: { project: { select: { name: true } } },
-      orderBy: { billAmount: "desc" },
-      take: 6,
-    }),
-    prisma.task.groupBy({
-      by: ["status"],
-      _count: true,
-    }),
+    canRead("projectManagement") ? prisma.project.count() : Promise.resolve(0),
+    canRead("projectManagement") ? prisma.project.count({ where: { status: "ACTIVE" } }) : Promise.resolve(0),
+    canRead("dueBills")
+      ? prisma.dueBill.aggregate({
+          _sum: { billAmount: true, receivedAmount: true },
+          where: { status: { in: ["PENDING", "PARTIAL"] } },
+        })
+      : Promise.resolve(emptyBillSum),
+    canRead("dueBills")
+      ? prisma.dueBill.aggregate({ _sum: { billAmount: true } })
+      : Promise.resolve(emptySum),
+    canRead("dueBills")
+      ? prisma.dueBill.aggregate({ _sum: { receivedAmount: true } })
+      : Promise.resolve({ _sum: { receivedAmount: null } }),
+    canRead("taskManagement")
+      ? prisma.task.count({ where: { status: { in: ["OPEN", "IN_PROGRESS", "PENDING_REVIEW", "ON_HOLD"] } } })
+      : Promise.resolve(0),
+    canRead("tadaBills")
+      ? prisma.tadaClaim.count({ where: { status: { in: ["DRAFT", "SUBMITTED", "MANAGER_APPROVED", "ACCOUNTS_VERIFIED", "FINANCE_APPROVED"] } } })
+      : Promise.resolve(0),
+    canRead("tenders")
+      ? prisma.tender.count({ where: { status: { in: ["UNDER_PREPARATION", "SUBMITTED", "UNDER_EVALUATION"] } } })
+      : Promise.resolve(0),
+    canRead("vehicleLogBook")
+      ? prisma.vehicle.count({ where: { status: "ACTIVE" } })
+      : Promise.resolve(0),
+    canRead("assets") ? prisma.asset.count() : Promise.resolve(0),
+    canRead("fundFlow") ? prisma.fundFlow.count() : Promise.resolve(0),
+    canRead("wip") ? prisma.workInProgress.count() : Promise.resolve(0),
+    canRead("dueBills")
+      ? prisma.dueBill.findMany({
+          include: { project: { select: { name: true } } },
+          orderBy: { billAmount: "desc" },
+          take: 6,
+        })
+      : Promise.resolve([]),
+    canRead("taskManagement")
+      ? prisma.task.groupBy({
+          by: ["status"],
+          _count: true,
+        })
+      : Promise.resolve([]),
   ]);
 
   const pendingAmount = Number(dueBillsPending._sum.billAmount ?? 0) - Number(dueBillsPending._sum.receivedAmount ?? 0);
@@ -127,6 +158,18 @@ export default async function DashboardPage() {
     { label: "TADA Bills", value: `${pendingTadaClaims}`, sub: "pending", icon: ReceiptText, href: "/dashboard/tada-bills", color: "text-teal-700 bg-teal-50" },
     { label: "Tasks", value: `${openTasks}`, sub: "open", icon: CheckSquare, href: "/dashboard/tasks", color: "text-teal-700 bg-teal-50" },
   ];
+
+  // Hide tiles for modules this user cannot read — same rules as the
+  // sidebar filter, resolved via the nav resource map.
+  const resourceForHref = new Map(
+    allNavItems
+      .filter((item) => item.resource)
+      .map((item) => [item.href, item.resource as string])
+  );
+  const visibleQuickTiles = quickTiles.filter((tile) => {
+    const resource = resourceForHref.get(tile.href);
+    return resource ? canRead(resource) : true;
+  });
 
   const maxBillAmount = Math.max(...dueBillsByProject.map((b) => Number(b.billAmount)), 1);
 
@@ -194,7 +237,7 @@ export default async function DashboardPage() {
       <div>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Quick Access</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {quickTiles.map((tile) => {
+          {visibleQuickTiles.map((tile) => {
             const Icon = tile.icon;
             return (
               <Link key={tile.label} href={tile.href}>

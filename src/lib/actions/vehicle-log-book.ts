@@ -56,6 +56,60 @@ function computeTotalExpenses(row: {
   ].reduce((sum, value) => sum + Number(toDecimal(value)), 0);
 }
 
+type FuelFillInput = {
+  expense?: Decimal | number | null;
+  litres?: Decimal | number | null;
+  rate?: Decimal | number | null;
+  billPath?: string | null;
+  odometerPhotoPath?: string | null;
+};
+
+// Fold the per-fill rows back into the legacy scalar fields so existing
+// reports/exports keep working. Rate is the true blended ₹/L when both
+// totals exist, else the average of supplied rates. Missing values stay
+// null rather than becoming a fake zero.
+function deriveFuelScalars(fills: FuelFillInput[]): {
+  fuelExpense: Decimal | null;
+  fuelLitre: Decimal | null;
+  fuelRate: Decimal | null;
+  fuelBillPath: string | null;
+  fuelOdometerPhotoPath: string | null;
+} {
+  let expenseTotal = new Decimal(0);
+  let litreTotal = new Decimal(0);
+  let hasExpense = false;
+  let hasLitre = false;
+  const rates: Decimal[] = [];
+  for (const f of fills) {
+    if (f.expense != null) {
+      hasExpense = true;
+      expenseTotal = expenseTotal.plus(String(f.expense));
+    }
+    if (f.litres != null) {
+      hasLitre = true;
+      litreTotal = litreTotal.plus(String(f.litres));
+    }
+    if (f.rate != null) rates.push(new Decimal(String(f.rate)));
+  }
+  let fuelRate: Decimal | null = null;
+  if (hasExpense && hasLitre && litreTotal.gt(0)) {
+    fuelRate = expenseTotal.div(litreTotal).toDecimalPlaces(2);
+  } else if (rates.length) {
+    fuelRate = rates
+      .reduce((a, b) => a.plus(b), new Decimal(0))
+      .div(rates.length)
+      .toDecimalPlaces(2);
+  }
+  return {
+    fuelExpense: hasExpense ? expenseTotal.toDecimalPlaces(2) : null,
+    fuelLitre: hasLitre ? litreTotal.toDecimalPlaces(2) : null,
+    fuelRate,
+    fuelBillPath: fills.find((f) => f.billPath)?.billPath ?? null,
+    fuelOdometerPhotoPath:
+      fills.find((f) => f.odometerPhotoPath)?.odometerPhotoPath ?? null,
+  };
+}
+
 function isDocumentExpired(value: Date | null): boolean {
   if (!value) return false;
   return new Date(value) < new Date();
@@ -236,7 +290,7 @@ export async function createJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "create", async (user) => {
     const parsed = journeyLogCreateSchemaValidated.parse(input);
-    const { photos, travellerStaffIds, stops, ...data } = parsed;
+    const { photos, travellerStaffIds, stops, fuelFills, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const totalKm = computeKmTotal(
@@ -248,6 +302,7 @@ export async function createJourneyLog(
     const journeyLog = await prisma.journeyLog.create({
       data: {
         ...data,
+        ...(fuelFills !== undefined ? deriveFuelScalars(fuelFills) : {}),
         totalKm,
         photos: photos
           ? { create: photos.map((path) => ({ path })) }
@@ -260,6 +315,17 @@ export async function createJourneyLog(
               create: stops.map((s, i) => ({
                 location: s.location,
                 stopOrder: i + 1,
+              })),
+            }
+          : undefined,
+        fuelFills: fuelFills?.length
+          ? {
+              create: fuelFills.map((f) => ({
+                expense: f.expense ?? null,
+                litres: f.litres ?? null,
+                rate: f.rate ?? null,
+                billPath: f.billPath ?? null,
+                odometerPhotoPath: f.odometerPhotoPath ?? null,
               })),
             }
           : undefined,
@@ -280,7 +346,7 @@ export async function updateJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "update", async (user) => {
     const parsed = journeyLogUpdateSchemaValidated.parse(input);
-    const { id, photos, travellerStaffIds, stops, ...data } = parsed;
+    const { id, photos, travellerStaffIds, stops, fuelFills, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const existing = await prisma.journeyLog.findUnique({
@@ -316,6 +382,24 @@ export async function updateJourneyLog(
       }
     }
 
+    // Fuel fills: same replace-all semantics as stops — absent `fuelFills`
+    // leaves existing rows (and scalar totals) untouched.
+    if (fuelFills !== undefined) {
+      await prisma.journeyFuel.deleteMany({ where: { journeyLogId: id } });
+      if (fuelFills.length) {
+        await prisma.journeyFuel.createMany({
+          data: fuelFills.map((f) => ({
+            journeyLogId: id,
+            expense: f.expense ?? null,
+            litres: f.litres ?? null,
+            rate: f.rate ?? null,
+            billPath: f.billPath ?? null,
+            odometerPhotoPath: f.odometerPhotoPath ?? null,
+          })),
+        });
+      }
+    }
+
     // Traveller staff ids are a join relation — sync only the diff so
     // existing traveller rows are preserved unless explicitly changed.
     if (travellerStaffIds !== undefined) {
@@ -343,6 +427,7 @@ export async function updateJourneyLog(
       where: { id },
       data: {
         ...data,
+        ...(fuelFills !== undefined ? deriveFuelScalars(fuelFills) : {}),
         totalKm,
         photos: photos
           ? { create: photos.map((path) => ({ path })) }
@@ -391,6 +476,7 @@ export async function getJourneyLogs(
           photos: true,
           travellers: { include: { staff: { select: { id: true, name: true } } } },
           stops: { orderBy: { stopOrder: "asc" } },
+          fuelFills: { orderBy: { createdAt: "asc" } },
           approvedBy: {
             select: { id: true, name: true, designation: true },
           },
@@ -422,6 +508,7 @@ export async function getJourneyLogById(
         photos: true,
         travellers: { include: { staff: { select: { id: true, name: true } } } },
         stops: { orderBy: { stopOrder: "asc" } },
+        fuelFills: { orderBy: { createdAt: "asc" } },
         approvedBy: {
           select: { id: true, name: true, designation: true },
         },

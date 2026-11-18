@@ -161,22 +161,27 @@ export function UserManagementPanel() {
   ) {
     if (!editTarget) return;
     setModuleSaving(resource);
-    const res = await setUserModulePermission(
-      editTarget.id,
-      resource,
-      allowedActions
-    );
-    if (res.success) {
-      toast.success("Module access updated");
-      const refreshed = await getUserModulePermissions(editTarget.id);
-      if (refreshed.success && refreshed.data) {
-        setModuleRows(refreshed.data.modules);
+    try {
+      const res = await setUserModulePermission(
+        editTarget.id,
+        resource,
+        allowedActions
+      );
+      if (res.success) {
+        toast.success("Module access updated");
+        const refreshed = await getUserModulePermissions(editTarget.id);
+        if (refreshed.success && refreshed.data) {
+          setModuleRows(refreshed.data.modules);
+        }
+        fetchAll();
+      } else {
+        toast.error(res.error ?? "Failed to update module access");
       }
-      fetchAll();
-    } else {
-      toast.error(res.error ?? "Failed to update module access");
+    } catch {
+      toast.error("Failed to update module access");
+    } finally {
+      setModuleSaving(null);
     }
-    setModuleSaving(null);
   }
 
   const fetchAll = useCallback(async () => {
@@ -632,7 +637,7 @@ export function UserManagementPanel() {
 
       {editTarget && (
         <Dialog open onOpenChange={(open) => !open && setEditTarget(null)}>
-          <DialogContent className="sm:max-w-3xl">
+          <DialogContent className="sm:max-w-4xl">
             <DialogHeader>
               <DialogTitle>Edit User</DialogTitle>
               <DialogDescription>

@@ -34,8 +34,24 @@ import { Loader2, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
+type FuelFillForm = {
+  expense: string;
+  litres: string;
+  rate: string;
+  billPath: string;
+  odometerPhotoPath: string;
+};
+
+type FuelFillRow = {
+  expense?: unknown;
+  litres?: unknown;
+  rate?: unknown;
+  billPath?: string | null;
+  odometerPhotoPath?: string | null;
+};
+
 interface JourneyLogFormProps {
-  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[]; stops?: { location: string }[]; approvedBy?: { id: string; name: string } | null };
+  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[]; stops?: { location: string }[]; fuelFills?: FuelFillRow[]; approvedBy?: { id: string; name: string } | null };
   vehicles: { id: string; registrationNumber: string }[];
   staff: { id: string; name: string }[];
   cities?: { id: string; name: string }[];
@@ -77,11 +93,7 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
       totalKm: "",
       startKmPhotoPath: "",
       endKmPhotoPath: "",
-      fuelExpense: "",
-      fuelLitre: "",
-      fuelRate: "",
-      fuelBillPath: "",
-      fuelOdometerPhotoPath: "",
+      fuelFills: [] as FuelFillForm[],
       serviceParticulars: "",
       serviceExpense: "",
       serviceBillPath: "",
@@ -127,11 +139,31 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
     totalKm: toMoneyString(journeyLog.totalKm),
     startKmPhotoPath: journeyLog.startKmPhotoPath ?? "",
     endKmPhotoPath: journeyLog.endKmPhotoPath ?? "",
-    fuelExpense: toMoneyString(journeyLog.fuelExpense),
-    fuelLitre: toMoneyString((journeyLog as any).fuelLitre),
-    fuelRate: toMoneyString((journeyLog as any).fuelRate),
-    fuelBillPath: journeyLog.fuelBillPath ?? "",
-    fuelOdometerPhotoPath: (journeyLog as any).fuelOdometerPhotoPath ?? "",
+    fuelFills: ((journeyLog as any).fuelFills?.length
+      ? (journeyLog as any).fuelFills.map((f: FuelFillRow) => ({
+          expense: toMoneyString(f.expense),
+          litres: toMoneyString(f.litres),
+          rate: toMoneyString(f.rate),
+          billPath: f.billPath ?? "",
+          odometerPhotoPath: f.odometerPhotoPath ?? "",
+        }))
+      : // Legacy record saved before multi-fill — surface its scalar
+        // values as a single prefilled fill so nothing appears lost.
+        journeyLog.fuelExpense ||
+          (journeyLog as any).fuelLitre ||
+          (journeyLog as any).fuelRate ||
+          journeyLog.fuelBillPath
+        ? [
+            {
+              expense: toMoneyString(journeyLog.fuelExpense),
+              litres: toMoneyString((journeyLog as any).fuelLitre),
+              rate: toMoneyString((journeyLog as any).fuelRate),
+              billPath: journeyLog.fuelBillPath ?? "",
+              odometerPhotoPath:
+                (journeyLog as any).fuelOdometerPhotoPath ?? "",
+            },
+          ]
+        : []) as FuelFillForm[],
     serviceParticulars: journeyLog.serviceParticulars ?? "",
     serviceExpense: toMoneyString(journeyLog.serviceExpense),
     serviceBillPath: journeyLog.serviceBillPath ?? "",
@@ -222,6 +254,36 @@ export function JourneyLogForm({
     }));
   }
 
+  function addFuelFill() {
+    setForm((prev) => ({
+      ...prev,
+      fuelFills: [
+        ...prev.fuelFills,
+        { expense: "", litres: "", rate: "", billPath: "", odometerPhotoPath: "" },
+      ],
+    }));
+  }
+
+  function updateFuelFill<K extends keyof FuelFillForm>(
+    index: number,
+    key: K,
+    value: FuelFillForm[K]
+  ) {
+    setForm((prev) => ({
+      ...prev,
+      fuelFills: prev.fuelFills.map((f, i) =>
+        i === index ? { ...f, [key]: value } : f
+      ),
+    }));
+  }
+
+  function removeFuelFill(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      fuelFills: prev.fuelFills.filter((_, i) => i !== index),
+    }));
+  }
+
   function buildPayload() {
     const base = {
       vehicleId: form.vehicleId,
@@ -238,11 +300,22 @@ export function JourneyLogForm({
       totalKm: computedTotalKm || null,
       startKmPhotoPath: emptyToNull(form.startKmPhotoPath),
       endKmPhotoPath: emptyToNull(form.endKmPhotoPath),
-      fuelExpense: form.fuelExpense || null,
-      fuelLitre: form.fuelLitre || null,
-      fuelRate: form.fuelRate || null,
-      fuelBillPath: emptyToNull(form.fuelBillPath),
-      fuelOdometerPhotoPath: emptyToNull(form.fuelOdometerPhotoPath),
+      fuelFills: form.fuelFills
+        .map((f) => ({
+          expense: f.expense || null,
+          litres: f.litres || null,
+          rate: f.rate || null,
+          billPath: emptyToNull(f.billPath),
+          odometerPhotoPath: emptyToNull(f.odometerPhotoPath),
+        }))
+        .filter(
+          (f) =>
+            f.expense != null ||
+            f.litres != null ||
+            f.rate != null ||
+            f.billPath != null ||
+            f.odometerPhotoPath != null
+        ),
       serviceParticulars: emptyToNull(form.serviceParticulars),
       serviceExpense: form.serviceExpense || null,
       serviceBillPath: emptyToNull(form.serviceBillPath),
@@ -608,59 +681,114 @@ export function JourneyLogForm({
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="fuelExpense">Fuel expense (₹)</Label>
-                <Input
-                  id="fuelExpense"
-                  type="number"
-                  step="0.01"
-                  value={form.fuelExpense}
-                  onChange={(e) => updateField("fuelExpense", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="fuelLitre">Fuel (Litres)</Label>
-                <Input
-                  id="fuelLitre"
-                  type="number"
-                  step="0.01"
-                  value={form.fuelLitre}
-                  onChange={(e) => updateField("fuelLitre", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="fuelRate">Fuel rate (₹ / L)</Label>
-                <Input
-                  id="fuelRate"
-                  type="number"
-                  step="0.01"
-                  value={form.fuelRate}
-                  onChange={(e) => updateField("fuelRate", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <FileUploadField
-                  id="journey-fuel-bill"
-                  label="Fuel bill"
-                  value={form.fuelBillPath}
-                  onChange={(v) => updateField("fuelBillPath", v)}
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload petrol / diesel bill"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <FileUploadField
-                  id="journey-fuel-odometer"
-                  label="Fuel odometer photo"
-                  value={form.fuelOdometerPhotoPath}
-                  onChange={(v) => updateField("fuelOdometerPhotoPath", v)}
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  placeholder="Upload odometer photo at fuel station"
-                />
+              <div className="space-y-2 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label>Fuel fills</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addFuelFill}
+                    className="h-7 gap-1 px-2 text-xs"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add fuel fill
+                  </Button>
+                </div>
+                {form.fuelFills.length === 0 ? (
+                  <p className="text-xs text-zinc-400">
+                    Optional — add a fill each time the vehicle was refuelled.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {form.fuelFills.map((fill, index) => (
+                      <div
+                        key={index}
+                        className="rounded-lg border border-zinc-200 p-3 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-500">
+                            Fill {index + 1}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFuelFill(index)}
+                            className="h-6 w-6 p-0 text-zinc-400 hover:text-rose-600"
+                            title="Remove fill"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`fuel-expense-${index}`}>
+                              Expense (₹)
+                            </Label>
+                            <Input
+                              id={`fuel-expense-${index}`}
+                              type="number"
+                              step="0.01"
+                              value={fill.expense}
+                              onChange={(e) =>
+                                updateFuelFill(index, "expense", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`fuel-litres-${index}`}>
+                              Litres
+                            </Label>
+                            <Input
+                              id={`fuel-litres-${index}`}
+                              type="number"
+                              step="0.01"
+                              value={fill.litres}
+                              onChange={(e) =>
+                                updateFuelFill(index, "litres", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`fuel-rate-${index}`}>
+                              Rate (₹ / L)
+                            </Label>
+                            <Input
+                              id={`fuel-rate-${index}`}
+                              type="number"
+                              step="0.01"
+                              value={fill.rate}
+                              onChange={(e) =>
+                                updateFuelFill(index, "rate", e.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <FileUploadField
+                            id={`fuel-bill-${index}`}
+                            label="Fuel bill"
+                            value={fill.billPath}
+                            onChange={(v) => updateFuelFill(index, "billPath", v)}
+                            accept=".jpg,.jpeg,.png,.pdf"
+                            placeholder="Upload petrol / diesel bill"
+                          />
+                          <FileUploadField
+                            id={`fuel-odometer-${index}`}
+                            label="Odometer photo"
+                            value={fill.odometerPhotoPath}
+                            onChange={(v) =>
+                              updateFuelFill(index, "odometerPhotoPath", v)
+                            }
+                            accept=".jpg,.jpeg,.png,.pdf"
+                            placeholder="Upload odometer photo at fuel station"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

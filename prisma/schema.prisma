@@ -487,6 +487,7 @@ model JourneyLog {
   photos             JourneyLogPhoto[]
   travellers         JourneyLogTraveller[]
   stops              JourneyStop[]
+  fuelFills          JourneyFuel[]
   approvedBy         Staff?                @relation("JourneyLogApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
@@ -528,6 +529,22 @@ model JourneyStop {
   createdAt    DateTime   @default(now())
 
   journeyLog   JourneyLog @relation(fields: [journeyLogId], references: [id], onDelete: Cascade)
+
+  @@index([journeyLogId])
+}
+
+model JourneyFuel {
+  id                String    @id @default(cuid())
+  journeyLogId      String
+  expense           Decimal?  @db.Decimal(19, 2)
+  litres            Decimal?  @db.Decimal(10, 2)
+  rate              Decimal?  @db.Decimal(10, 2)
+  billPath          String?
+  odometerPhotoPath String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  journeyLog        JourneyLog @relation(fields: [journeyLogId], references: [id], onDelete: Cascade)
 
   @@index([journeyLogId])
 }

@@ -107,6 +107,21 @@ export const journeyLogCreateSchema = z.object({
   stops: z
     .array(z.object({ location: cleanedString(200) }))
     .optional(),
+  // Individual fuel fills for this journey — each keeps its own bill and
+  // odometer photo. Absent = scalar fuel* fields used as-is (legacy path);
+  // present = rows replace the fill list and the scalar fields are
+  // overwritten with the derived totals by the actions.
+  fuelFills: z
+    .array(
+      z.object({
+        expense: money.optional().nullable(),
+        litres: money.optional().nullable(),
+        rate: money.optional().nullable(),
+        billPath: cleanedString(500).optional().nullable(),
+        odometerPhotoPath: cleanedString(500).optional().nullable(),
+      })
+    )
+    .optional(),
 });
 
 export const journeyLogUpdateSchema = journeyLogCreateSchema
