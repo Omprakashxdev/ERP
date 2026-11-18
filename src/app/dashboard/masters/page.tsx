@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
-import { hasPermission } from "@/lib/authz";
+import { hasPermission, hasPermissionWithOverrides } from "@/lib/authz";
 import { getStaff } from "@/lib/actions/staff";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/utils";
-import { Database } from "lucide-react";
+import { Database, ShieldAlert } from "lucide-react";
 import { MastersManager } from "@/components/masters/masters-manager";
 
 export const metadata = {
@@ -17,6 +17,28 @@ export default async function MastersPage({
 }) {
   const params = searchParams ? await searchParams : undefined;
   const session = await auth();
+  const canRead = session?.user
+    ? await hasPermissionWithOverrides(
+        session.user.role,
+        "masters",
+        "read",
+        session.user.id
+      )
+    : false;
+  if (!canRead) {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-24 text-center">
+          <ShieldAlert className="h-10 w-10 text-zinc-300" />
+          <p className="text-lg font-medium text-zinc-700">Access denied</p>
+          <p className="text-sm text-zinc-500">
+            You do not have permission to view Masters. Contact your
+            administrator.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const canManageStaff = session?.user
     ? hasPermission(session.user.role, "staffManagement", "create")
     : false;

@@ -167,6 +167,7 @@ export const navGroups: NavGroup[] = [
       {
         label: "Masters",
         href: "/dashboard/masters",
+        resource: "masters",
         icon: Database,
         description: "Lookup data, client & employee master",
       },

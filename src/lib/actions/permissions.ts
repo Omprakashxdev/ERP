@@ -30,6 +30,7 @@ const defaultPermissions: Record<string, Record<string, string[]>> = {
   auditLog: { ADMIN: ["read", "admin"], AUDITOR: ["read"] },
   userManagement: { ADMIN: ["create", "read", "update", "delete", "admin"] },
   progressApp: { ADMIN: ["create", "read", "update", "delete", "admin"], MANAGER: ["read"], STAFF: ["read"], AUDITOR: ["read"] },
+  masters: { ADMIN: ["create", "read", "update", "delete", "admin"] },
 };
 
 export async function getAllPermissions(): Promise<{
@@ -183,6 +184,7 @@ const moduleLabels: Record<string, string> = {
   auditLog: "Audit Log",
   userManagement: "User Management",
   progressApp: "Progress App",
+  masters: "Masters",
 };
 
 const validActions = new Set(["create", "read", "update", "delete", "admin"]);

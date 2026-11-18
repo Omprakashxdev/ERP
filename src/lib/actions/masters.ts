@@ -2,10 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@/types/auth";
-import { withAuth, audit, ActionResult } from "./wrapper";
-
-const mutationRoles = [Role.ADMIN, Role.MANAGER];
+import { withAuth, withPermission, audit, ActionResult } from "./wrapper";
 
 // ─── Master type definitions ─────────────────────────────────
 
@@ -84,7 +81,7 @@ export async function createMaster(
   type: MasterType,
   input: MasterInput
 ): Promise<ActionResult<{ id: string }>> {
-  return withAuth(async (user) => {
+  return withPermission("masters", "create", async (user) => {
     const data: Record<string, unknown> = {};
     if (type === "dprMaster" || type === "tsAaMaster") {
       data.referenceNumber = input.referenceNumber;
@@ -131,14 +128,14 @@ export async function createMaster(
     await audit(user.id, "create", type, item.id, { input });
     revalidatePath("/dashboard", "layout");
     return item;
-  }, mutationRoles);
+  });
 }
 
 export async function updateMaster(
   type: MasterType,
   input: MasterInput
 ): Promise<ActionResult<{ id: string }>> {
-  return withAuth(async (user) => {
+  return withPermission("masters", "update", async (user) => {
     const { id, ...rest } = input;
     const data: Record<string, unknown> = {};
     if (type === "dprMaster" || type === "tsAaMaster") {
@@ -196,14 +193,14 @@ export async function updateMaster(
     await audit(user.id, "update", type, item.id, { input });
     revalidatePath("/dashboard", "layout");
     return item;
-  }, mutationRoles);
+  });
 }
 
 export async function deleteMaster(
   type: MasterType,
   id: string
 ): Promise<ActionResult<{ id: string }>> {
-  return withAuth(async (user) => {
+  return withPermission("masters", "delete", async (user) => {
     if (type === "modeMaster") {
       // Modes referenced by register entries must be deactivated, never
       // deleted — physical removal would destroy register history.
@@ -221,7 +218,7 @@ export async function deleteMaster(
     await audit(user.id, "delete", type, id, {});
     revalidatePath("/dashboard", "layout");
     return item;
-  }, mutationRoles);
+  });
 }
 
 // ─── Lookup helpers for forms ────────────────────────────────
