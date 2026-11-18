@@ -114,6 +114,7 @@ export default async function DashboardPage() {
   // Financial highlight cards — the 3 numbers that matter most
   const financialHighlights = [
     {
+      resource: "dueBills",
       label: "Total Billed",
       value: `₹${totalBilled.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
       sub: `₹${totalReceived.toLocaleString("en-IN", { maximumFractionDigits: 0 })} received (${realizationRate.toFixed(0)}%)`,
@@ -124,6 +125,7 @@ export default async function DashboardPage() {
       href: "/dashboard/due-bills",
     },
     {
+      resource: "dueBills",
       label: "Pending Collection",
       value: `₹${pendingAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
       sub: "Outstanding from clients",
@@ -134,6 +136,7 @@ export default async function DashboardPage() {
       href: "/dashboard/due-bills",
     },
     {
+      resource: "taskManagement",
       label: "Open Tasks",
       value: `${openTasks}`,
       sub: "Tasks in progress",
@@ -144,6 +147,12 @@ export default async function DashboardPage() {
       href: "/dashboard/tasks",
     },
   ];
+  const visibleFinancialHighlights = financialHighlights.filter((item) =>
+    canRead(item.resource)
+  );
+
+  const showDueBillsChart = canRead("dueBills");
+  const showTaskChart = canRead("taskManagement");
 
   // Quick access tiles — kiosk-style module navigation
   const quickTiles = [
@@ -209,9 +218,10 @@ export default async function DashboardPage() {
         </Badge>
       </div>
 
-      {/* Financial highlights — 3 big numbers */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {financialHighlights.map((item) => {
+      {/* Financial highlights — hidden entirely for denied modules */}
+      {visibleFinancialHighlights.length > 0 && (
+      <div className={`grid gap-4 ${visibleFinancialHighlights.length === 1 ? "sm:grid-cols-1" : visibleFinancialHighlights.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+        {visibleFinancialHighlights.map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.label} href={item.href}>
@@ -232,8 +242,10 @@ export default async function DashboardPage() {
           );
         })}
       </div>
+      )}
 
       {/* Quick access — kiosk-style module tiles */}
+      {visibleQuickTiles.length > 0 && (
       <div>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Quick Access</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -258,14 +270,17 @@ export default async function DashboardPage() {
           })}
         </div>
       </div>
+      )}
 
       {/* AI Executive Summary — full width */}
       <AiDashboardSummary />
 
-      {/* Charts — financial and task overview */}
+      {/* Charts — hidden entirely for denied modules */}
+      {(showDueBillsChart || showTaskChart) && (
       <div>
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Financial & Task Overview</h2>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className={`grid gap-4 ${showDueBillsChart && showTaskChart ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
+          {showDueBillsChart && (
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm font-medium">Due Bills by Project</CardTitle>
@@ -316,7 +331,9 @@ export default async function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {showTaskChart && (
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm font-medium">Task Status Distribution</CardTitle>
@@ -355,8 +372,10 @@ export default async function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </div>
       </div>
+      )}
     </div>
   );
 }
