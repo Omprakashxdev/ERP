@@ -11,7 +11,6 @@ import { SidebarNav } from "@/components/sidebar-nav";
 import { AiAssistant } from "@/components/ai-assistant";
 import { withBasePath } from "@/lib/base-path";
 import { getUserModuleAccess } from "@/lib/authz";
-import { filterNavGroups } from "@/lib/nav";
 
 export default async function DashboardLayout({
   children,
@@ -27,7 +26,6 @@ export default async function DashboardLayout({
     session.user.id,
     session.user.role
   );
-  const visibleNavGroups = filterNavGroups(moduleAccess);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
@@ -51,7 +49,7 @@ export default async function DashboardLayout({
         <Separator className="shrink-0" />
 
         {/* Navigation — client component with grouped sections, scrolls independently */}
-        <SidebarNav groups={visibleNavGroups} />
+        <SidebarNav access={moduleAccess} />
 
         <Separator className="shrink-0" />
 
@@ -95,7 +93,7 @@ export default async function DashboardLayout({
         {/* Top bar — clean, minimal, pinned at top */}
         <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 lg:px-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
-            <MobileSidebar groups={visibleNavGroups} />
+            <MobileSidebar access={moduleAccess} />
             <Breadcrumbs />
           </div>
           <div className="flex items-center gap-2">

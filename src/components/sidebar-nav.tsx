@@ -2,11 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navGroups, type NavGroup } from "@/lib/nav";
+import { navGroups, filterNavGroups } from "@/lib/nav";
 import { Separator } from "@/components/ui/separator";
 
-export function SidebarNav({ groups = navGroups }: { groups?: NavGroup[] }) {
+export function SidebarNav({
+  access,
+}: {
+  access?: Record<string, string[]>;
+}) {
   const pathname = usePathname();
+  const groups = access ? filterNavGroups(access) : navGroups;
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4">

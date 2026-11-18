@@ -7,10 +7,15 @@ import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LogOut, Menu, X } from "lucide-react";
-import { navGroups, type NavGroup } from "@/lib/nav";
+import { navGroups, filterNavGroups } from "@/lib/nav";
 import { withBasePath } from "@/lib/base-path";
 
-export function MobileSidebar({ groups = navGroups }: { groups?: NavGroup[] }) {
+export function MobileSidebar({
+  access,
+}: {
+  access?: Record<string, string[]>;
+}) {
+  const groups = access ? filterNavGroups(access) : navGroups;
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
