@@ -184,7 +184,7 @@ async function createEntry(extra: object = {}) {
       expect(clash.success).toBe(false);
     });
 
-    it("saves a register entry with an active mode and trims Letter pad", async () => {
+    it("saves a register entry with an active mode (letterPad input ignored)", async () => {
       const res = await createEntry({
         documentRefNo: "MODE-DOC-2",
         modeId: byPostId,
@@ -197,7 +197,7 @@ async function createEntry(extra: object = {}) {
       });
       expect(saved!.modeId).toBe(byPostId);
       expect(saved!.mode!.name).toBe("By Post");
-      expect(saved!.letterPad).toBe("Head Office pad");
+      expect(saved!.letterPad).toBeNull();
     });
 
     it("saves an entry with NULL mode and NULL letter pad (both optional)", async () => {
@@ -213,7 +213,7 @@ async function createEntry(extra: object = {}) {
       expect(saved!.letterPad).toBeNull();
     });
 
-    it("persists Gujarati/Unicode letter pad text", async () => {
+    it("ignores Gujarati/Unicode letter pad input (field removed)", async () => {
       const gujarati = "શ્રી સરદાર પટેલ લેટર પેડ";
       const res = await createEntry({
         documentRefNo: "MODE-DOC-4",
@@ -223,10 +223,10 @@ async function createEntry(extra: object = {}) {
       const saved = await prisma.inOutRegister.findUnique({
         where: { id: res.data!.id },
       });
-      expect(saved!.letterPad).toBe(gujarati);
+      expect(saved!.letterPad).toBeNull();
     });
 
-    it("works on an Outward entry with mode + letter pad", async () => {
+    it("works on an Outward entry with mode (letterPad input ignored)", async () => {
       const res = await createEntry({
         direction: "OUTWARD",
         documentRefNo: "MODE-DOC-5",
@@ -238,7 +238,7 @@ async function createEntry(extra: object = {}) {
         where: { id: res.data!.id },
       });
       expect(saved!.modeId).toBe(courierId);
-      expect(saved!.letterPad).toBe("Regional pad");
+      expect(saved!.letterPad).toBeNull();
     });
 
     it("rejects a nonexistent mode id on create", async () => {

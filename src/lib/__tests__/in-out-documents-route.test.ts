@@ -69,7 +69,7 @@ describe("/api/in-out-documents", () => {
       mockDocFindFirst.mockResolvedValue({ id: "d1" });
       const { GET } = await import("@/app/api/in-out-documents/route");
       await GET(req(`?path=${encodeURIComponent(PRIV)}&meta=1`));
-      expect(mockPerm).toHaveBeenCalledWith("ADMIN", "inOutRegister", "read");
+      expect(mockPerm).toHaveBeenCalledWith("ADMIN", "inOutRegister", "read", "u1");
     });
   });
 

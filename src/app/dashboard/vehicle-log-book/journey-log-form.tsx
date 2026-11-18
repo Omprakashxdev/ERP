@@ -30,12 +30,12 @@ import {
   getProjectNameSuggestions,
 } from "@/lib/actions/vehicle-log-book";
 import { FileUploadField } from "@/components/ui/file-upload-field";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBanner, useErrorHandler } from "@/components/error-handling";
 
 interface JourneyLogFormProps {
-  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[]; approvedBy?: { id: string; name: string } | null };
+  journeyLog?: JourneyLog & { vehicle?: Vehicle; photos?: { path: string }[]; stops?: { location: string }[]; approvedBy?: { id: string; name: string } | null };
   vehicles: { id: string; registrationNumber: string }[];
   staff: { id: string; name: string }[];
   cities?: { id: string; name: string }[];
@@ -71,6 +71,7 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
       timeOut: "",
       fromLocation: "",
       toLocation: "",
+      stops: [] as string[],
       startKm: "",
       endKm: "",
       totalKm: "",
@@ -116,6 +117,11 @@ function getInitialForm(journeyLog: JourneyLog | undefined, cities: { name: stri
     toLocation: journeyLog.toLocation
       ? (cities.some(c => c.name === journeyLog.toLocation) ? journeyLog.toLocation : "__other__" + journeyLog.toLocation)
       : "",
+    stops: ((journeyLog as any).stops?.map((s: { location: string }) =>
+      cities.some((c) => c.name === s.location)
+        ? s.location
+        : "__other__" + s.location
+    ) ?? []) as string[],
     startKm: toMoneyString(journeyLog.startKm),
     endKm: toMoneyString(journeyLog.endKm),
     totalKm: toMoneyString(journeyLog.totalKm),
@@ -198,6 +204,24 @@ export function JourneyLogForm({
     }));
   }
 
+  function addStop() {
+    setForm((prev) => ({ ...prev, stops: [...prev.stops, ""] }));
+  }
+
+  function updateStop(index: number, value: string) {
+    setForm((prev) => ({
+      ...prev,
+      stops: prev.stops.map((s, i) => (i === index ? value : s)),
+    }));
+  }
+
+  function removeStop(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      stops: prev.stops.filter((_, i) => i !== index),
+    }));
+  }
+
   function buildPayload() {
     const base = {
       vehicleId: form.vehicleId,
@@ -206,6 +230,9 @@ export function JourneyLogForm({
       timeOut: emptyToNull(form.timeOut),
       fromLocation: emptyToNull(form.fromLocation.replace(/^__other__/, "")) ?? "",
       toLocation: emptyToNull(form.toLocation.replace(/^__other__/, "")) ?? "",
+      stops: form.stops
+        .map((s) => ({ location: s.replace(/^__other__/, "").trim() }))
+        .filter((s) => s.location !== ""),
       startKm: form.startKm || null,
       endKm: form.endKm || null,
       totalKm: computedTotalKm || null,
@@ -450,6 +477,79 @@ export function JourneyLogForm({
                     placeholder="End location"
                   />
                 ) : null}
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label>Intermediate stops</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addStop}
+                    className="h-7 gap-1 px-2 text-xs"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add stop
+                  </Button>
+                </div>
+                {form.stops.length === 0 ? (
+                  <p className="text-xs text-zinc-400">
+                    Optional — add cities the vehicle passed through between From and To.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {form.stops.map((stop, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <span className="w-4 shrink-0 text-xs font-medium text-zinc-400">
+                          {index + 1}.
+                        </span>
+                        <div className="flex-1">
+                          {cities.length > 0 && !stop.startsWith("__other__") ? (
+                            <Select
+                              value={stop}
+                              onValueChange={(v) => {
+                                if (v === "__other__") {
+                                  updateStop(index, "__other__");
+                                } else {
+                                  updateStop(index, v ?? "");
+                                }
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select city" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {cities.map((c) => (
+                                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                ))}
+                                <SelectItem value="__other__">Other (type manually)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={stop.replace(/^__other__/, "")}
+                              onChange={(e) =>
+                                updateStop(index, "__other__" + e.target.value)
+                              }
+                              placeholder={`Stop ${index + 1} location`}
+                            />
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeStop(index)}
+                          className="h-7 w-7 shrink-0 p-0 text-zinc-400 hover:text-rose-600"
+                          title="Remove stop"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

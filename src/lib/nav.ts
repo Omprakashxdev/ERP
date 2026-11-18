@@ -16,6 +16,7 @@ import {
   Users,
   Database,
   UserCog,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   description: string;
+  resource?: string;
 }
 
 export interface NavGroup {
@@ -49,18 +51,21 @@ export const navGroups: NavGroup[] = [
       {
         label: "Fund Flow",
         href: "/dashboard/fund-flow",
+        resource: "fundFlow",
         icon: Landmark,
         description: "Project finances",
       },
       {
         label: "Due Bills",
         href: "/dashboard/due-bills",
+        resource: "dueBills",
         icon: FileText,
         description: "Bills & payments",
       },
       {
         label: "Work in Progress",
         href: "/dashboard/wip",
+        resource: "wip",
         icon: Hammer,
         description: "Active work status",
       },
@@ -72,12 +77,14 @@ export const navGroups: NavGroup[] = [
       {
         label: "Contractors",
         href: "/dashboard/contractors",
+        resource: "contractors",
         icon: HardHat,
         description: "Vendor management",
       },
       {
         label: "Tenders",
         href: "/dashboard/tenders",
+        resource: "tenders",
         icon: ClipboardList,
         description: "Bids & proposals",
       },
@@ -89,12 +96,14 @@ export const navGroups: NavGroup[] = [
       {
         label: "Payment Schedules",
         href: "/dashboard/payment-schedules",
+        resource: "paymentSchedules",
         icon: CalendarDays,
         description: "Upcoming payments",
       },
       {
         label: "TADA Bills",
         href: "/dashboard/tada-bills",
+        resource: "tadaBills",
         icon: ReceiptText,
         description: "Travel & expense claims",
       },
@@ -106,26 +115,49 @@ export const navGroups: NavGroup[] = [
       {
         label: "Vehicle Log Book",
         href: "/dashboard/vehicle-log-book",
+        resource: "vehicleLogBook",
         icon: Car,
         description: "Vehicle tracking",
       },
       {
         label: "Property",
         href: "/dashboard/property",
+        resource: "assets",
         icon: Box,
         description: "Equipment & property",
       },
       {
         label: "In-Out Register",
         href: "/dashboard/in-out-register",
+        resource: "inOutRegister",
         icon: ArrowLeftRight,
         description: "Document tracking",
       },
       {
         label: "Tasks",
         href: "/dashboard/tasks",
+        resource: "taskManagement",
         icon: CheckSquare,
         description: "Team assignments",
+      },
+    ],
+  },
+  {
+    label: "Progress App",
+    items: [
+      {
+        label: "Site Management",
+        href: "/dashboard/progress-app",
+        resource: "progressApp",
+        icon: Building2,
+        description: "Construction site master",
+      },
+      {
+        label: "Checklist Templates",
+        href: "/dashboard/progress-app/templates",
+        resource: "progressApp",
+        icon: CheckSquare,
+        description: "Activity checklists for rooms",
       },
     ],
   },
@@ -146,6 +178,7 @@ export const navGroups: NavGroup[] = [
       {
         label: "Reports",
         href: "/dashboard/reports",
+        resource: "reports",
         icon: BarChart3,
         description: "Analytics & exports",
       },
@@ -160,3 +193,19 @@ export const navGroups: NavGroup[] = [
 ];
 
 export const allNavItems: NavItem[] = navGroups.flatMap((g) => g.items);
+
+// Returns nav groups filtered by the user's effective module access.
+// Items without a `resource` tag are always visible; groups left empty are dropped.
+export function filterNavGroups(
+  access: Record<string, string[]>
+): NavGroup[] {
+  return navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) =>
+          !item.resource || (access[item.resource] ?? []).includes("read")
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+}

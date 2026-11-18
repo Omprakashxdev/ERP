@@ -204,7 +204,7 @@ function JourneyLogViewDialog({
                 <span>•</span>
                 <span className="font-medium text-zinc-800">{journey.vehicle.registrationNumber}</span>
                 <span>•</span>
-                <span className="text-teal-700 font-medium">{journey.fromLocation} → {journey.toLocation}</span>
+                <span className="text-teal-700 font-medium">{journey.fromLocation}{(journey as { stops?: { location: string }[] }).stops?.map((s) => ` → ${s.location}`).join("")} → {journey.toLocation}</span>
               </DialogDescription>
             </div>
             <Badge
@@ -919,6 +919,12 @@ export function VehicleLogBookTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <span className="font-medium text-zinc-900">{row.fromLocation}</span>
+                    {(row.stops ?? []).map((s) => (
+                      <span key={s.id}>
+                        <span className="text-zinc-400 mx-1">→</span>
+                        <span className="text-zinc-600">{s.location}</span>
+                      </span>
+                    ))}
                     <span className="text-zinc-500 mx-1">→</span>
                     <span className="font-medium text-zinc-900">{row.toLocation}</span>
                   </TableCell>

@@ -236,7 +236,7 @@ export async function createJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "create", async (user) => {
     const parsed = journeyLogCreateSchemaValidated.parse(input);
-    const { photos, travellerStaffIds, ...data } = parsed;
+    const { photos, travellerStaffIds, stops, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const totalKm = computeKmTotal(
@@ -255,6 +255,14 @@ export async function createJourneyLog(
         travellers: travellerStaffIds?.length
           ? { create: travellerStaffIds.map((staffId) => ({ staffId })) }
           : undefined,
+        stops: stops?.length
+          ? {
+              create: stops.map((s, i) => ({
+                location: s.location,
+                stopOrder: i + 1,
+              })),
+            }
+          : undefined,
       },
     });
 
@@ -272,7 +280,7 @@ export async function updateJourneyLog(
 ): Promise<ActionResult<{ id: string }>> {
   return withPermission("vehicleLogBook", "update", async (user) => {
     const parsed = journeyLogUpdateSchemaValidated.parse(input);
-    const { id, photos, travellerStaffIds, ...data } = parsed;
+    const { id, photos, travellerStaffIds, stops, ...data } = parsed;
     await checkRateLimit(user.id);
 
     const existing = await prisma.journeyLog.findUnique({
@@ -292,6 +300,21 @@ export async function updateJourneyLog(
     await prisma.journeyLogPhoto.deleteMany({
       where: { journeyLogId: id },
     });
+
+    // Stops: replace the whole ordered list when the client sends one —
+    // absent `stops` leaves existing rows untouched.
+    if (stops !== undefined) {
+      await prisma.journeyStop.deleteMany({ where: { journeyLogId: id } });
+      if (stops.length) {
+        await prisma.journeyStop.createMany({
+          data: stops.map((s, i) => ({
+            journeyLogId: id,
+            location: s.location,
+            stopOrder: i + 1,
+          })),
+        });
+      }
+    }
 
     // Traveller staff ids are a join relation — sync only the diff so
     // existing traveller rows are preserved unless explicitly changed.
@@ -367,6 +390,7 @@ export async function getJourneyLogs(
           vehicle: true,
           photos: true,
           travellers: { include: { staff: { select: { id: true, name: true } } } },
+          stops: { orderBy: { stopOrder: "asc" } },
           approvedBy: {
             select: { id: true, name: true, designation: true },
           },
@@ -397,6 +421,7 @@ export async function getJourneyLogById(
         vehicle: true,
         photos: true,
         travellers: { include: { staff: { select: { id: true, name: true } } } },
+        stops: { orderBy: { stopOrder: "asc" } },
         approvedBy: {
           select: { id: true, name: true, designation: true },
         },

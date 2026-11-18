@@ -595,7 +595,7 @@ export async function importModule(
             }
             const allowedFields = [
               "direction", "serialNo", "documentDate", "receivedDate", "documentRefNo", "clientId",
-              "details", "actionSuggestedStaffId", "modeId", "letterPad",
+              "details", "actionSuggestedStaffId", "modeId",
               "inwardType", "receivedByPersonName", "receivedByStaffId", "department", "replyDueDate", "parentInwardId",
               "projectId"
             ];
@@ -649,11 +649,6 @@ export async function importModule(
                 throw new Error("Selected mode is inactive and cannot be used for new entries");
               }
             }
-            if (cleanData.letterPad !== undefined && cleanData.letterPad !== null) {
-              const lp = String(cleanData.letterPad).trim();
-              cleanData.letterPad = lp === "" ? null : lp;
-            }
-
             // Outward letters are going outside, so they NEVER have pending reply or deadline
             if (cleanData.direction === "OUTWARD") {
               cleanData.replyDueDate = null;
@@ -1846,7 +1841,7 @@ function getTemplateFields(module: string): string[] {
     dueBills: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "scheme", "grossAmount", "sgst", "cgst", "billAmount", "chequeAmount", "sd", "itTds", "receivedAmount", "billDate", "receiveDate", "status", "remarks"],
     wip: ["project", "project_region", "project_client", "project_workOrderDate", "project_timeLimitMonths", "project_workType", "project_serviceType", "status", "loiReceiptDate", "agreementDate", "workOrderDate", "timeLimitMonths", "stipulatedCompletionDate", "targetCompletionDate", "hoCoordinator", "roCoordinator", "securityDepositAmount", "securityDepositStatus", "securityDepositReturnDate", "amountOfWorkDone", "finalProgressAmount", "raBill1Amount", "raBill1Date", "raBill1SaecFee", "raBill1ProjectExpense", "raBill2Amount", "raBill2Date", "raBill2SaecFee", "raBill2ProjectExpense", "raBill3Amount", "raBill3Date", "raBill3SaecFee", "raBill3ProjectExpense", "raBill4Amount", "raBill4Date", "raBill4SaecFee", "raBill4ProjectExpense", "completionDate", "remarks"],
     vehicleLogBook: ["registrationNumber", "make", "model", "year", "status", "rcNumber", "rcExpiryDate", "insurancePolicyNumber", "insuranceExpiryDate", "pucNumber", "pucExpiryDate", "tyreWarrantyExpiryDate", "batteryWarrantyExpiryDate"],
-    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "project", "department", "actionSuggestedStaff", "mode", "letterPad", "inwardType", "receivedByPersonName", "receivedByStaff", "replyDueDate", "parentInwardRefNo"],
+    inOutRegister: ["direction", "documentDate", "receivedDate", "documentRefNo", "details", "client", "project", "department", "actionSuggestedStaff", "mode", "inwardType", "receivedByPersonName", "receivedByStaff", "replyDueDate", "parentInwardRefNo"],
     tadaBills: ["staff", "tourPurpose", "fromDate", "toDate", "location", "travelExpense", "accommodationExp", "foodExpense", "localConveyance", "otherExpense", "totalClaimAmount", "advanceAmount", "adjustedAmount", "balanceAmount", "status", "rejectReason"],
     tasks: ["title", "description", "status", "priority", "assignedTo", "assignedBy", "project", "dueDate", "reworkCount"],
     clients: ["name", "abbreviation", "address", "gstNumber", "panNumber", "phone", "website"],

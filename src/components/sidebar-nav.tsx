@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navGroups } from "@/lib/nav";
+import { navGroups, type NavGroup } from "@/lib/nav";
 import { Separator } from "@/components/ui/separator";
 
-export function SidebarNav() {
+export function SidebarNav({ groups = navGroups }: { groups?: NavGroup[] }) {
   const pathname = usePathname();
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
-      {navGroups.map((group) => (
+      {groups.map((group) => (
         <div key={group.label} className="mb-4">
           <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-wider text-white/40">
             {group.label}

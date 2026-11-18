@@ -267,7 +267,7 @@ describe("Brick 4 — UTF-8 BOM & Gujarati export", () => {
     const { rowsToCsv } = await import("@/lib/export-import");
     const csv = rowsToCsv(rows as never, config);
     expect(csv).toContain("ગુજરાતી દસ્તાવેજ");
-    expect(csv).toContain("Letter pad - અમદાવાદ");
+    expect(csv).not.toContain("Letter pad - અમદાવાદ");
     expect(csv).toContain("કાર્યવાહી જરૂરી");
     expect(csv).not.toContain("�"); // no replacement chars / double encoding
   });
@@ -434,7 +434,7 @@ describe("Brick 4 — XLSX export preserves Unicode", () => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const parsed = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
     expect(parsed[0].details).toBe("ગુજરાતી દસ્તાવેજ");
-    expect(parsed[0].letterPad).toBe("Letter pad - અમદાવાદ");
+    expect(parsed[0].letterPad).toBeUndefined();
     expect(parsed[0].documentRefNo).toBe("SAEC/IN/7");
   });
 });

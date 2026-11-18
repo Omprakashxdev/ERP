@@ -102,6 +102,11 @@ export const journeyLogCreateSchema = z.object({
   approvedById: cleanedString(100).optional().nullable(),
 
   photos: z.array(cleanedString(500)).optional(),
+  // Intermediate stops between From and To — order in the array is the
+  // chronological stop order. Absent = leave existing stops untouched.
+  stops: z
+    .array(z.object({ location: cleanedString(200) }))
+    .optional(),
 });
 
 export const journeyLogUpdateSchema = journeyLogCreateSchema

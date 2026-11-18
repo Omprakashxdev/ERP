@@ -43,6 +43,11 @@ import {
   getStaffForForm,
 } from "@/lib/actions/user-management";
 import {
+  getUserModulePermissions,
+  setUserModulePermission,
+  type UserModulePermissionRow,
+} from "@/lib/actions/permissions";
+import {
   Users,
   Loader2,
   UserCheck,
@@ -51,6 +56,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -106,6 +112,48 @@ export function UserManagementPanel() {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectLoading, setRejectLoading] = useState(false);
+
+  const [moduleTarget, setModuleTarget] = useState<UserRow | null>(null);
+  const [moduleRows, setModuleRows] = useState<UserModulePermissionRow[]>([]);
+  const [moduleLoading, setModuleLoading] = useState(false);
+  const [moduleSaving, setModuleSaving] = useState<string | null>(null);
+
+  async function openModuleAccess(user: UserRow) {
+    setModuleTarget(user);
+    setModuleRows([]);
+    setModuleLoading(true);
+    const res = await getUserModulePermissions(user.id);
+    if (res.success && res.data) {
+      setModuleRows(res.data.modules);
+    } else {
+      toast.error(res.error ?? "Failed to load module access");
+      setModuleTarget(null);
+    }
+    setModuleLoading(false);
+  }
+
+  async function handleModuleChange(
+    resource: string,
+    allowedActions: string[] | null
+  ) {
+    if (!moduleTarget) return;
+    setModuleSaving(resource);
+    const res = await setUserModulePermission(
+      moduleTarget.id,
+      resource,
+      allowedActions
+    );
+    if (res.success) {
+      toast.success("Module access updated");
+      const refreshed = await getUserModulePermissions(moduleTarget.id);
+      if (refreshed.success && refreshed.data) {
+        setModuleRows(refreshed.data.modules);
+      }
+    } else {
+      toast.error(res.error ?? "Failed to update module access");
+    }
+    setModuleSaving(null);
+  }
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -372,22 +420,38 @@ export function UserManagementPanel() {
                         : "Never"}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 p-0"
-                        onClick={() => handleToggleActive(user.id)}
-                        disabled={actionLoading === `toggle-${user.id}`}
-                        title={user.isActive ? "Deactivate user" : "Activate user"}
-                      >
-                        {actionLoading === `toggle-${user.id}` ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : user.isActive ? (
-                          <UserX className="h-3.5 w-3.5 text-red-500" />
-                        ) : (
-                          <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
-                        )}
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 p-0"
+                          onClick={() => openModuleAccess(user)}
+                          disabled={user.role === "ADMIN"}
+                          title={
+                            user.role === "ADMIN"
+                              ? "Admins always have full module access"
+                              : "Custom module access"
+                          }
+                        >
+                          <Shield className="h-3.5 w-3.5 text-blue-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 p-0"
+                          onClick={() => handleToggleActive(user.id)}
+                          disabled={actionLoading === `toggle-${user.id}`}
+                          title={user.isActive ? "Deactivate user" : "Activate user"}
+                        >
+                          {actionLoading === `toggle-${user.id}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : user.isActive ? (
+                            <UserX className="h-3.5 w-3.5 text-red-500" />
+                          ) : (
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-500" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -532,6 +596,117 @@ export function UserManagementPanel() {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {moduleTarget && (
+        <Dialog open onOpenChange={(open) => !open && setModuleTarget(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Custom Module Access</DialogTitle>
+              <DialogDescription>
+                {moduleTarget.name ?? moduleTarget.email} ·{" "}
+                <span className="font-medium">{moduleTarget.role}</span> — role
+                defaults apply unless a custom override is set.
+              </DialogDescription>
+            </DialogHeader>
+            {moduleLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+              </div>
+            ) : (
+              <div className="max-h-[60vh] overflow-auto">
+                <Table className="text-xs">
+                  <TableHeader className="sticky top-0 z-10 bg-white">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Module</TableHead>
+                      <TableHead>Effective access</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {moduleRows.map((m) => {
+                      const denied = !m.effective.includes("read");
+                      return (
+                        <TableRow key={m.resource}>
+                          <TableCell className="font-medium">{m.label}</TableCell>
+                          <TableCell>
+                            {m.effective.length === 0 ? (
+                              <span className="text-red-500">No access</span>
+                            ) : (
+                              <span className="text-zinc-600">
+                                {m.effective.join(", ")}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={m.override === null ? "outline" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {m.override === null ? "Role default" : "Custom"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {denied && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  disabled={moduleSaving === m.resource}
+                                  onClick={() =>
+                                    handleModuleChange(m.resource, ["read"])
+                                  }
+                                >
+                                  {moduleSaving === m.resource ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    "Grant read"
+                                  )}
+                                </Button>
+                              )}
+                              {!denied && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px] text-red-600"
+                                  disabled={moduleSaving === m.resource}
+                                  onClick={() =>
+                                    handleModuleChange(m.resource, [])
+                                  }
+                                >
+                                  {moduleSaving === m.resource ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    "Deny all"
+                                  )}
+                                </Button>
+                              )}
+                              {m.override !== null && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  disabled={moduleSaving === m.resource}
+                                  onClick={() =>
+                                    handleModuleChange(m.resource, null)
+                                  }
+                                >
+                                  Reset
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       )}

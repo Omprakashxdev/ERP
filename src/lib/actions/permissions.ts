@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/authz";
+import { requireAuth, invalidatePermissionCache } from "@/lib/authz";
 import { Role } from "@prisma/client";
 import { audit } from "./wrapper";
 import { revalidatePath } from "next/cache";
@@ -29,6 +29,7 @@ const defaultPermissions: Record<string, Record<string, string[]>> = {
   notifications: { ADMIN: ["create", "read", "update", "delete", "admin"], MANAGER: ["read", "update"], STAFF: ["read"], AUDITOR: ["read"] },
   auditLog: { ADMIN: ["read", "admin"], AUDITOR: ["read"] },
   userManagement: { ADMIN: ["create", "read", "update", "delete", "admin"] },
+  progressApp: { ADMIN: ["create", "read", "update", "delete", "admin"], MANAGER: ["read"], STAFF: ["read"], AUDITOR: ["read"] },
 };
 
 export async function getAllPermissions(): Promise<{
@@ -157,6 +158,159 @@ export async function updateAiAllowedRoles(
     });
 
     revalidatePath("/dashboard/settings");
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+const moduleLabels: Record<string, string> = {
+  fundFlow: "Fund Flow",
+  dueBills: "Due Bills",
+  wip: "Work in Progress",
+  contractors: "Contractors",
+  tenders: "Tenders",
+  paymentSchedules: "Payment Schedules",
+  vehicleLogBook: "Vehicle Log Book",
+  assets: "Property",
+  inOutRegister: "In-Out Register",
+  tadaBills: "TADA Bills",
+  taskManagement: "Tasks",
+  reports: "Reports",
+  exportImport: "Export / Import",
+  notifications: "Notifications",
+  auditLog: "Audit Log",
+  userManagement: "User Management",
+  progressApp: "Progress App",
+};
+
+const validActions = new Set(["create", "read", "update", "delete", "admin"]);
+
+export interface UserModulePermissionRow {
+  resource: string;
+  label: string;
+  roleDefault: string[];
+  override: string[] | null;
+  effective: string[];
+}
+
+export async function getUserModulePermissions(userId: string): Promise<{
+  success: boolean;
+  data?: {
+    userId: string;
+    userName: string | null;
+    userEmail: string;
+    role: string;
+    modules: UserModulePermissionRow[];
+  };
+  error?: string;
+}> {
+  try {
+    const actor = await requireAuth();
+    if (actor.role !== Role.ADMIN) {
+      return { success: false, error: "Only admins can view user module access." };
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    if (!target) {
+      return { success: false, error: "User not found." };
+    }
+
+    const [roleOverrides, userOverrides] = await Promise.all([
+      prisma.rolePermission.findMany({ where: { role: target.role } }),
+      prisma.userModulePermission.findMany({ where: { userId } }),
+    ]);
+
+    const modules: UserModulePermissionRow[] = Object.keys(
+      defaultPermissions
+    ).map((resource) => {
+      const roleDefault =
+        roleOverrides.find((o) => o.resource === resource)?.allowedActions ??
+        defaultPermissions[resource]?.[target.role] ??
+        [];
+      const override =
+        userOverrides.find((o) => o.resource === resource)?.allowedActions ??
+        null;
+      return {
+        resource,
+        label: moduleLabels[resource] ?? resource,
+        roleDefault,
+        override,
+        effective: override ?? roleDefault,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        userId: target.id,
+        userName: target.name,
+        userEmail: target.email,
+        role: target.role,
+        modules,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+export async function setUserModulePermission(
+  userId: string,
+  resource: string,
+  allowedActions: string[] | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const actor = await requireAuth();
+    if (actor.role !== Role.ADMIN) {
+      return { success: false, error: "Only admins can modify user module access." };
+    }
+
+    if (!(resource in defaultPermissions)) {
+      return { success: false, error: "Unknown module." };
+    }
+    if (allowedActions !== null && allowedActions.some((a) => !validActions.has(a))) {
+      return { success: false, error: "Invalid action in override." };
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!target) {
+      return { success: false, error: "User not found." };
+    }
+    if (target.role === "ADMIN") {
+      return { success: false, error: "Admin module access cannot be restricted." };
+    }
+
+    if (allowedActions === null) {
+      await prisma.userModulePermission.deleteMany({
+        where: { userId, resource },
+      });
+    } else {
+      await prisma.userModulePermission.upsert({
+        where: { userId_resource: { userId, resource } },
+        create: { userId, resource, allowedActions },
+        update: { allowedActions },
+      });
+    }
+
+    await audit(
+      actor.id,
+      allowedActions === null ? "delete" : "update",
+      "UserModulePermission",
+      `${userId}:${resource}`,
+      { userId, resource, allowedActions }
+    );
+
+    invalidatePermissionCache();
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

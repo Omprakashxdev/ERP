@@ -7,10 +7,10 @@ import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LogOut, Menu, X } from "lucide-react";
-import { navGroups } from "@/lib/nav";
+import { navGroups, type NavGroup } from "@/lib/nav";
 import { withBasePath } from "@/lib/base-path";
 
-export function MobileSidebar() {
+export function MobileSidebar({ groups = navGroups }: { groups?: NavGroup[] }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -57,7 +57,7 @@ export function MobileSidebar() {
             </div>
             <Separator className="mb-3" />
             <nav className="flex flex-1 flex-col gap-3 overflow-y-auto">
-              {navGroups.map((group) => (
+              {groups.map((group) => (
                 <div key={group.label}>
                   <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-white/40">
                     {group.label}

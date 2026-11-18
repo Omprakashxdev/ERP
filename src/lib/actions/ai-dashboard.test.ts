@@ -60,11 +60,11 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/authz", () => ({
   requireAuth: vi.fn(),
-  hasPermission: vi.fn(),
+  hasPermissionWithOverrides: vi.fn(),
 }));
 
 import { generateText } from "ai";
-import { requireAuth, hasPermission } from "@/lib/authz";
+import { requireAuth, hasPermissionWithOverrides } from "@/lib/authz";
 
 function dec(value: string | number): Decimal {
   return new Decimal(String(value));
@@ -188,7 +188,7 @@ describe("generateDashboardSummary", () => {
       role: "STAFF",
       name: "Staff User",
     } as any);
-    vi.mocked(hasPermission).mockReturnValue(false);
+    vi.mocked(hasPermissionWithOverrides).mockResolvedValue(false);
 
     const result = await generateDashboardSummary();
     expect(result.success).toBe(false);
@@ -201,7 +201,7 @@ describe("generateDashboardSummary", () => {
       role: "STAFF",
       name: "Staff User",
     } as any);
-    vi.mocked(hasPermission).mockReturnValue(true);
+    vi.mocked(hasPermissionWithOverrides).mockResolvedValue(true);
     vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue({
       key: "ai_allowed_roles",
       value: "ADMIN,MANAGER",
@@ -220,7 +220,7 @@ describe("generateDashboardSummary", () => {
       role: "ADMIN",
       name: "Admin User",
     } as any);
-    vi.mocked(hasPermission).mockReturnValue(true);
+    vi.mocked(hasPermissionWithOverrides).mockResolvedValue(true);
     vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.fundFlow.findMany).mockResolvedValue([]);
     vi.mocked(generateText).mockResolvedValue({

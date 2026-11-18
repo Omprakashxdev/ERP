@@ -70,7 +70,7 @@ export async function withPermission<T>(
 ): Promise<ActionResult<T>> {
   try {
     const user = await requireAuth();
-    if (!(await hasPermissionWithOverrides(user.role, resource, actionName))) {
+    if (!(await hasPermissionWithOverrides(user.role, resource, actionName, user.id))) {
       return { success: false, error: "Forbidden" };
     }
     return { success: true, data: await fn(user) };

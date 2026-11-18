@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!(await hasPermissionWithOverrides(session.user.role, "inOutRegister", "read"))) {
+  if (!(await hasPermissionWithOverrides(session.user.role, "inOutRegister", "read", session.user.id))) {
     return NextResponse.json(
       { error: "You are not allowed to view this document" },
       { status: 403 }
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!(await hasPermissionWithOverrides(session.user.role, "inOutRegister", "create"))) {
+  if (!(await hasPermissionWithOverrides(session.user.role, "inOutRegister", "create", session.user.id))) {
     return NextResponse.json(
       { error: "You are not allowed to attach documents" },
       { status: 403 }

@@ -3,7 +3,7 @@
 import { generateText } from "ai";
 import { getGroqChatModel } from "@/lib/ai/groq";
 import { withPermission, checkRateLimit, ActionResult } from "./wrapper";
-import { requireAuth, hasPermission } from "@/lib/authz";
+import { requireAuth, hasPermissionWithOverrides } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 async function checkAiAccess(role: string): Promise<boolean> {
@@ -289,7 +289,7 @@ ${JSON.stringify(metrics, null, 2)}`;
 export async function generateDashboardSummary(): Promise<ActionResult<string>> {
   try {
     const user = await requireAuth();
-    if (!hasPermission(user.role, "reports", "read")) {
+    if (!(await hasPermissionWithOverrides(user.role, "reports", "read", user.id))) {
       return { success: false, error: "You don't have permission to view reports." };
     }
 

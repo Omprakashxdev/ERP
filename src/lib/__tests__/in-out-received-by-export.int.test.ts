@@ -72,7 +72,7 @@ async function createEntry(extra: object = {}) {
 
 // CSV header mirrors the inOutRegister import template columns.
 const IMPORT_HEADER =
-  "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,mode,letterPad,inwardType,receivedByPersonName,receivedByStaff,replyDueDate,parentInwardRefNo";
+  "direction,documentDate,receivedDate,documentRefNo,details,client,department,actionSuggestedStaff,mode,inwardType,receivedByPersonName,receivedByStaff,replyDueDate,parentInwardRefNo";
 
 function importRow(overrides: Record<string, string> = {}) {
   const cols = {
@@ -85,7 +85,6 @@ function importRow(overrides: Record<string, string> = {}) {
     department: "",
     actionSuggestedStaff: staffName,
     mode: "",
-    letterPad: "",
     inwardType: "INFORMATIVE",
     receivedByPersonName: "",
     receivedByStaff: "",
