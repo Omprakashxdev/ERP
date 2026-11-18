@@ -7,8 +7,7 @@ import { ExportImportPanel } from "./export-import-panel";
 import { NotificationsPanel } from "./notifications-panel";
 import { AuditLogPanel } from "./audit-log-panel";
 import { UserManagementPanel } from "./user-management-panel";
-import { UserRightsPanel } from "./user-rights-panel";
-import { Settings, Download, Bell, Shield, Users, KeyRound, Network } from "lucide-react";
+import { Settings, Download, Bell, Shield, Users, Network } from "lucide-react";
 import { OrgChartPanel } from "./org-chart-panel";
 
 export default async function SettingsPage() {
@@ -22,11 +21,10 @@ export default async function SettingsPage() {
   const canViewAuditLog = hasPermission(session.user.role, "auditLog", "read");
   const canManageUsers = hasPermission(session.user.role, "userManagement", "read");
 
-  const canViewRights = true;
   const canViewOrgChart = true;
 
   const hasAnyAccess =
-    canExportImport || canManageNotifications || canViewAuditLog || canManageUsers || canViewRights || canViewOrgChart;
+    canExportImport || canManageNotifications || canViewAuditLog || canManageUsers || canViewOrgChart;
 
   if (!hasAnyAccess) {
     redirect("/unauthorized");
@@ -70,12 +68,6 @@ export default async function SettingsPage() {
             <TabsTrigger value="users">
               <Users className="mr-1.5 h-3.5 w-3.5" />
               Users
-            </TabsTrigger>
-          )}
-          {canViewRights && (
-            <TabsTrigger value="rights">
-              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
-              Role Defaults
             </TabsTrigger>
           )}
           {canViewOrgChart && (
@@ -126,19 +118,6 @@ export default async function SettingsPage() {
           </TabsContent>
         )}
 
-        {canViewRights && (
-          <TabsContent value="rights">
-            <p className="mb-3 text-sm text-zinc-500">
-              Set the default baseline permissions for each role. You can
-              override these for individual users in the Users tab.
-            </p>
-            <Card className="shadow-sm">
-              <CardContent className="p-4">
-                <UserRightsPanel isAdmin={session.user.role === "ADMIN"} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
         {canViewOrgChart && (
           <TabsContent value="orgchart">
             <Card className="shadow-sm">
