@@ -708,7 +708,12 @@ export function UserManagementPanel() {
                 </h4>
                 <p className="text-xs text-zinc-500">
                   Defaults come from the {editTarget.role} role. Changes here
-                  apply to this user only.
+                  apply to this user only. Toggles:{" "}
+                  <span className="font-medium">C</span>reate,{" "}
+                  <span className="font-medium">R</span>ead,{" "}
+                  <span className="font-medium">U</span>pdate,{" "}
+                  <span className="font-medium">D</span>elete,{" "}
+                  <span className="font-medium">A</span>dmin.
                 </p>
               </div>
               {editTarget.role === "ADMIN" ? (
@@ -756,22 +761,42 @@ export function UserManagementPanel() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                {denied && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px]"
-                                    disabled={moduleSaving === m.resource}
-                                    onClick={() =>
-                                      handleModuleChange(m.resource, ["read"])
-                                    }
-                                  >
-                                    {moduleSaving === m.resource ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      "Grant read"
-                                    )}
-                                  </Button>
+                                {["create", "read", "update", "delete", "admin"].map(
+                                  (action) => {
+                                    const on = m.effective.includes(action);
+                                    return (
+                                      <button
+                                        key={action}
+                                        type="button"
+                                        title={action}
+                                        disabled={moduleSaving === m.resource}
+                                        onClick={() => {
+                                          const next = on
+                                            ? m.effective.filter(
+                                                (a) => a !== action
+                                              )
+                                            : [...m.effective, action];
+                                          const same =
+                                            next.length ===
+                                              m.roleDefault.length &&
+                                            next.every((a) =>
+                                              m.roleDefault.includes(a)
+                                            );
+                                          handleModuleChange(
+                                            m.resource,
+                                            same ? null : next
+                                          );
+                                        }}
+                                        className={`h-6 w-6 rounded border text-[9px] font-semibold uppercase transition-colors disabled:opacity-50 ${
+                                          on
+                                            ? "border-teal-600 bg-teal-600 text-white"
+                                            : "border-zinc-300 bg-white text-zinc-400 hover:border-zinc-400"
+                                        }`}
+                                      >
+                                        {action[0]}
+                                      </button>
+                                    );
+                                  }
                                 )}
                                 {!denied && (
                                   <Button
