@@ -110,6 +110,7 @@ export async function getUsers(): Promise<ActionResult<unknown[]>> {
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
+        _count: { select: { modulePermissions: true } },
       },
       orderBy: { createdAt: "desc" },
     });

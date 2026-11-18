@@ -56,7 +56,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Shield,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,6 +68,7 @@ interface UserRow {
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
+  _count?: { modulePermissions: number };
 }
 
 interface RegistrationRow {
@@ -113,13 +114,14 @@ export function UserManagementPanel() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectLoading, setRejectLoading] = useState(false);
 
-  const [moduleTarget, setModuleTarget] = useState<UserRow | null>(null);
+  const [editTarget, setEditTarget] = useState<UserRow | null>(null);
   const [moduleRows, setModuleRows] = useState<UserModulePermissionRow[]>([]);
   const [moduleLoading, setModuleLoading] = useState(false);
   const [moduleSaving, setModuleSaving] = useState<string | null>(null);
+  const [editRoleSaving, setEditRoleSaving] = useState(false);
 
-  async function openModuleAccess(user: UserRow) {
-    setModuleTarget(user);
+  async function openEditUser(user: UserRow) {
+    setEditTarget(user);
     setModuleRows([]);
     setModuleLoading(true);
     const res = await getUserModulePermissions(user.id);
@@ -127,28 +129,50 @@ export function UserManagementPanel() {
       setModuleRows(res.data.modules);
     } else {
       toast.error(res.error ?? "Failed to load module access");
-      setModuleTarget(null);
+      setEditTarget(null);
     }
     setModuleLoading(false);
+  }
+
+  async function handleEditRoleChange(newRole: string) {
+    if (!editTarget || newRole === editTarget.role) return;
+    setEditRoleSaving(true);
+    try {
+      await updateUserRole(
+        editTarget.id,
+        newRole as "ADMIN" | "MANAGER" | "STAFF" | "AUDITOR"
+      );
+      setEditTarget({ ...editTarget, role: newRole });
+      const refreshed = await getUserModulePermissions(editTarget.id);
+      if (refreshed.success && refreshed.data) {
+        setModuleRows(refreshed.data.modules);
+      }
+      fetchAll();
+    } catch {
+      toast.error("Failed to update role");
+    } finally {
+      setEditRoleSaving(false);
+    }
   }
 
   async function handleModuleChange(
     resource: string,
     allowedActions: string[] | null
   ) {
-    if (!moduleTarget) return;
+    if (!editTarget) return;
     setModuleSaving(resource);
     const res = await setUserModulePermission(
-      moduleTarget.id,
+      editTarget.id,
       resource,
       allowedActions
     );
     if (res.success) {
       toast.success("Module access updated");
-      const refreshed = await getUserModulePermissions(moduleTarget.id);
+      const refreshed = await getUserModulePermissions(editTarget.id);
       if (refreshed.success && refreshed.data) {
         setModuleRows(refreshed.data.modules);
       }
+      fetchAll();
     } else {
       toast.error(res.error ?? "Failed to update module access");
     }
@@ -392,22 +416,33 @@ export function UserManagementPanel() {
                     <TableCell className="font-medium">{user.name ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">{user.email}</TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <Select
-                        value={user.role}
-                        onValueChange={(v) => handleRoleChange(user.id, v ?? user.role)}
-                      >
-                        <SelectTrigger className="h-7 w-28" size="sm">
-                          <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${roleColor(user.role)}`}>
-                            {user.role}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                          <SelectItem value="MANAGER">Manager</SelectItem>
-                          <SelectItem value="STAFF">Staff</SelectItem>
-                          <SelectItem value="AUDITOR">Auditor</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-1.5">
+                        <Select
+                          value={user.role}
+                          onValueChange={(v) => handleRoleChange(user.id, v ?? user.role)}
+                        >
+                          <SelectTrigger className="h-7 w-28" size="sm">
+                            <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${roleColor(user.role)}`}>
+                              {user.role}
+                            </span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ADMIN">Admin</SelectItem>
+                            <SelectItem value="MANAGER">Manager</SelectItem>
+                            <SelectItem value="STAFF">Staff</SelectItem>
+                            <SelectItem value="AUDITOR">Auditor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {(user._count?.modulePermissions ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-zinc-500"
+                            title="Has custom module overrides"
+                          >
+                            Custom
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <Badge variant={user.isActive ? "secondary" : "outline"}>
@@ -425,15 +460,10 @@ export function UserManagementPanel() {
                           variant="ghost"
                           size="sm"
                           className="h-7 p-0"
-                          onClick={() => openModuleAccess(user)}
-                          disabled={user.role === "ADMIN"}
-                          title={
-                            user.role === "ADMIN"
-                              ? "Admins always have full module access"
-                              : "Custom module access"
-                          }
+                          onClick={() => openEditUser(user)}
+                          title="Edit user & module access"
                         >
-                          <Shield className="h-3.5 w-3.5 text-blue-600" />
+                          <Pencil className="h-3.5 w-3.5 text-blue-600" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -600,113 +630,172 @@ export function UserManagementPanel() {
         </Dialog>
       )}
 
-      {moduleTarget && (
-        <Dialog open onOpenChange={(open) => !open && setModuleTarget(null)}>
-          <DialogContent className="max-w-2xl">
+      {editTarget && (
+        <Dialog open onOpenChange={(open) => !open && setEditTarget(null)}>
+          <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>Custom Module Access</DialogTitle>
+              <DialogTitle>Edit User</DialogTitle>
               <DialogDescription>
-                {moduleTarget.name ?? moduleTarget.email} ·{" "}
-                <span className="font-medium">{moduleTarget.role}</span> — role
-                defaults apply unless a custom override is set.
+                Update account details and override module access for this
+                user only.
               </DialogDescription>
             </DialogHeader>
-            {moduleLoading ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+
+            <div className="grid grid-cols-2 gap-3 rounded-md border border-zinc-200 bg-zinc-50/50 p-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Name</Label>
+                <div className="flex h-8 items-center rounded-md border border-zinc-200 bg-white px-3 text-xs">
+                  {editTarget.name ?? "—"}
+                </div>
               </div>
-            ) : (
-              <div className="max-h-[60vh] overflow-auto">
-                <Table className="text-xs">
-                  <TableHeader className="sticky top-0 z-10 bg-white">
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead>Module</TableHead>
-                      <TableHead>Effective access</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {moduleRows.map((m) => {
-                      const denied = !m.effective.includes("read");
-                      return (
-                        <TableRow key={m.resource}>
-                          <TableCell className="font-medium">{m.label}</TableCell>
-                          <TableCell>
-                            {m.effective.length === 0 ? (
-                              <span className="text-red-500">No access</span>
-                            ) : (
-                              <span className="text-zinc-600">
-                                {m.effective.join(", ")}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={m.override === null ? "outline" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {m.override === null ? "Role default" : "Custom"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {denied && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
-                                  disabled={moduleSaving === m.resource}
-                                  onClick={() =>
-                                    handleModuleChange(m.resource, ["read"])
-                                  }
-                                >
-                                  {moduleSaving === m.resource ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    "Grant read"
-                                  )}
-                                </Button>
-                              )}
-                              {!denied && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px] text-red-600"
-                                  disabled={moduleSaving === m.resource}
-                                  onClick={() =>
-                                    handleModuleChange(m.resource, [])
-                                  }
-                                >
-                                  {moduleSaving === m.resource ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    "Deny all"
-                                  )}
-                                </Button>
-                              )}
-                              {m.override !== null && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
-                                  disabled={moduleSaving === m.resource}
-                                  onClick={() =>
-                                    handleModuleChange(m.resource, null)
-                                  }
-                                >
-                                  Reset
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="space-y-1">
+                <Label className="text-xs">Email</Label>
+                <div className="flex h-8 items-center rounded-md border border-zinc-200 bg-white px-3 text-xs">
+                  {editTarget.email}
+                </div>
               </div>
-            )}
+              <div className="space-y-1">
+                <Label className="text-xs">Role</Label>
+                <Select
+                  value={editTarget.role}
+                  onValueChange={(v) => handleEditRoleChange(v ?? editTarget.role)}
+                  disabled={editRoleSaving}
+                >
+                  <SelectTrigger className="h-8 w-full" size="sm">
+                    <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${roleColor(editTarget.role)}`}>
+                      {editRoleSaving ? "Saving…" : editTarget.role}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="MANAGER">Manager</SelectItem>
+                    <SelectItem value="STAFF">Staff</SelectItem>
+                    <SelectItem value="AUDITOR">Auditor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Status</Label>
+                <div className="flex h-8 items-center">
+                  <Badge variant={editTarget.isActive ? "secondary" : "outline"}>
+                    {editTarget.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <h4 className="text-sm font-medium text-zinc-700">
+                  Module Access
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  Defaults come from the {editTarget.role} role. Changes here
+                  apply to this user only.
+                </p>
+              </div>
+              {editTarget.role === "ADMIN" ? (
+                <p className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-xs text-purple-700">
+                  Admins always have full access to every module — overrides do
+                  not apply.
+                </p>
+              ) : moduleLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              ) : (
+                <div className="max-h-[45vh] overflow-auto rounded-md border border-zinc-200">
+                  <Table className="text-xs">
+                    <TableHeader className="sticky top-0 z-10 bg-white">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Module</TableHead>
+                        <TableHead>Effective access</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {moduleRows.map((m) => {
+                        const denied = !m.effective.includes("read");
+                        return (
+                          <TableRow key={m.resource}>
+                            <TableCell className="font-medium">{m.label}</TableCell>
+                            <TableCell>
+                              {m.effective.length === 0 ? (
+                                <span className="text-red-500">No access</span>
+                              ) : (
+                                <span className="text-zinc-600">
+                                  {m.effective.join(", ")}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={m.override === null ? "outline" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {m.override === null ? "Role default" : "Custom"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {denied && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px]"
+                                    disabled={moduleSaving === m.resource}
+                                    onClick={() =>
+                                      handleModuleChange(m.resource, ["read"])
+                                    }
+                                  >
+                                    {moduleSaving === m.resource ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Grant read"
+                                    )}
+                                  </Button>
+                                )}
+                                {!denied && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-red-600"
+                                    disabled={moduleSaving === m.resource}
+                                    onClick={() =>
+                                      handleModuleChange(m.resource, [])
+                                    }
+                                  >
+                                    {moduleSaving === m.resource ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Deny all"
+                                    )}
+                                  </Button>
+                                )}
+                                {m.override !== null && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px]"
+                                    disabled={moduleSaving === m.resource}
+                                    onClick={() =>
+                                      handleModuleChange(m.resource, null)
+                                    }
+                                  >
+                                    Reset
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       )}

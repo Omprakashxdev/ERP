@@ -75,7 +75,7 @@ export default async function SettingsPage() {
           {canViewRights && (
             <TabsTrigger value="rights">
               <KeyRound className="mr-1.5 h-3.5 w-3.5" />
-              Rights
+              Role Defaults
             </TabsTrigger>
           )}
           {canViewOrgChart && (
@@ -128,6 +128,10 @@ export default async function SettingsPage() {
 
         {canViewRights && (
           <TabsContent value="rights">
+            <p className="mb-3 text-sm text-zinc-500">
+              Set the default baseline permissions for each role. You can
+              override these for individual users in the Users tab.
+            </p>
             <Card className="shadow-sm">
               <CardContent className="p-4">
                 <UserRightsPanel isAdmin={session.user.role === "ADMIN"} />
