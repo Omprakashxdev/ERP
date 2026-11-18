@@ -31,6 +31,7 @@ const modules = [
   { key: "notifications", label: "Notifications" },
   { key: "auditLog", label: "Audit Log" },
   { key: "userManagement", label: "User Management" },
+  { key: "progressApp", label: "Progress App" },
 ];
 
 const roles = ["ADMIN", "MANAGER", "STAFF", "AUDITOR"] as const;
@@ -172,7 +173,7 @@ export function UserRightsPanel({ isAdmin }: { isAdmin: boolean }) {
 
         <div className="flex flex-wrap gap-2">
           {roles.map((role) => (
-            <Badge key={role} variant="secondary" className={`text-xs ${roleConfig[role].color}`}>
+            <Badge key={role} variant="secondary" className={`px-2.5 py-1 text-xs ${roleConfig[role].color}`}>
               {roleConfig[role].label}
             </Badge>
           ))}
@@ -220,10 +221,10 @@ export function UserRightsPanel({ isAdmin }: { isAdmin: boolean }) {
                                   key={action}
                                   disabled={!canToggle}
                                   onClick={() => togglePermission(mod.key, role, action)}
-                                  className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all ${
+                                  className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
                                     has
-                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                      : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                      : "border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500"
                                   } ${
                                     canToggle
                                       ? "cursor-pointer hover:scale-105 hover:shadow-sm"
@@ -232,17 +233,17 @@ export function UserRightsPanel({ isAdmin }: { isAdmin: boolean }) {
                                   title={has ? `Can ${action}` : `Cannot ${action}`}
                                 >
                                   {has ? (
-                                    <Check className="h-2.5 w-2.5" />
+                                    <Check className="h-3 w-3" />
                                   ) : (
-                                    <X className="h-2.5 w-2.5" />
+                                    <X className="h-3 w-3" />
                                   )}
                                   {action}
                                 </button>
                               );
                             })}
                             {isLocked && (
-                              <span className="inline-flex items-center gap-0.5 rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-950/30 dark:text-purple-400">
-                                <Lock className="h-2.5 w-2.5" />
+                              <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-[11px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400">
+                                <Lock className="h-3 w-3" />
                                 admin
                               </span>
                             )}
@@ -250,15 +251,15 @@ export function UserRightsPanel({ isAdmin }: { isAdmin: boolean }) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-5 w-5 p-0"
+                                className="h-6 w-6 p-0"
                                 disabled={saving === cellKey}
                                 onClick={() => savePermission(mod.key, role)}
                                 title="Save changes"
                               >
                                 {saving === cellKey ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
-                                  <Save className="h-3 w-3 text-emerald-600" />
+                                  <Save className="h-3.5 w-3.5 text-emerald-600" />
                                 )}
                               </Button>
                             )}
@@ -401,10 +402,10 @@ export function UserRightsPanel({ isAdmin }: { isAdmin: boolean }) {
                           <button
                             disabled={!canToggle}
                             onClick={() => toggleAiDataModule(role, mod.key)}
-                            className={`inline-flex items-center justify-center rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
+                            className={`inline-flex items-center justify-center rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-all ${
                               enabled
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                : "border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500"
                             } ${
                               canToggle
                                 ? "cursor-pointer hover:scale-105 hover:shadow-sm"

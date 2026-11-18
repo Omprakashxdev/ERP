@@ -50,6 +50,7 @@ interface InOutRegisterTableProps {
   totalPages: number;
   filter: InOutRegisterFilterInput;
   clients: { id: string; name: string; abbreviation: string | null }[];
+  projects?: { id: string; name: string; abbreviation: string | null; clientId: string }[];
   departments?: { id: string; name: string }[];
   staff: { id: string; name: string; employeeCode: string | null }[];
   allStaff?: { id: string; name: string; employeeCode: string | null; isActive: boolean }[];
@@ -79,6 +80,7 @@ export function InOutRegisterTable({
   totalPages,
   filter,
   clients,
+  projects,
   departments,
   staff,
   allStaff,
@@ -97,6 +99,7 @@ export function InOutRegisterTable({
     clientId: string;
     department?: string | null;
     details?: string | null;
+    project?: { id: string; name: string } | null;
   } | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<InOutRegisterWithComputed | null>(null);
@@ -259,6 +262,7 @@ export function InOutRegisterTable({
                 <TableHead className="whitespace-nowrap">Doc Ref. No</TableHead>
                 <TableHead className="whitespace-nowrap">Direction</TableHead>
                 <TableHead className="whitespace-nowrap">From / To</TableHead>
+                <TableHead className="whitespace-nowrap">Project</TableHead>
                 <TableHead className="whitespace-nowrap">Dept / Division</TableHead>
                 <TableHead className="whitespace-nowrap">Details</TableHead>
                 <TableHead className="whitespace-nowrap">CC marking</TableHead>
@@ -351,6 +355,17 @@ export function InOutRegisterTable({
                   <TableCell className="whitespace-nowrap font-medium text-zinc-800">
                     {row.client.name}
                   </TableCell>
+                  <TableCell className="whitespace-nowrap text-zinc-600 max-w-40 truncate" title={row.project?.name ?? row.parentInward?.project?.name ?? undefined}>
+                    {row.project?.name ? (
+                      row.project.name
+                    ) : row.direction === "OUTWARD" && row.parentInward?.project?.name ? (
+                      <span className="text-blue-700" title={`Inherited from Inward ${row.parentInward.serialNo || row.parentInward.documentRefNo || ""}`}>
+                        {row.parentInward.project.name}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap text-zinc-600">
                     {row.department || "—"}
                   </TableCell>
@@ -415,6 +430,7 @@ export function InOutRegisterTable({
                               clientId: row.clientId,
                               department: row.department,
                               details: row.details,
+                              project: row.project ?? null,
                             });
                             setCreateDirection("OUTWARD");
                             setCreateEntryOpen(true);
@@ -499,6 +515,7 @@ export function InOutRegisterTable({
         <InOutRegisterForm
           entry={selectedEntry as never}
           clients={clients}
+          projects={projects}
           departments={departments}
           staff={staff}
           allStaff={allStaff}
@@ -511,6 +528,7 @@ export function InOutRegisterTable({
       {createEntryOpen && (
         <InOutRegisterForm
           clients={clients}
+          projects={projects}
           defaultDirection={createDirection}
           parentInward={replyParentInward ?? undefined}
           departments={departments}

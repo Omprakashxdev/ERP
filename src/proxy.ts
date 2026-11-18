@@ -7,6 +7,9 @@ export default auth((req) => {
 
   const isAuthApiRoute = nextUrl.pathname.startsWith("/api/auth");
   const isCronApiRoute = nextUrl.pathname.startsWith("/api/notifications/check");
+  // Mobile API routes authenticate via bearer access tokens and must
+  // return JSON 401s — never redirect to the ERP login page.
+  const isMobileApiRoute = nextUrl.pathname.startsWith("/api/mobile/");
   const isLoginPage = nextUrl.pathname === "/login";
   const isRegisterPage = nextUrl.pathname === "/register";
   const isPublicAsset =
@@ -14,7 +17,7 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/static") ||
     nextUrl.pathname === "/favicon.ico";
 
-  if (isPublicAsset || isAuthApiRoute || isLoginPage || isRegisterPage || isCronApiRoute) {
+  if (isPublicAsset || isAuthApiRoute || isMobileApiRoute || isLoginPage || isRegisterPage || isCronApiRoute) {
     return NextResponse.next();
   }
 

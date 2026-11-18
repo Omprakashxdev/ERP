@@ -407,7 +407,7 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
   const title = isEdit ? "Edit project" : "New project";
   const description = isEdit
     ? "Update project details, staff assignments, and fee stages."
-    : "Create a new project to start tracking fund flow.";
+    : "Create a new project in the centralized Project Master.";
 
   const body = (
     <>
@@ -450,7 +450,22 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                 )}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {!isEdit && (
+                  {isEdit ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="region-readonly">Region</Label>
+                      <Input
+                        id="region-readonly"
+                        value={
+                          project?.region?.name ??
+                          master.regions.find((r) => r.id === form.regionId)?.name ??
+                          "—"
+                        }
+                        readOnly
+                        disabled
+                        className="bg-zinc-50"
+                      />
+                    </div>
+                  ) : (
                     <div className="space-y-1.5">
                       <Label htmlFor="region">Region</Label>
                       <Select
@@ -521,6 +536,18 @@ export function ProjectForm({ project, mode, onClose, embedded }: ProjectFormPro
                       onChange={(e) =>
                         updateField("abbreviation", e.target.value)
                       }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      value={form.address}
+                      onChange={(e) =>
+                        updateField("address", e.target.value)
+                      }
+                      placeholder="Project site address (optional)"
                     />
                   </div>
 

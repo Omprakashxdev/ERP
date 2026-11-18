@@ -122,6 +122,19 @@ function documentRefNoTakenMessage(err: unknown): never {
   throw err;
 }
 
+// Related-project guard: the linked project must exist and belong to the
+// same client as the register entry — an inward letter can never point at
+// another client's project.
+async function assertProjectSelectable(projectId: string, _clientId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true },
+  });
+  if (!project) {
+    throw new Error("Selected project does not exist");
+  }
+}
+
 function buildDocumentCreateInput(
   documents?: string[]
 ): { create: { path: string }[] } | undefined {
@@ -212,6 +225,9 @@ export async function createInOutRegister(
       if (!receiver.isActive) {
         throw new Error("Received-by employee is inactive and cannot be used for new entries");
       }
+    }
+    if (data.projectId) {
+      await assertProjectSelectable(data.projectId, data.clientId);
     }
     await assertDocumentRefNoAvailable(data.documentRefNo);
     await assertPrivatePathsAttachable(documents ?? [], user.id);
@@ -334,6 +350,22 @@ export async function updateInOutRegister(
         throw new Error("Received-by employee is inactive and cannot be used for new entries");
       }
     }
+    // A changed project pick must belong to the entry's own client and is
+    // only allowed on inward entries (clientId itself is immutable on
+    // update). Passing null clears the link; an untouched saved reference
+    // is preserved.
+    if (
+      data.projectId !== undefined &&
+      data.projectId !== existing.projectId
+    ) {
+      const effectiveDirection = data.direction ?? existing.direction;
+      if (data.projectId !== null) {
+        if (effectiveDirection !== "INWARD") {
+          throw new Error("Related project can only be set on inward entries");
+        }
+        await assertProjectSelectable(data.projectId, existing.clientId);
+      }
+    }
     await assertDocumentRefNoAvailable(effectiveRefNo, id);
 
     // Legacy inward types remain valid only while unchanged — they cannot
@@ -392,6 +424,12 @@ export async function updateInOutRegister(
 
     // Ensure serialNo is immutable and cannot be changed on edit
     const { serialNo: _ignoredSerialNo, ...updateData } = data;
+
+    // A direction flip away from inward clears any stored project link —
+    // the field only exists on inward entries.
+    if (updateData.direction !== undefined && updateData.direction !== "INWARD") {
+      updateData.projectId = null;
+    }
 
     const entry = await prisma.inOutRegister
       .update({
@@ -473,12 +511,13 @@ export async function getInOutRegisters(
           actionSuggestedStaff: true,
           receivedByStaff: { select: { id: true, name: true, isActive: true } },
           mode: { select: { id: true, name: true, isActive: true } },
+          project: { select: { id: true, name: true, abbreviation: true } },
           documents: true,
           ccStaff: {
             include: { staff: true },
           },
           parentInward: {
-            select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true },
+            select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true, project: { select: { id: true, name: true } } },
           },
           replies: {
             select: { id: true, serialNo: true, documentRefNo: true, receivedDate: true, details: true },
@@ -512,12 +551,13 @@ export async function getInOutRegisterById(
         actionSuggestedStaff: true,
         receivedByStaff: { select: { id: true, name: true, isActive: true } },
         mode: { select: { id: true, name: true, isActive: true } },
+        project: { select: { id: true, name: true, abbreviation: true } },
         documents: true,
         ccStaff: {
           include: { staff: true },
         },
         parentInward: {
-          select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true },
+          select: { id: true, serialNo: true, documentRefNo: true, details: true, documentDate: true, project: { select: { id: true, name: true } } },
         },
         replies: {
           select: { id: true, serialNo: true, documentRefNo: true, receivedDate: true, details: true },

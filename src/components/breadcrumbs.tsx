@@ -24,6 +24,8 @@ const labelMap: Record<string, string> = {
   masters: "Masters",
   clients: "Clients",
   employee: "Employee",
+  "progress-app": "Progress App",
+  sites: "Sites",
 };
 
 const defaultModuleHrefMap: Record<string, string> = {

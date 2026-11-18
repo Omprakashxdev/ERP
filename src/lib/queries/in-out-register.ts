@@ -32,6 +32,7 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
     }
   }
   if (filter?.clientId) and.push({ clientId: filter.clientId });
+  if (filter?.projectId) and.push({ projectId: filter.projectId });
   if (filter?.department) {
     and.push({ department: { contains: filter.department, mode: "insensitive" } });
   }
