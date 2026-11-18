@@ -20,6 +20,7 @@ export function buildInOutRegisterWhere(filter?: InOutRegisterFilterInput) {
         { details: { contains: term, mode: "insensitive" } },
         { client: { name: { contains: term, mode: "insensitive" } } },
         { department: { contains: term, mode: "insensitive" } },
+        { letterPad: { contains: term, mode: "insensitive" } },
       ],
     });
   }

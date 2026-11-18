@@ -127,6 +127,7 @@ function getInitialForm(
       inwardType: "",
       receivedByPersonName: "",
       receivedByStaffId: "",
+      letterPad: "",
       parentInwardId: parentInward?.id ?? null,
       projectId: "",
     };
@@ -148,6 +149,7 @@ function getInitialForm(
     inwardType: (entry as Record<string, unknown>)?.inwardType as string ?? "",
     receivedByPersonName: (entry as Record<string, unknown>)?.receivedByPersonName as string ?? "",
     receivedByStaffId: (entry as Record<string, unknown>)?.receivedByStaffId as string ?? "",
+    letterPad: (entry as Record<string, unknown>)?.letterPad as string ?? "",
     parentInwardId: (entry as Record<string, unknown>)?.parentInwardId as string ?? null,
     projectId: (entry as Record<string, unknown>)?.projectId as string ?? "",
   };
@@ -292,6 +294,7 @@ export function InOutRegisterForm({
       receivedByPersonName: form.direction === "INWARD" ? emptyToNull(form.receivedByPersonName) : null,
       receivedByStaffId: form.direction === "INWARD" ? form.receivedByStaffId || null : null,
       parentInwardId: form.parentInwardId || null,
+      letterPad: form.direction === "OUTWARD" ? emptyToNull(form.letterPad) : null,
       projectId: form.direction === "INWARD" ? form.projectId || null : null,
     };
 
@@ -635,6 +638,19 @@ export function InOutRegisterForm({
                   </Select>
                 )}
               </div>
+
+              {isOutward && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="letterPad">Letter pad</Label>
+                  <Input
+                    id="letterPad"
+                    value={form.letterPad}
+                    maxLength={200}
+                    onChange={(e) => updateField("letterPad", e.target.value)}
+                    placeholder="e.g. Head Office / Rajkot branch letterhead"
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="details">Details</Label>
