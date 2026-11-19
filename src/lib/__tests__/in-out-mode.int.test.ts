@@ -9,6 +9,8 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
     _r: string,
@@ -86,6 +88,11 @@ async function createEntry(extra: object = {}) {
     let inactiveId = "";
 
     beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: "int-test" },
+        update: {},
+        create: { id: "int-test", email: "int-test@int.test", name: "Int Test", hashedPassword: "x", role: "ADMIN" },
+      });
       await prisma.$executeRaw`
         CREATE UNIQUE INDEX IF NOT EXISTS "InOutRegister_documentRefNo_key"
         ON "InOutRegister" (lower(btrim("documentRefNo")))
@@ -184,7 +191,7 @@ async function createEntry(extra: object = {}) {
       expect(clash.success).toBe(false);
     });
 
-    it("saves a register entry with an active mode (letterPad input ignored)", async () => {
+    it("saves a register entry with an active mode and letterPad", async () => {
       const res = await createEntry({
         documentRefNo: "MODE-DOC-2",
         modeId: byPostId,
@@ -197,7 +204,7 @@ async function createEntry(extra: object = {}) {
       });
       expect(saved!.modeId).toBe(byPostId);
       expect(saved!.mode!.name).toBe("By Post");
-      expect(saved!.letterPad).toBeNull();
+      expect(saved!.letterPad).toBe("Head Office pad");
     });
 
     it("saves an entry with NULL mode and NULL letter pad (both optional)", async () => {
@@ -213,7 +220,7 @@ async function createEntry(extra: object = {}) {
       expect(saved!.letterPad).toBeNull();
     });
 
-    it("ignores Gujarati/Unicode letter pad input (field removed)", async () => {
+    it("saves Gujarati/Unicode letter pad input (restored field)", async () => {
       const gujarati = "શ્રી સરદાર પટેલ લેટર પેડ";
       const res = await createEntry({
         documentRefNo: "MODE-DOC-4",
@@ -223,10 +230,10 @@ async function createEntry(extra: object = {}) {
       const saved = await prisma.inOutRegister.findUnique({
         where: { id: res.data!.id },
       });
-      expect(saved!.letterPad).toBeNull();
+      expect(saved!.letterPad).toBe(gujarati);
     });
 
-    it("works on an Outward entry with mode (letterPad input ignored)", async () => {
+    it("works on an Outward entry with mode and letterPad", async () => {
       const res = await createEntry({
         direction: "OUTWARD",
         documentRefNo: "MODE-DOC-5",
@@ -238,7 +245,7 @@ async function createEntry(extra: object = {}) {
         where: { id: res.data!.id },
       });
       expect(saved!.modeId).toBe(courierId);
-      expect(saved!.letterPad).toBeNull();
+      expect(saved!.letterPad).toBe("Regional pad");
     });
 
     it("rejects a nonexistent mode id on create", async () => {

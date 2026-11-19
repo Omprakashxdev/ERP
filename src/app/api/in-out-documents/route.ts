@@ -6,14 +6,24 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermissionWithOverrides } from "@/lib/authz";
+import { Role } from "@prisma/client";
 import {
   INOUT_PRIVATE_PREFIX,
   INOUT_PRIVATE_DIR,
   INOUT_LEGACY_PUBLIC_DIR,
 } from "@/lib/in-out-documents";
+import { buildInOutVisibilityWhere } from "@/lib/in-out-visibility";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx"];
+const ALLOWED_EXTENSIONS = [
+  ".pdf", ".jpg", ".jpeg", ".png",
+  ".doc", ".docx", ".xls", ".xlsx",
+  ".ppt", ".pptx", ".dwg", ".dxf",
+];
+
+// Types a browser can render inline; everything else is forced to
+// download as an attachment rather than dumping raw binary in a tab.
+const INLINE_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
 
 const pathSchema = z
   .string()
@@ -30,6 +40,10 @@ const MIME_BY_EXT: Record<string, string> = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".xls": "application/vnd.ms-excel",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".dwg": "application/octet-stream",
+  ".dxf": "application/octet-stream",
 };
 
 function displayName(fileName: string): string {
@@ -67,20 +81,30 @@ function resolveStoredPath(storedPath: string): string | null {
  */
 async function isAuthorizedForPath(
   storedPath: string,
-  userId: string
+  user: { id: string; email?: string | null; name?: string | null; role: Role }
 ): Promise<boolean> {
   const linked = await prisma.inOutRegisterDocument.findFirst({
     where: { path: storedPath },
-    select: { id: true },
+    select: { inOutRegisterId: true },
   });
-  if (linked) return true;
+  if (linked) {
+    // Row-level visibility: a linked document is only downloadable if
+    // the requesting user may also see the parent register row.
+    const visibility = await buildInOutVisibilityWhere(user);
+    if (Object.keys(visibility).length === 0) return true;
+    const visible = await prisma.inOutRegister.findFirst({
+      where: { AND: [{ id: linked.inOutRegisterId }, visibility] },
+      select: { id: true },
+    });
+    return !!visible;
+  }
 
   if (storedPath.startsWith(INOUT_PRIVATE_PREFIX)) {
     const pending = await prisma.pendingInOutUpload.findUnique({
       where: { storedName: storedPath.slice(INOUT_PRIVATE_PREFIX.length) },
       select: { uploadedById: true },
     });
-    return pending?.uploadedById === userId;
+    return pending?.uploadedById === user.id;
   }
 
   // Legacy /uploads/ paths with no register link are NOT served — this
@@ -88,7 +112,10 @@ async function isAuthorizedForPath(
   return false;
 }
 
-async function serveFile(req: NextRequest, userId: string) {
+async function serveFile(
+  req: NextRequest,
+  user: { id: string; email?: string | null; name?: string | null; role: Role }
+) {
   const parsed = pathSchema.safeParse(req.nextUrl.searchParams.get("path") ?? "");
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid document reference" }, { status: 400 });
@@ -99,7 +126,7 @@ async function serveFile(req: NextRequest, userId: string) {
     return NextResponse.json({ error: "Invalid document reference" }, { status: 400 });
   }
 
-  if (!(await isAuthorizedForPath(storedPath, userId))) {
+  if (!(await isAuthorizedForPath(storedPath, user))) {
     return NextResponse.json(
       { error: "You are not allowed to view this document" },
       { status: 403 }
@@ -133,7 +160,9 @@ async function serveFile(req: NextRequest, userId: string) {
   }
 
   const ext = path.extname(abs).toLowerCase();
-  const download = req.nextUrl.searchParams.get("download") === "1";
+  const download =
+    req.nextUrl.searchParams.get("download") === "1" ||
+    !INLINE_EXTENSIONS.has(ext);
   const safeName = fileName.replace(/"/g, "_");
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
@@ -156,7 +185,7 @@ export async function GET(req: NextRequest) {
       { status: 403 }
     );
   }
-  return serveFile(req, session.user.id);
+  return serveFile(req, session.user);
 }
 
 export async function POST(req: NextRequest) {

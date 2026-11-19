@@ -15,8 +15,13 @@ vi.mock("@/lib/auth", () => ({ auth: () => mockAuth() }));
 vi.mock("@/lib/authz", () => ({
   hasPermissionWithOverrides: (...args: unknown[]) => mockPerm(...args),
 }));
+const mockRegisterFindFirst = vi.fn(async (..._a: unknown[]) => null as unknown);
+const mockVisStaffFindFirst = vi.fn(async (..._a: unknown[]) => null as unknown);
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    inOutRegister: { findFirst: (...a: unknown[]) => mockRegisterFindFirst(...a) },
+    staff: { findFirst: (...a: unknown[]) => mockVisStaffFindFirst(...a) },
     inOutRegisterDocument: { findFirst: (...a: unknown[]) => mockDocFindFirst(...a) },
     pendingInOutUpload: {
       findUnique: (...a: unknown[]) => mockPendingFind(...a),
@@ -128,6 +133,29 @@ describe("/api/in-out-documents", () => {
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
+    it("scoped staff user downloads a linked doc only when the register row is visible", async () => {
+      // read allowed, admin denied → row-level scoping applies
+      mockAuth.mockResolvedValue({ user: { id: "u9", email: "pc@saec.com", name: "Prakash", role: "STAFF" } });
+      mockPerm.mockImplementation((_r, _res, action) => Promise.resolve(action === "read"));
+      mockDocFindFirst.mockResolvedValue({ inOutRegisterId: "reg-1" });
+      mockVisStaffFindFirst.mockResolvedValue({ id: "s-1", name: "Prakash", email: "pc@saec.com" });
+      mockRegisterFindFirst.mockResolvedValue({ id: "reg-1" });
+      const { GET } = await import("@/app/api/in-out-documents/route");
+      const res = await GET(req(`?path=${encodeURIComponent(PRIV)}`));
+      expect(res.status).toBe(200);
+    });
+
+    it("scoped staff user gets 403 on a linked doc outside their visibility", async () => {
+      mockAuth.mockResolvedValue({ user: { id: "u9", email: "pc@saec.com", name: "Prakash", role: "STAFF" } });
+      mockPerm.mockImplementation((_r, _res, action) => Promise.resolve(action === "read"));
+      mockDocFindFirst.mockResolvedValue({ inOutRegisterId: "reg-1" });
+      mockVisStaffFindFirst.mockResolvedValue({ id: "s-1", name: "Prakash", email: "pc@saec.com" });
+      mockRegisterFindFirst.mockResolvedValue(null);
+      const { GET } = await import("@/app/api/in-out-documents/route");
+      const res = await GET(req(`?path=${encodeURIComponent(PRIV)}`));
+      expect(res.status).toBe(403);
+    });
+
     it("serves a LEGACY /uploads/ path only when linked to a register document", async () => {
       mockDocFindFirst.mockResolvedValue({ id: "d1" });
       const { GET } = await import("@/app/api/in-out-documents/route");
@@ -167,6 +195,18 @@ describe("/api/in-out-documents", () => {
       const res = await GET(req(`?path=${encodeURIComponent(PRIV)}&download=1`));
       expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
     });
+
+    it.each([".dwg", ".dxf", ".ppt", ".pptx", ".docx", ".xlsx"])(
+      "serves %s as attachment even without download=1",
+      async (ext) => {
+        const { GET } = await import("@/app/api/in-out-documents/route");
+        const res = await GET(
+          req(`?path=${encodeURIComponent(`inout-priv/123_doc${ext}`)}`)
+        );
+        expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+        expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      }
+    );
 
     it("meta=1 checks existence without reading file contents", async () => {
       mockStat.mockResolvedValue({ size: 42 });
@@ -230,13 +270,37 @@ describe("/api/in-out-documents", () => {
       expect(res.status).toBe(403);
     });
 
-    it("rejects disallowed file types", async () => {
-      const fd = new FormData();
-      fd.append("file", new File(["x"], "evil.exe", { type: "application/x-msdownload" }));
-      const { POST } = await import("@/app/api/in-out-documents/route");
-      const res = await POST({ formData: async () => fd } as unknown as NextRequest);
-      expect(res.status).toBe(400);
-    });
+    it.each([".dwg", ".dxf", ".ppt", ".pptx"])(
+      "accepts %s uploads (octet-stream MIME)",
+      async (ext) => {
+        const fd = new FormData();
+        // DWG/DXF/PPT arrive from browsers with inconsistent or absent
+        // MIME types — validation must rely on extension, not file.type.
+        fd.append(
+          "file",
+          new File(["AC1018"], `drawing${ext}`, { type: "application/octet-stream" })
+        );
+        const { POST } = await import("@/app/api/in-out-documents/route");
+        const res = await POST({ formData: async () => fd } as unknown as NextRequest);
+        const body = await res.json();
+        expect(res.status).toBe(200);
+        expect(body.path).toMatch(new RegExp(`^inout-priv/\\d+_drawing\\${ext}$`));
+      }
+    );
+
+    it.each([".exe", ".sh", ".js", ".html", ".svg", ".bat", ".php"])(
+      "rejects dangerous file type %s",
+      async (ext) => {
+        const fd = new FormData();
+        fd.append(
+          "file",
+          new File(["x"], `evil${ext}`, { type: "application/octet-stream" })
+        );
+        const { POST } = await import("@/app/api/in-out-documents/route");
+        const res = await POST({ formData: async () => fd } as unknown as NextRequest);
+        expect(res.status).toBe(400);
+      }
+    );
 
     it("strips directory components from uploaded filenames", async () => {
       const fd = new FormData();

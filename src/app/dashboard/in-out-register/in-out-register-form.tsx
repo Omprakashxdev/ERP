@@ -561,14 +561,14 @@ export function InOutRegisterForm({
                   value={form.clientId}
                   onValueChange={(v) => updateField("clientId", v ?? "")}
                 >
-                  <SelectTrigger id="clientId">
+                  <SelectTrigger id="clientId" className="w-full">
                     <SelectValue placeholder="Select client">
                       {(value: string) =>
                         clients.find((c) => c.id === value)?.name ?? "Select client"
                       }
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="w-auto min-w-(--anchor-width) max-w-[min(90vw,32rem)]">
                     {clients.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name}
@@ -585,6 +585,7 @@ export function InOutRegisterForm({
                 <Input
                   id="department"
                   list="department-suggestions"
+                  autoComplete="off"
                   value={form.department}
                   onChange={(e) => updateField("department", e.target.value)}
                   placeholder="e.g. Regional Office Rajkot / Town Planning"
@@ -995,6 +996,7 @@ export function InOutRegisterForm({
                   id="in-out-register-doc"
                   label="Attach document"
                   value={newDocument}
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.dwg,.dxf"
                   uploadEndpoint="/api/in-out-documents"
                   onChange={(path) => {
                     if (path) {

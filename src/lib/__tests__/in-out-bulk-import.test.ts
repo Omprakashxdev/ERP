@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { importModule } from "@/lib/actions/export-import";
 import { prisma } from "@/lib/prisma";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("@/lib/actions/wrapper", () => ({
   withPermission: async (_res: string, _act: string, fn: (user: { id: string }) => Promise<unknown>) => {
     try {

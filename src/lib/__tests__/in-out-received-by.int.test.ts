@@ -8,6 +8,8 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
     _r: string,
@@ -70,6 +72,11 @@ async function getRow(id: string) {
   "in-out register received-by staff link — disposable DB",
   () => {
     beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: "int-test" },
+        update: {},
+        create: { id: "int-test", email: "int-test@int.test", name: "Int Test", hashedPassword: "x", role: "ADMIN" },
+      });
       const client = await prisma.client.findFirst({ select: { id: true } });
       if (client) {
         clientId = client.id;

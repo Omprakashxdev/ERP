@@ -8,6 +8,7 @@ import {
 } from "@/lib/register-serial";
 import { issueEmployeeCode } from "@/lib/employee-code";
 import { Decimal } from "@prisma/client/runtime/library";
+import { Role } from "@prisma/client";
 import {
   withPermission,
   checkRateLimit,
@@ -28,6 +29,7 @@ import {
   MODULE_EXPORT_CONFIGS,
   CSV_BOM,
 } from "@/lib/export-import";
+import { buildInOutVisibilityWhere } from "@/lib/in-out-visibility";
 
 function parseImportDate(value: string): Date | null {
   if (!value || value.trim() === "") return null;
@@ -169,7 +171,10 @@ function autoCorrectEnum(value: string, allowed: string[]): string | null {
   return null;
 }
 
-async function fetchModuleData(module: string): Promise<Record<string, unknown>[]> {
+async function fetchModuleData(
+  module: string,
+  user: { id: string; email?: string | null; name?: string | null; role: Role }
+): Promise<Record<string, unknown>[]> {
   switch (module) {
     case "fundFlow":
       return prisma.fundFlow.findMany({
@@ -209,6 +214,7 @@ async function fetchModuleData(module: string): Promise<Record<string, unknown>[
 
     case "inOutRegister":
       return prisma.inOutRegister.findMany({
+        where: await buildInOutVisibilityWhere(user),
         include: {
           client: { select: { name: true, id: true } },
           actionSuggestedStaff: { select: { name: true, id: true } },
@@ -278,7 +284,7 @@ export async function exportModule(
     const parsed = exportRequestSchema.parse(input);
     await checkRateLimit(user.id);
 
-    const rows = await fetchModuleData(parsed.module);
+    const rows = await fetchModuleData(parsed.module, user);
     const raw = exportData(rows, parsed.module, parsed.format);
     const filename = getExportFilename(parsed.module, parsed.format);
 

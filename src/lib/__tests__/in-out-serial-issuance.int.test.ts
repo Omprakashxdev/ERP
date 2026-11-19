@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
     _r: string,
@@ -61,6 +63,11 @@ async function serialOf(id: string) {
 
 (SKIP ? describe.skip : describe)("serial issuance — disposable DB", () => {
   beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: "int-test" },
+        update: {},
+        create: { id: "int-test", email: "int-test@int.test", name: "Int Test", hashedPassword: "x", role: "ADMIN" },
+      });
     // Disposable DB only — wipe prior run's records AND counters so the
     // suite is deterministic; counters are otherwise intentionally monotonic.
     await prisma.inOutRegister.deleteMany({});

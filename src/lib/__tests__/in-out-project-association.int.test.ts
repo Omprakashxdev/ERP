@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { ProjectStatus } from "@prisma/client";
 import { Role } from "@/types/auth";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
     _r: string,
@@ -55,6 +57,11 @@ const SKIP = !process.env.RUN_INTEGRATION_TESTS;
     };
 
     beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: "int-test" },
+        update: {},
+        create: { id: "int-test", email: "int-test@int.test", name: "Int Test", hashedPassword: "x", role: "ADMIN" },
+      });
       await prisma.user
         .create({
           data: { id: "int-test", email: "int-test@local", hashedPassword: "x" },

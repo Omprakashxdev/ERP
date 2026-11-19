@@ -8,6 +8,8 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withPermission: async (
     _r: string,
@@ -65,6 +67,11 @@ async function createEntry(extra: object = {}) {
   "in-out register mandatory fields + uniqueness — disposable DB",
   () => {
     beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: "int-test" },
+        update: {},
+        create: { id: "int-test", email: "int-test@int.test", name: "Int Test", hashedPassword: "x", role: "ADMIN" },
+      });
       // Apply the release's partial unique index so the disposable DB
       // mirrors production (idempotent — same SQL as the migration).
       await prisma.$executeRaw`

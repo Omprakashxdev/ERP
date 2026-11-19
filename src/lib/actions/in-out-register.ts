@@ -11,6 +11,7 @@ import {
   InOutRegisterFilterInput,
 } from "@/lib/schemas/in-out-register";
 import { buildInOutRegisterWhere } from "@/lib/queries/in-out-register";
+import { buildInOutVisibilityWhere } from "@/lib/in-out-visibility";
 import {
   withPermission,
   checkRateLimit,
@@ -244,6 +245,7 @@ export async function createInOutRegister(
         data: {
           ...data,
           serialNo,
+          createdByUserId: user.id,
           documents: buildDocumentCreateInput(documents),
           ccStaff: buildCcStaffCreateInput(ccStaffIds),
         },
@@ -497,11 +499,15 @@ export async function getInOutRegisters(
   page = 1,
   pageSize = 25
 ): Promise<ActionResult<{ rows: unknown[]; total: number }>> {
-  return withPermission("inOutRegister", "read", async () => {
+  return withPermission("inOutRegister", "read", async (user) => {
     const parsed = filter
       ? inOutRegisterFilterSchema.parse(filter)
       : undefined;
     const where = buildInOutRegisterWhere(parsed);
+    const visibility = await buildInOutVisibilityWhere(user);
+    if (Object.keys(visibility).length > 0) {
+      where.AND = [...((where.AND as unknown[]) ?? []), visibility];
+    }
 
     const [rows, total] = await Promise.all([
       prisma.inOutRegister.findMany({
@@ -543,9 +549,12 @@ export async function getInOutRegisters(
 export async function getInOutRegisterById(
   id: string
 ): Promise<ActionResult<unknown | null>> {
-  return withPermission("inOutRegister", "read", async () => {
-    const entry = await prisma.inOutRegister.findUnique({
-      where: { id },
+  return withPermission("inOutRegister", "read", async (user) => {
+    const visibility = await buildInOutVisibilityWhere(user);
+    const entry = await prisma.inOutRegister.findFirst({
+      where: Object.keys(visibility).length
+        ? { AND: [{ id }, visibility] }
+        : { id },
       include: {
         client: true,
         actionSuggestedStaff: true,
@@ -637,7 +646,15 @@ export async function getInOutRegisterLinkedTasks(
     }[]
   >
 > {
-  return withPermission("inOutRegister", "read", async () => {
+  return withPermission("inOutRegister", "read", async (user) => {
+    const visibility = await buildInOutVisibilityWhere(user);
+    if (Object.keys(visibility).length > 0) {
+      const visible = await prisma.inOutRegister.findFirst({
+        where: { AND: [{ id: inOutRegisterId }, visibility] },
+        select: { id: true },
+      });
+      if (!visible) return [];
+    }
     return prisma.task.findMany({
       where: { sourceModule: "IN_OUT_REGISTER", sourceEntityId: inOutRegisterId },
       select: {

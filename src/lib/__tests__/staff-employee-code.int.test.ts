@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
+vi.mock("@/lib/authz", () => ({ hasPermissionWithOverrides: async () => true }));
+
 vi.mock("../actions/wrapper", () => ({
   withAuth: async (fn: (u: { id: string }) => unknown) => {
     try {

@@ -61,6 +61,7 @@ model User {
   tasksAssignedBy Task[]       @relation("TaskAssignedBy")
   taskAttachments TaskAttachment[]
   pendingInOutUploads PendingInOutUpload[]
+  createdInOutRegisters InOutRegister[]
   forwardsMade    ForwardRecord[] @relation("ForwardFromUser")
   reviewedRegistrations RegistrationRequest[] @relation("RegistrationReviewedBy")
   progressSitesCreated ProgressSite[]
@@ -634,10 +635,12 @@ model InOutRegister {
   replyRefNo             String?                 @unique
   parentInwardId         String?
   projectId              String?
+  createdByUserId        String?
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
 
+  createdByUser          User?                   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   actionSuggestedStaff   Staff?                  @relation("ActionSuggestedStaff", fields: [actionSuggestedStaffId], references: [id], onDelete: SetNull)
   receivedByStaff        Staff?                  @relation("ReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
@@ -660,6 +663,7 @@ model InOutRegister {
   @@index([replyDueDate])
   @@index([replyDate])
   @@index([parentInwardId])
+  @@index([createdByUserId])
 }
 
 // Monotonic serial counter for In-Out Register — one row per
